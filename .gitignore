@@ -1,0 +1,10 @@
+runs/
+.venv/
+__pycache__/
+*.pyc
+.env
+tests/_*
+# 工作台是运行时产物(索引自动生成,产出是那次跑出来的东西)
+.flower/
+# 人工试用的目录:里面是某次真实运行的需求确认书、问答记录、session 库
+human-test/

@@ -1,0 +1,11 @@
+# 构建上下文别带这些 —— .venv 里有个 191M 的 macOS 二进制,带上就是白等
+.venv/
+runs/
+human-test/
+tests/_*
+**/__pycache__/
+**/*.pyc
+.git/
+# 凭证绝不进镜像层。容器里靠 docker run --env-file 传
+.env
+docs/

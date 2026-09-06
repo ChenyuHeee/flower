@@ -1,0 +1,55 @@
+#!/bin/sh
+# 在容器里跑 flower,当前目录当作项目挂进去。用法和 flower 完全一样:
+#
+#     cd ~/你的项目
+#     flowerbox                    # 不带参数 → 它问你要做什么(不用打引号)
+#     flowerbox --clarify-only -v  # 开关照给,诉求还是交互输入
+#     flowerbox "帮我做一个 X"      # 也可以直接给
+#
+# 挂进去的只有当前目录。框架源码在镜像里(/opt/flower),没挂载 ——
+# 容器里的 agent 改不到宿主的框架,也看不见宿主别的目录。
+set -e
+# 从脚本自己的位置推 flower 仓库根,不写死路径(开源之后别人克隆到哪都能用)
+SELF_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+FLOWER_HOME="${FLOWER_HOME:-$SELF_DIR}"
+IMAGE="${FLOWER_IMAGE:-flower-box}"
+
+[ -f "$FLOWER_HOME/.env" ] || {
+    echo "找不到 $FLOWER_HOME/.env(凭证)。用 FLOWER_HOME=... 指过去。" >&2
+    exit 1
+}
+
+# 当前目录必须落在容器真能看见的宿主路径里。colima 默认只挂 $HOME ——
+# 在 /tmp 下跑的话 -v 会在 VM 里建一个空目录,写进去的东西**宿主永远看不到**,
+# 而且不报错:产出、确认书、runs/ 全部静默丢失。踩过。
+case "$PWD/" in
+    "$HOME"/*) ;;                       # 常见情况,直接过
+    *)
+        # 配了额外挂载的话这里也该过 —— 用探针实测,不猜
+        probe=".flowerbox-mount-probe.$$"
+        : > "$probe"
+        if docker run --rm -v "$PWD:/work" --entrypoint test "$IMAGE" -f "/work/$probe" 2>/dev/null; then
+            rm -f "$probe"
+        else
+            rm -f "$probe"
+            echo "$PWD 不在容器能看见的宿主路径里(colima 默认只挂 \$HOME)。" >&2
+            echo "产出会静默丢失 —— 换到 \$HOME 下面,或 colima start --mount '$PWD:w'。" >&2
+            exit 1
+        fi
+        ;;
+esac
+
+# -t 只在真有 TTY 时加:`docker run -t` 在管道/CI 里会直接报
+# "the input device is not a TTY"。-i 一直要,不然 stdin 根本进不去。
+TTY=""
+if [ -t 0 ]; then
+    TTY="-t"
+else
+    echo "⚠ 标准输入不是终端,没人能回答提问 —— 想让它自己判断就加 --timeout 0" >&2
+fi
+
+exec docker run -i $TTY --rm \
+    --env-file "$FLOWER_HOME/.env" \
+    -v "$PWD:/work" \
+    -w /work \
+    "$IMAGE" "$@"

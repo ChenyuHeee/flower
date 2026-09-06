@@ -1,0 +1,6 @@
+{
+  "name": "flower-domain",
+  "description": "flower 的领域能力包 —— skills / agents / hooks / MCP 随仓库走,换机器行为不变。",
+  "version": "0.1.0",
+  "author": { "name": "flower" }
+}

@@ -1,0 +1,35 @@
+#!/bin/sh
+# 构建 flower-box 镜像。
+#
+# 为什么要这个脚本而不是直接 docker build:这台机器到 pypi.org / Docker Hub /
+# github.com 都只有 20–32 KB/s(实测),而国内镜像 2.5–7.4 MB/s。所以要
+#   1. 基础镜像从 registry 镜像拉下来再 retag,让 Dockerfile 的 FROM 命中本地
+#   2. pip 的 index 指到阿里云
+# 网络没这个问题时:FLOWER_MIRRORS=0 docker/build
+set -e
+cd "$(dirname "$0")/.."
+
+BASE="python:3.13-slim"
+IMAGE="${FLOWER_IMAGE:-flower-box}"
+MIRRORS="${FLOWER_MIRRORS:-1}"
+
+if [ "$MIRRORS" = "1" ]; then
+    # 实测:dockerproxy.net 直接返回 manifest(HTTP 200)。
+    # docker.1ms.run / docker.m.daocloud.io 回 401(标准 auth challenge,docker client
+    # 也许能过 token 流程,但没验过);hub.rat.dev 302、docker.xuanyuan.me 403。
+    REG="${FLOWER_REGISTRY:-dockerproxy.net}"
+    echo "==> 从 $REG 拉基础镜像(直连 Docker Hub 太慢)"
+    docker pull "$REG/library/$BASE"
+    docker tag "$REG/library/$BASE" "$BASE"
+    set -- --build-arg PIP_INDEX_URL="${FLOWER_PIP_INDEX:-https://mirrors.aliyun.com/pypi/simple/}" \
+           --build-arg APT_MIRROR="${FLOWER_APT_MIRROR:-mirrors.ustc.edu.cn}"
+else
+    set --
+fi
+
+echo "==> 构建 $IMAGE"
+docker build "$@" -f docker/Dockerfile -t "$IMAGE" .
+echo
+echo "✓ 好了。用法:"
+echo "    cd ~/你的项目 && $(pwd)/docker/flowerbox"
+echo "  (不带参数,它会问你要做什么 —— 不用在 shell 里打引号)"
