@@ -261,6 +261,20 @@ Linux/arm64 容器里跑通真实请求($0.1741),镜像里没有 claude CLI、�
 - `smoke.py` / `delegation.py` / `isolation.py` 都不经过 `Workflow.run`(直接用 `Runtime`),
   上次全绿,这次的改动不碰它们的路径。
 
+**第四轮花钱验掉的两条(`tests/nesting_live.py`,共 $0.42):**
+
+- **subagent 可以再派 subagent。** 实测 主控 → lead → hand 走通:1 次带 `agent_id`
+  的 Agent 调用、2 个 subagent 级 store_key。`lead` 手里**没有写工具**,所以它是
+  真的必须派人才能完成。`AgentDefinition` 没有 `agents` 字段,但注册表是 session 级的,
+  下级照样看得见。
+- **PreToolUse 的 `data` 里有 `agent_type`,装的是角色名。** 完整键集:
+  `agent_id / agent_type / cwd / effort / hook_event_name / permission_mode /
+  prompt_id / session_id / tool_input / tool_name / tool_use_id / transcript_path`。
+  所以**按角色限制工具直接可做** —— `delegate_guard` 的判据可以从
+  "`not data.get("agent_id")`(只管主线程)" 换成 "`agent_type` 在受限名单里"。
+  (我一度以为只有不透明 id、映射建不起来 —— 那是错的。)
+  `QUICK=1` 跑单层就能取到这些值,约 $0.1,不必每次跑完整三层。
+
 **仍未验证**(不是遗漏,是成本/权限所限,`README.md` 末尾有完整清单):
 真断网端到端(要 sudo 改 hosts,`tests/resilience_live.py` 已写好)、
 微压缩在 `DISABLE_AUTO_COMPACT=1` 下的行为(**这条是读二进制反汇编推断的,不是实测**)、
