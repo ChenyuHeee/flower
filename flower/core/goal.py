@@ -125,6 +125,20 @@ class Goal:
     checks: list[str] = field(default_factory=list)
     path: Path | None = None
 
+    UNVERIFIABLE = re.compile(r"\[\s*(?:此环境)?无法验证\s*[::]?")
+    """判定清单里"这条在当前环境验不了"的标记。见 ``JUDGE_RULES`` 的设定目标一节。"""
+
+    @property
+    def unverifiable(self) -> list[str]:
+        """标了"此环境无法验证"的条目。
+
+        **为什么要单独拿出来**:这些条目的命运在**设目标那一刻**就定了 ——
+        判定的时候必然过不去。实测栽过:HT002 花了 $35.90 干活 + $1.40 判定
+        之后才发现清单里有 4/15 条原理上验不了,而那件事在设目标时就已成立。
+        把发现提前到设目标那一步,成本从 $37 降到 $0。
+        """
+        return [c for c in self.checks if self.UNVERIFIABLE.search(c)]
+
     def missing(self) -> list[str]:
         return [GOAL_CANON[k] for k in GOAL_ORDER
                 if not (self.checks if k == "checks" else self.statement.strip())]

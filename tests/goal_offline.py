@@ -223,6 +223,41 @@ async def test_goal_step():
     check(not [c for c in rt2.calls if "设定目标" in c[0]], "目标已存在 → 跳过,不再设一遍")
     check(isinstance(ctx2.get(GOAL_KEY), Goal), "跳过时仍把目标灌进 ctx")
 
+    print("\n[8b] 验不了的条目在**设目标时**就喊出来(不等判定花完钱才暴露)")
+    gp2 = Path("/tmp/_goal_unverif_test.md"); gp2.unlink(missing_ok=True)
+    seen = []
+    rt_u = FakeRuntime([("设定目标", True, """# 目标
+装起来跑通
+# 判定清单
+- 构建 exit 0
+- 进程存活 30 秒
+- 截图并看图 [此环境无法验证:屏幕录制未授权]
+- 本人确认 [此环境无法验证:只能由他给出]
+""")])
+    wf_u = Workflow([goal_step(ch, goal_path=gp2)], context={"确认需求": "x"})
+    ctx_u = await wf_u.run(rt_u, on_event=seen.append)
+    g_u = ctx_u[GOAL_KEY]
+    check(len(g_u.unverifiable) == 2, f"Goal.unverifiable 认出 {len(g_u.unverifiable)} 条")
+    warn = [e for e in seen if e.kind == "task" and "验不了" in (e.text or "")]
+    check(len(warn) == 1, "设目标那一步发了一条提醒事件")
+    if warn:
+        p_ = warn[0].payload
+        check(p_.get("total") == 4 and len(p_.get("unverifiable", [])) == 2,
+              f"事件带上了 {len(p_.get('unverifiable',[]))}/{p_.get('total')} 的结构化数据")
+        check(str(gp2) in (warn[0].text or ""), "告诉人现在改哪个文件还来得及")
+    check("_failed_at" not in ctx_u, "只是提醒,不阻断 —— 人可以选择就这样跑")
+    gp2.unlink(missing_ok=True)
+
+    print("\n[8c] 没有验不了的条目时,不发这条提醒(零噪音)")
+    gp3 = Path("/tmp/_goal_clean_test.md"); gp3.unlink(missing_ok=True)
+    seen2 = []
+    rt_c = FakeRuntime([("设定目标", True, GOAL_MD)])
+    await Workflow([goal_step(ch, goal_path=gp3)],
+                   context={"确认需求": "x"}).run(rt_c, on_event=seen2.append)
+    check(not [e for e in seen2 if e.kind == "task" and "验不了" in (e.text or "")],
+          "清单全都验得了 → 一条提醒都不发")
+    gp3.unlink(missing_ok=True)
+
     rt3 = FakeRuntime([("设定目标", True, "# 目标\n只有目标没有清单")])
     wf3 = Workflow([goal_step(ch, goal_path=gp, always_set=True)],
                    context={"确认需求": "x"})

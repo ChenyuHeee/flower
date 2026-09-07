@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core.agent import AgentSpec
+from ..core.events import Event
 from ..core.goal import Goal, Verdict
 from ..core.human import HumanChannel
 from ..core.roles import judge
@@ -121,6 +122,14 @@ def goal_step(
             return False
         g.write(path)            # 冻结:从这里往后,目标以文件为准
         hydrate(ctx, g)
+        # 验不了的条目**现在**就说,不要等干完活判定时才暴露 ——
+        # 它们的命运在这一刻已经定了,而那时已经花掉了整轮干活的钱(实测 $37)。
+        if (bad := g.unverifiable) and (emit := ctx.get("_on_event")):
+            emit(Event("task", text=(
+                f"目标里有 {len(bad)}/{len(g.checks)} 条在这个环境里验不了 —— "
+                f"判定时它们必然过不去,会停下来问你。现在改 {path} 还来得及:\n"
+                + "\n".join(f"  · {c}" for c in bad)),
+                payload={"unverifiable": bad, "total": len(g.checks), "path": str(path)}))
         return True
 
     def reduce(result: StepResult, ctx: Ctx) -> str:
