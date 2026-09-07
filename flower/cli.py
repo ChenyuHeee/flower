@@ -26,7 +26,7 @@ from .core.env import describe, load_dotenv
 from .core.events import Event
 from .core.roles import oracle
 from .core.runtime import Runtime
-from .workflow.starter import starter_flow
+from .workflow.starter import starter_flow, wake_state
 
 # 配色的规则:**色相表示"谁在说话",不是装饰**。
 # 不用亮暗区分角色 —— dim 在某些终端配色下接近不可读,而"这句话是谁说的"
@@ -117,6 +117,15 @@ def _human(n: float) -> str:
     return f"{n/1000:.1f}K" if n >= 1000 else str(int(n))
 
 
+def _short(path: str | Path) -> str:
+    """把家目录换成 ~。绝对路径在终端里又长又抢眼,而它几乎从不是重点。"""
+    p = Path(path).resolve()
+    try:
+        return f"~/{p.relative_to(Path.home())}"
+    except ValueError:
+        return str(p)
+
+
 class Render:
     """Event → 终端。换 UI 就是换这一个类。
 
@@ -162,9 +171,14 @@ class Render:
     def _on_step(self, ev: Event) -> None:
         self._enter(False)
         i, total = ev.payload.get("index", 0), ev.payload.get("total", 0)
-        bar = "━" * max(4, _width() - len(ev.text) - 14)
+        # 「接上次」必须看得见:否则"它到底记不记得上次"完全不可感知,
+        # 而那正是这一层的全部价值。
+        tail = f"{i}/{total}"
+        if ev.payload.get("resumed"):
+            tail += f"  ↩ 接上次 · 第 {ev.payload.get('woke', 1)} 次唤醒"
+        bar = "━" * max(4, _width() - _cols(ev.text) - _cols(tail) - 6)
         _say(f"\n{C['bold']}{C['cyn']}━━ {ev.text} {bar}{C['off']}"
-             f" {C['dim']}{i}/{total}{C['off']}\n")
+             f" {C['dim']}{tail}{C['off']}\n")
 
     def _on_text(self, ev: Event) -> None:
         sub = bool(ev.payload.get("subagent"))
@@ -475,23 +489,33 @@ def _with_default_cmd(argv: list[str], parser: argparse.ArgumentParser) -> list[
     return argv + ["go"]
 
 
-def ask_for_prompt() -> str:
+NEW_CMD = "/new"
+
+
+def ask_for_prompt(*, waking: bool = False) -> str:
     """没在命令行给诉求时,问一句。
 
     为什么值得单独做:命令行里那对引号是纯负担。**实测踩过** ——
     右引号打成了中文的 `”`,zsh 一直在等真正的右引号(`dquote>` 续行提示符),
     看起来就像程序卡住了,而其实一次都没启动。这里读的是标准输入,
     不经过 shell 解析:中文引号、空格、感叹号、换行都能直接打。
+
+    ``waking=True``(这个目录用过)时**空回车是合法的** —— 那就是"接着做"。
+    打 ``/new`` 则是"这次别接上次"。
     """
     if sys.stdin.isatty():
-        print(f"{C['ylw']}要做什么?{C['off']} "
-              f"{C['dim']}一句话就够,回车开始(Ctrl-C 退出){C['off']}", flush=True)
+        head = (f"{C['ylw']}接着上次?{C['off']} {C['dim']}直接回车 = 接着做;"
+                f"也可以说点新的;{NEW_CMD} = 重开一件事(Ctrl-C 退出){C['off']}"
+                if waking else
+                f"{C['ylw']}要做什么?{C['off']} "
+                f"{C['dim']}一句话就够,回车开始(Ctrl-C 退出){C['off']}")
+        print(head, flush=True)
     try:
         ask = input("> ").strip()
     except (EOFError, KeyboardInterrupt):
         print(flush=True)
         sys.exit("已取消")
-    if not ask:
+    if not ask and not waking:
         sys.exit('诉求是空的。直接 `flower` 然后按提示输入,或者 flower "帮我做一个 X"。')
     return ask
 
@@ -611,13 +635,51 @@ async def _run_workflow(args) -> None:
     await _drive(obj() if callable(obj) else obj, args)
 
 
+def _wake_banner(st: dict, args) -> None:
+    """唤醒时先报一行现状。
+
+    不报的话"它到底记不记得上次"完全不可感知 —— 而那正是这一层的全部价值。
+    上下文数字尤其要报:接续是无止境的,它只会一直涨,人得看得见才有机会
+    在撞窗口之前自己决定 ``/new``。
+    """
+    bits = ["需求已确认"]
+    if st["checks"]:
+        bits.append(f"目标 {st['checks']} 条")
+    if sid := st["steps"].get("干活"):
+        try:
+            rt = Runtime(workspace=args.workspace, run_dir=args.run_dir)
+        except Exception:                                  # noqa: BLE001
+            rt = None
+        if rt is not None:
+            try:
+                if n := rt.context_of(sid):
+                    bits.append(f"干活上下文 {_human(n)}")
+            finally:
+                rt.close()
+    _say(f"{C['cyn']}↩ 在 {_short(args.workspace)} 接上上次{C['off']} "
+         f"{C['dim']}{' · '.join(bits)} · 第 {st['woke'] + 1} 次唤醒{C['off']}")
+
+
 async def _run_go(args) -> None:
     """零配置入口:`flower "帮我做一个 X"`。流程见 workflow/starter.py。"""
-    ask = (args.ask or "").strip() or ask_for_prompt()
+    fresh = bool(getattr(args, "new", False))
+    st = wake_state(args.workspace, run_dir=args.run_dir, isolate=args.isolate)
+    waking = st["waking"] and not fresh
+
+    ask = (args.ask or "").strip()
+    if not ask:
+        ask = ask_for_prompt(waking=waking)
+    if ask == NEW_CMD:              # 在提示符里改主意了 —— 和 --new 同一条路
+        fresh, waking, ask = True, False, ask_for_prompt()
+    if waking:
+        _wake_banner(st, args)
+
     try:
         wf = starter_flow(
             ask,
             workspace=args.workspace,
+            run_dir=args.run_dir,
+            new=fresh,
             isolate=args.isolate,
             clarify_only=args.clarify_only,
             max_asks=None if args.asks < 0 else args.asks,
@@ -702,6 +764,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="等你多久回答:默认 1800;0 = 全自动,不等人")
     g.add_argument("--isolate", action="store_true",
                    help="每个 subagent 分一份 git worktree(要求工作区是 git 仓库)")
+    g.add_argument("--new", action="store_true",
+                   help="这次别接上次:把上一段的需求/目标/血缘收进 "
+                        "notes/archive/ 再从头开始(不删,只是移开)")
     g.add_argument("--clarify-only", action="store_true", help="只问清需求,不往下干活")
     g.add_argument("--no-trim", action="store_true", help="关掉 trim(这条路径默认开)")
     g.set_defaults(fn=_run_go)

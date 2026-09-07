@@ -10,10 +10,14 @@
         Step("复核", spec=reviewer,  prompt="…", resume_from="实现", fork=True),
     ])
 
-三种接法:
+三种接法(**同一次运行内**,步与步之间):
   resume_from=None          新会话,只靠 prompt 里传入的上下文(便宜、隔离)
   resume_from="上一步"       续跑同一会话,完整上下文(贵、连贯)
   resume_from=… fork=True   分叉,不污染原会话(用于复核/多方案并行)
+
+**跨进程**是另一个轴,由 ``continuous``(默认开)管:同一个工作区再跑一次,
+每一步接着上次那个 session 说 —— 用户不需要知道 session 这个词,
+也不需要记住任何 id。见 :mod:`~flower.core.lineage`。
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ from typing import Any
 
 from ..core.agent import AgentSpec
 from ..core.events import Event
+from ..core.lineage import Lineage
 from ..core.runtime import Runtime, StepResult
 
 Ctx = dict[str, Any]
@@ -40,6 +45,17 @@ class StepAbort(Exception):
     抛出后本步按失败处理,并走 ``on_fail``(默认 ``stop``)。原因记在
     ``ctx["_aborted"]`` 里给 UI 用。
     """
+
+
+def _lineage_for(runtime: Runtime) -> Lineage | None:
+    """给这个运行时开血缘 —— **它得有个磁盘位置**。
+
+    真的 :class:`~flower.core.runtime.Runtime` 一定有 ``run_dir`` 和 ``workspace``。
+    没有的(测试里的假运行时、别人自己实现的驱动)就不接血缘:接续是锦上添花,
+    缺了它照样能跑,而硬要求这两个属性会把 Workflow 和某一个运行时实现焊死。
+    """
+    rd, ws = getattr(runtime, "run_dir", None), getattr(runtime, "workspace", None)
+    return Lineage.open(rd, ws) if rd and ws else None
 
 
 async def _settle(value: Any) -> Any:
@@ -77,6 +93,17 @@ class Step:
 
     返回空字符串 = 不打回(退化成重头跑)。可以是 async。
     """
+    resume_prompt: str | Callable[[Ctx], str] | None = None
+    """**接上次**的时候说什么(``prompt`` 说的是"从头开始"的时候说什么)。
+
+    为什么要分开:接续时对方的上下文里**已经有**确认书、目标、上次干到哪了。
+    再把 "照这份需求做:<整份确认书>" 原样发一遍是纯噪音,更糟的是它会读成
+    "需求变了,重新看一遍" —— 实际什么都没变。
+
+    不给就沿用 ``prompt``。有些步骤本来就该重发全文(设定目标要重新推导清单时,
+    它要的正是那份完整确认书),那就别给。
+    """
+
     reduce: Callable[[StepResult, Ctx], str] | None = None
     """决定 ``ctx[step.name]`` 里放什么。默认放 ``result.text`` 原文。
 
@@ -85,8 +112,9 @@ class Step:
     见 :func:`~flower.workflow.clarify.clarify_step`。
     """
 
-    def render(self, ctx: Ctx) -> str:
-        return self.prompt(ctx) if callable(self.prompt) else self.prompt
+    def render(self, ctx: Ctx, *, resuming: bool = False) -> str:
+        p = self.resume_prompt if (resuming and self.resume_prompt) else self.prompt
+        return p(ctx) if callable(p) else p
 
 
 @dataclass
@@ -121,6 +149,17 @@ class Workflow:
     ``None`` = 沿用驱动程序自己的选择(``cli.py`` 的 ``-W``)。
     """
 
+    continuous: bool = True
+    """**同一个路径 = 同一段对话。** 在同一个工作区再跑一次,每个步骤接着上次
+    那个 session 说,而不是从零开会话 —— 哪怕上次是被 kill 掉的。
+
+    实现是 :class:`~flower.core.lineage.Lineage`:步骤名 → session_id 落在
+    ``<run_dir>/lineage.json``,每步跑完立刻写。步骤名是跨进程稳定的键,
+    这是整件事成立的前提。
+
+    ``False`` = 老行为,每次进程都是全新会话。
+    """
+
     async def run(
         self,
         runtime: Runtime,
@@ -143,26 +182,50 @@ class Workflow:
         sessions: dict[str, str] = ctx.setdefault("_sessions", {})
         ctx.setdefault("_results", {})
 
+        # 上一次(或者更早)留在磁盘上的血缘。**逐个验证 session 还在库里** ——
+        # 血缘文件可能比 sessions.db 活得久(删过库、换过机器),而 resume 一个
+        # 不存在的 session 要等子进程起来才炸,那时候钱和时间都花了。
+        lin = _lineage_for(runtime) if self.continuous else None
+        if lin is not None:
+            ctx["_lineage"] = lin
+            ctx["_woke"] = lin.bump()
+            alive = getattr(runtime, "has_session", None)
+            for name, sid in lin.steps.items():
+                if alive is None or alive(sid):
+                    sessions.setdefault(name, sid)
+
         for i, step in enumerate(self.steps, 1):
             if step.when and not await _settle(step.when(ctx)):
                 continue
+
+            if step.resume_from:
+                # 本次运行内的血缘:显式声明"接着哪一步说"。语义一字未变。
+                resume = sessions.get(step.resume_from)
+                if resume is None:
+                    raise ValueError(
+                        f"步骤 {step.name!r} 要求 resume_from={step.resume_from!r},"
+                        " 但那一步没有产生 session(未运行或已失败)"
+                    )
+                carried = False
+            else:
+                # 跨进程的血缘:同一个目录、同一步 —— 接着上次那段对话。
+                # sessions[step.name] 是**步骤跑完才写**的(见下面),
+                # 所以本次运行内不会自己 resume 自己,不需要额外的标记位。
+                resume = sessions.get(step.name)
+                carried = resume is not None
+
             if on_event:
                 # 步骤边界是这次运行的骨架。UI 靠它分段 —— 否则几小时的输出
-                # 是一条看不出结构的流。
-                on_event(Event("step", text=step.name,
-                               payload={"index": i, "total": len(self.steps)}))
-
-            resume = sessions.get(step.resume_from) if step.resume_from else None
-            if step.resume_from and resume is None:
-                raise ValueError(
-                    f"步骤 {step.name!r} 要求 resume_from={step.resume_from!r},"
-                    " 但那一步没有产生 session(未运行或已失败)"
-                )
+                # 是一条看不出结构的流。carried 让人看得见"它记不记得"。
+                on_event(Event("step", text=step.name, payload={
+                    "index": i, "total": len(self.steps),
+                    "resumed": carried, "woke": ctx.get("_woke", 1)}))
 
             result, passed = None, False
             # 这三个会随"打回"而变,所以是局部变量 —— **不要写回 step**,
             # 同一个 Step 对象可能被跑第二次。
-            prompt_cur, resume_cur, fork_cur = step.render(ctx), resume, step.fork
+            prompt_cur, resume_cur, fork_cur = (
+                step.render(ctx, resuming=carried), resume, step.fork)
             for attempt in range(step.retries + 1):
                 if attempt == 0:
                     label = step.name
@@ -205,6 +268,9 @@ class Workflow:
 
             if result.session_id:
                 sessions[step.name] = result.session_id
+                if lin is not None:
+                    # **立刻**写盘,不是等跑完 —— 进程被 kill 正是要防的场景。
+                    lin.remember(step.name, result.session_id)
 
             if passed:
                 ctx[step.name] = step.reduce(result, ctx) if step.reduce else result.text

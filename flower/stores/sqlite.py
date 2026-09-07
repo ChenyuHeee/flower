@@ -140,6 +140,42 @@ class SqliteSessionStore(SessionStore):
         所以查询前用这个确认,别猜。"""
         return sorted({k.split("/", 1)[0] for (k,) in self._db.execute("SELECT store_key FROM meta")})
 
+    def has_session(self, project_key: str, session_id: str) -> bool:
+        """这个 session 还在库里吗?**同步的,不读 payload** —— 只查 meta 一行。
+
+        给"同一路径接续"用:血缘文件里记的 session_id 可能已经不在库里了
+        (删过 sessions.db、换过机器)。resume 一个不存在的 session 会在
+        子进程起来之后才炸,那时候钱和时间都花了 —— 所以开跑前先查这一下。
+        """
+        row = self._db.execute(
+            "SELECT 1 FROM meta WHERE store_key=? LIMIT 1", (f"{project_key}/{session_id}",)
+        ).fetchone()
+        return row is not None
+
+    def last_context(self, project_key: str, session_id: str, *, scan: int = 60) -> int:
+        """这个 session 最后一轮模型实际看到多大的上下文。查不到返回 ``0``。
+
+        接续是无止境的(见 :mod:`~flower.core.lineage`),上下文只会一直涨 ——
+        所以唤醒时要把这个数字摆出来,人才有机会在撞窗口之前自己决定 ``/new``。
+
+        只倒着扫最后 ``scan`` 条,不解析整份 transcript(HT001 那份 10 小时的
+        全解析要几秒)。``cache_read`` / ``cache_creation`` 都算 ——
+        它们同样在上下文里,只看 ``input_tokens`` 缓存命中时接近 0,会严重低估。
+        """
+        rows = self._db.execute(
+            "SELECT payload FROM entries WHERE store_key=? ORDER BY seq DESC LIMIT ?",
+            (f"{project_key}/{session_id}", scan),
+        ).fetchall()
+        for (payload,) in rows:
+            try:
+                u = ((json.loads(payload).get("message") or {}).get("usage")) or {}
+            except (ValueError, AttributeError):
+                continue
+            if n := (u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0)
+                     + u.get("cache_creation_input_tokens", 0)):
+                return int(n)
+        return 0
+
     async def load(self, key: SessionKey) -> list[SessionStoreEntry] | None:
         rows = self._db.execute(
             "SELECT payload FROM entries WHERE store_key=? ORDER BY seq", (_skey(key),)

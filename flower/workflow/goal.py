@@ -34,6 +34,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -225,10 +226,9 @@ def with_goal(
         v = ctx.get(VERDICT_KEY)
         return v.feedback() if isinstance(v, Verdict) else ""
 
-    return Step(
-        name=step.name, spec=step.spec, prompt=step.prompt,
-        resume_from=step.resume_from, fork=step.fork,
-        retries=max(0, rounds - 1),        # rounds 是总轮数,retries 是额外轮数
-        gate=gate, on_fail=step.on_fail, when=step.when,
-        on_reject=on_reject, reduce=step.reduce,
-    )
+    # ``replace`` 而不是逐字段重建:重建过一次就会漏 —— ``resume_prompt`` 刚被
+    # 这样漏掉过,而且**不报错**,只是接续时把整份确认书又发了一遍。
+    # 只写"这一层真正改变的东西",别的原样带过去。
+    return replace(step,
+                   retries=max(0, rounds - 1),   # rounds 是总轮数,retries 是额外轮数
+                   gate=gate, on_reject=on_reject)

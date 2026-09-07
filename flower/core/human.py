@@ -277,20 +277,30 @@ class HumanChannel:
         with self._lock:
             self.mail.append(m)
         self._emit_mail(m, "queued")
-        self._amend(m)
+        self.amend(m.text)
         return m
 
-    def _amend(self, m: Mail) -> None:
-        """追加到确认书。见 :attr:`amend_path` 的说明 —— 不落盘就活不过步骤边界。"""
-        if self.amend_path is None:
-            return
+    def amend(self, text: str, *, label: str = "运行中补充") -> bool:
+        """把一句话追加进确认书。见 :attr:`amend_path` —— 不落盘就活不过步骤边界。
+
+        :meth:`send` 会自己调它。**单独调**是给另一条路用的:唤醒时人在命令行上
+        直接说的那句新需求(``flower "顺便把 X 也做了"``)—— 它不该进收件箱
+        (那句话会被当成 prompt 直接送到干活的人面前,进收件箱就成了重复),
+        但**必须**落进确认书,否则下一个新 session 看不见它。
+
+        返回是否真的写了(没配 ``amend_path``、或者文本是空的 → ``False``)。
+        """
+        text = (text or "").strip()
+        if self.amend_path is None or not text:
+            return False
         try:
             self.amend_path.parent.mkdir(parents=True, exist_ok=True)
             head = "" if self.amend_path.exists() else "# 运行中的补充\n"
             with self.amend_path.open("a", encoding="utf-8") as f:
-                f.write(f"{head}\n## 运行中补充({time.strftime('%H:%M:%S')})\n{m.text}\n")
+                f.write(f"{head}\n## {label}({time.strftime('%H:%M:%S')})\n{text}\n")
         except OSError:
-            pass                       # 落盘失败不该带走这次运行
+            return False               # 落盘失败不该带走这次运行
+        return True
 
     def pending_mail(self) -> list[Mail]:
         with self._lock:

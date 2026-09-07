@@ -31,7 +31,10 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from ..core.brief import Brief
+from ..core.goal import Goal
 from ..core.human import HumanChannel
+from ..core.lineage import Lineage
 from ..core.roles import coordinator, worker
 from ..core.workbench import Workbench
 from .base import Ctx, Step, Workflow
@@ -39,6 +42,48 @@ from .clarify import clarify_step
 from .goal import GOAL_KEY, goal_step, with_goal
 
 DEFAULT_WORKER_PROMPT = "你负责实现。每改一处就跑一次验证,别攒到最后。"
+
+
+def _bench(ws: Path, isolate: bool) -> Workbench:
+    """工作台放哪 —— **只此一处定义**。
+
+    开隔离时必须在仓库外:worktree 是每个 agent 的私有副本,工作台是跨 agent
+    的共享层,共享的东西不能放进私有围栏里。驱动程序想知道确认书在哪,
+    也走这个函数,不要自己拼路径(拼错了不报错,只是静默失效)。
+    """
+    home = (ws.parent / f".flower-{ws.name}") if isolate else None
+    return Workbench(ws, home=home)
+
+
+def wake_state(
+    workspace: str | Path = ".",
+    *,
+    run_dir: str | Path = "runs",
+    isolate: bool = False,
+    brief_name: str = "需求.md",
+    goal_name: str = "目标.md",
+) -> dict:
+    """**起跑之前**问一句:这个目录用过没有?
+
+    给驱动程序用的只读探测 —— 它决定命令行上该提示"要做什么"还是"接着上次"。
+    一个字节都不写,叫它是安全的。
+
+    返回 ``{"waking", "brief", "goal", "checks", "woke", "steps"}``。
+    """
+    ws = Path(workspace).resolve()
+    wb = _bench(ws, isolate)
+    brief_path, goal_path = wb.notes / brief_name, wb.notes / goal_name
+    b = Brief.load(brief_path)
+    g = Goal.load(goal_path)
+    lin = Lineage.open(run_dir, ws)
+    return {
+        "waking": b is not None and b.complete(),
+        "brief": brief_path,
+        "goal": goal_path,
+        "checks": len(g.checks) if g is not None else 0,
+        "woke": lin.woke,
+        "steps": dict(lin.steps),
+    }
 
 
 def _is_git_repo(p: Path) -> bool:
@@ -51,6 +96,8 @@ def starter_flow(
     ask: str,
     *,
     workspace: str | Path = ".",
+    run_dir: str | Path = "runs",
+    new: bool = False,
     isolate: bool = False,
     clarify_only: bool = False,
     goal: bool = True,
@@ -78,10 +125,14 @@ def starter_flow(
     ``goal=False`` 关掉目标看守:干活那一步不再被判定,跑完就算完
     (便宜、快,但"它说做完了"就真的算做完了)。
     ``rounds`` 是干活的**总轮数**上限;``judge_can_run=True`` 让判定者能跑命令。
+
+    **唤醒**:这个工作区已经有确认书时,``ask`` 不是新任务,是**又说的一句话**。
+    它会同时落到三个地方(少一个都会静默失效,见 :func:`_wake_prompt`)。
+    ``ask`` 这时可以是空的 —— 什么都不说就是"接着做"。
+
+    ``new=True`` 把上一段收进 ``notes/archive/<时间戳>/`` 再从头开始。
     """
     ask = (ask or "").strip()
-    if not ask:
-        raise ValueError("要给一句诉求,例如 flower '帮我做一个 X'")
 
     ws = Path(workspace).resolve()
     if isolate and not _is_git_repo(ws):
@@ -90,26 +141,44 @@ def starter_flow(
             "先 git init,或者去掉 --isolate。"
         )
 
-    # 开隔离时工作台必须在仓库外,否则被隔离的 agent 写不进来(围栏会挡)。
-    # 放外面时 Runtime 会自动 add_dirs 授权。
-    home = (ws.parent / f".flower-{ws.name}") if isolate else None
-    wb = Workbench(ws, home=home).ensure()
+    wb = _bench(ws, isolate).ensure()
+    brief_path, goal_path = wb.notes / brief_name, wb.notes / goal_name
+
+    if new:
+        # 确认书、目标、血缘是同一段历史的三个面 —— 只收其中一部分会留下
+        # "目标还在但对话没了"这种半截状态。移动而不是删除。
+        Lineage.open(run_dir, ws).archive(wb.notes / "archive",
+                                          extra=[brief_path, goal_path])
+
+    # 用过的目录 + 你又说了一句话 = 唤醒,不是新任务。
+    prior = Brief.load(brief_path)
+    waking = prior is not None and prior.complete()
+    if not waking and not ask:
+        raise ValueError("要给一句诉求,例如 flower '帮我做一个 X'")
 
     # amend_path:人在运行途中说的话追加到确认书里。
     # 不落盘的话它活不过步骤边界 —— 下一步是新 session,只读冻结件。
     ch = HumanChannel(log_path=wb.notes / log_name,
-                      amend_path=wb.notes / brief_name,
+                      amend_path=brief_path,
                       max_asks=max_asks, timeout_s=timeout_s)
 
-    brief_step = clarify_step(ch, brief_path=wb.notes / brief_name, prompt=ask,
+    # 落地之一:追加进确认书。没有这一步,你这句话活不过步骤边界。
+    # 已经在里面就不重复写(重跑同一条命令时常见)。
+    said = ask if waking else ""
+    amended = bool(said) and said not in brief_path.read_text(encoding="utf-8") \
+        and ch.amend(said, label="唤醒时追加")
+
+    brief_step = clarify_step(ch, brief_path=brief_path, prompt=ask,
                               instructions=instructions)
     steps = [brief_step]
     if clarify_only:
         return Workflow(name="starter", channel=ch, workbench=wb, steps=steps)
 
-    goal_path = wb.notes / goal_name
     if goal:
-        steps.append(goal_step(ch, goal_path=goal_path, brief_key=brief_step.name))
+        # 落地之二:确认书变了就重推清单。不重推的话,判定者读的还是冻结的老目标,
+        # 你新加的那件事**做没做完根本不进判定** —— 它会按老清单判通过。
+        steps.append(goal_step(ch, goal_path=goal_path, brief_key=brief_step.name,
+                               always_set=amended))
 
     # channel 给协调者 = 它能查收件箱(人主动说的话),也能中途提问。
     # 不给的话,人在干活那几小时里说什么它都收不到 —— 见 issue #3。
@@ -117,14 +186,31 @@ def starter_flow(
         "coder": worker("写代码与测试。要动手实现的活派给它。",
                         worker_prompt, isolate=isolate),
     }, channel=ch)
+    # 落地之三:接续时直接把这句话送到协调者面前。它的上下文里已经有确认书和
+    # 上次干到哪了,重发全文是噪音,还会被读成"需求变了,重新看一遍"。
     work = Step("干活", spec=coord,
-                prompt=lambda ctx: _work_prompt(ctx, brief_step.name))
+                prompt=lambda ctx: _work_prompt(ctx, brief_step.name),
+                resume_prompt=lambda ctx: _wake_prompt(said, ctx, regoal=amended))
     if goal:
         work = with_goal(work, ch, goal_path=goal_path,
                          rounds=rounds, can_run=judge_can_run)
     steps.append(work)
 
     return Workflow(name="starter", channel=ch, workbench=wb, steps=steps)
+
+
+def _wake_prompt(said: str, ctx: Ctx, *, regoal: bool) -> str:
+    """接着上次说什么。
+
+    空的 ``said`` = 你什么都没说,那就是"接着做"。
+    ``regoal`` 时把新清单一并给它:它的上下文里是**旧**目标,不给的话它会
+    照旧标准干,然后被按新标准判 —— 那是最冤的一种打回。
+    """
+    parts = [said or "接着做。上次干到哪就从哪接着,先说一句你打算先动什么。"]
+    if regoal and (g := ctx.get(GOAL_KEY)) is not None:
+        parts.append("判定标准已经按这句话重新推导过,**以这份为准**:\n\n"
+                     f"{g.prompt_block()}")
+    return "\n\n---\n\n".join(parts)
 
 
 def _work_prompt(ctx: Ctx, brief_key: str) -> str:

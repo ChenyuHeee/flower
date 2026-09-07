@@ -96,11 +96,20 @@ def main(run_dir: str) -> int:
     print("=" * 72)
     print(f"运行目录 {rd}")
     if steps:
-        print(f"步骤 {len(steps)} 个,合计 ${total_usd:.4f}")
+        # manifest 是跨进程累积的(同一个目录接着跑 → 又追加一批),所以按 run 分组。
+        # 老的清单没有 run 字段,归到 "-" 一组照常显示。
+        runs = collections.OrderedDict()
         for s in steps:
-            dur = s.get("duration_s") or (s.get("ended_at", 0) - s.get("started_at", 0))
-            print(f"  {s['step']:<12} ${s['cost_usd']:>9.4f}  {s['num_turns']:>3}轮  "
-                  f"attempts={s['attempts']}  resumed={s['resumed']}  {dur/3600:.2f}h")
+            runs.setdefault(s.get("run", "-"), []).append(s)
+        print(f"步骤 {len(steps)} 个,{len(runs)} 次运行,合计 ${total_usd:.4f}")
+        for rid, group in runs.items():
+            if len(runs) > 1:
+                sub = sum(s.get("cost_usd", 0) for s in group)
+                print(f"  ── 第 {list(runs).index(rid) + 1} 次运行 {rid} · ${sub:.4f}")
+            for s in group:
+                dur = s.get("duration_s") or (s.get("ended_at", 0) - s.get("started_at", 0))
+                print(f"  {s['step']:<12} ${s['cost_usd']:>9.4f}  {s['num_turns']:>3}轮  "
+                      f"attempts={s['attempts']}  resumed={s['resumed']}  {dur/3600:.2f}h")
 
     # ---------- 上下文经济学 ----------
     def agg(keys):

@@ -98,6 +98,11 @@ class Runtime:
         self.resilience = (resilience if isinstance(resilience, Resilience)
                            else Resilience(enabled=bool(resilience)))
         self.results: list[StepResult] = []
+        # 这次进程的标记 + 上次留下的账。manifest 是**跨进程累积**的:
+        # 同一个目录接着跑(见 core/lineage.py),它就是唯一能查到
+        # "哪一步用了哪个 session" 的地方,不能被后一次运行冲掉。
+        self.run_id = time.strftime("%Y%m%d-%H%M%S")
+        self._prior_rows = self._load_manifest()
         self._interrupt: str | None = None
         """人按下 Ctrl+C 时想说的话。见 :meth:`interrupt`。"""
 
@@ -304,14 +309,34 @@ class Runtime:
             # 失败时保留上一次的正文,不要被空结果冲掉
             result.text = "\n".join(texts).strip() or result.text
 
+    @property
+    def manifest_path(self) -> Path:
+        return self.run_dir / "manifest.json"
+
+    def _load_manifest(self) -> list[dict]:
+        """读回上一次(以及更早)留下的行。读不动就当空的 —— 不能因为
+        一份坏掉的账本拦住这次运行。"""
+        try:
+            rows = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
     def _persist(self) -> None:
         """运行清单:step → session_id 的血缘,事后 resume/fork 靠它。
+
+        **追加,不覆盖。** 以前写的是 ``self.results``,而它每个进程从空列表开始
+        且从不读回来 —— 于是在同一个 run_dir 跑第二次,第一次的账被整个冲掉。
+        现在每行带 ``run``(进程启动时刻),按它分组就能看出跑了几次。
 
         ``duration_s`` 要手工补:它是 ``@property``,而 ``asdict()`` 只收 dataclass
         字段 —— 不补的话清单里没有时长,得自己拿 started_at/ended_at 去减。
         """
-        rows = [{**asdict(r), "duration_s": r.duration_s} for r in self.results]
-        (self.run_dir / "manifest.json").write_text(
+        rows = self._prior_rows + [
+            {**asdict(r), "duration_s": r.duration_s, "run": self.run_id}
+            for r in self.results
+        ]
+        self.manifest_path.write_text(
             json.dumps(rows, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
@@ -321,6 +346,20 @@ class Runtime:
         """SDK 用 cwd 推导 project_key(`/`、`_`、`.` 全部换成 `-`),
         调用方指定不了。查库时必须用这个,不是自定义标签。"""
         return _project_key(self.workspace)
+
+    def has_session(self, session_id: str) -> bool:
+        """这个 session_id 在**本工作区**下还查得到吗。
+
+        ``project_key`` 由工作区路径推导(见 :attr:`project_key`),所以目录被拷走
+        之后旧 id 一律查不到 —— 这正是想要的:接续应该退回从头开始,而不是报错。
+        """
+        store = getattr(self.store, "has_session", None)
+        return bool(store and store(self.project_key, session_id))
+
+    def context_of(self, session_id: str) -> int:
+        """某个 session 最后一轮的上下文规模。给唤醒时那行状态用。"""
+        fn = getattr(self.store, "last_context", None)
+        return int(fn(self.project_key, session_id)) if fn else 0
 
     def total_cost(self) -> float:
         return round(sum(r.cost_usd for r in self.results), 4)

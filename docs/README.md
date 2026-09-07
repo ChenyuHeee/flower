@@ -13,6 +13,7 @@ flower 是一个**可移植的长程 agent 框架**。它用 Claude Agent SDK wh
 | 设计自己的流程(`Step` / `Workflow` 参考) | [workflow.md](workflow.md) |
 | 让它先把需求问清楚再动手 | [clarify.md](clarify.md) |
 | 谁来判"做完了没有" | [goal.md](goal.md) |
+| **同一个目录再跑一次,它还记得吗** | [continuity.md](continuity.md) |
 | **一次真实运行到底发生了什么(实测数据)** | [case-ht001.md](case-ht001.md) |
 | **目标看守首次真实运行,以及它把简单问题复杂化了** | [case-ht002.md](case-ht002.md) |
 | 换掉终端,接 Web / TUI / HTTP / 全自动 | [interaction.md](interaction.md) |
@@ -83,7 +84,19 @@ echo "帮我做一个 X" | flower --timeout 0     # 全自动,不等人
 3. **干活,每轮结束由独立的判定者判"做完了没有"** —— 没达成就打回去接着做,
    做不到就停下来问你。见 [goal.md](goal.md)。
 
-重跑不会再盘问一遍,也不会重设一遍目标。
+**重跑就是接着上次说。** 同一个目录再跑一次 `flower`,每一步接着上次那个会话 ——
+不会再盘问一遍需求,也不会重设一遍目标,连协调者试过哪些死路都还记得。
+进程被 kill、机器重启都一样。什么都不想说就直接回车:
+
+```
+接着上次? 直接回车 = 接着做;也可以说点新的;/new = 重开一件事(Ctrl-C 退出)
+> 顺便支持代码块高亮
+↩ 在 ~/proj 接上上次  需求已确认 · 目标 7 条 · 干活上下文 71.4K · 第 3 次唤醒
+```
+
+唤醒时说的那句话会追加进 `需求.md`,并触发重新推导判定清单 ——
+否则判定者读的还是老清单,你新加的事根本不进判定。细节和代价(**上下文会一直涨**)
+见 [continuity.md](continuity.md)。
 
 | 开关 | 作用 |
 |---|---|
@@ -94,6 +107,7 @@ echo "帮我做一个 X" | flower --timeout 0     # 全自动,不等人
 | `--judge-can-run` | 让判定者能跑命令(判定更硬,但它能改动工作区)|
 | `--timeout 秒` | 等你多久,默认 1800;**`0` = 全自动,没人时不阻塞** |
 | `--isolate` | 每个 subagent 分一份 git worktree(要求项目是 git 仓库) |
+| `--new` | 这次别接上次:上一段的需求/目标/血缘收进 `notes/archive/`(不删,只是移开) |
 | `-v` | 显示思考和工具结果 |
 
 开关写在诉求前面或后面都行,只给开关不给诉求也行(`flower --clarify-only` 会先问你要做什么)。这条路径的流程实现在
@@ -221,7 +235,8 @@ agent 的私有副本,工作台是跨 agent 的共享层,共享的东西不能�
 ```
 runs/
   sessions.db        全部 transcript(含每个 subagent 的独立 transcript)。原文永不改写
-  manifest.json      step → session_id / 花费 / 重试次数 / 失败原因。事后续跑靠它
+  manifest.json      step → session_id / 花费 / 重试次数 / 失败原因。**跨进程追加**
+  lineage.json       步骤名 → session_id。同一个目录再跑一次就靠它接上
   workbench/         开 -W 时的工作台:scripts/ artifacts/ notes/ + INDEX.md
 ```
 

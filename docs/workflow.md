@@ -296,6 +296,22 @@ result = await rt.run(spec, "任务", step_name="调研",
 重试的 prompt **有意不含任何错误细节** —— 模型需要知道"被打断了、接着做",
 不需要知道是 ENOTFOUND 还是 503。
 
+## 同一个路径再跑一次 = 接着上次
+
+上面三种接法说的是**一次运行内**步与步之间。跨进程是另一个轴:
+
+```python
+Workflow(..., continuous=True)     # 默认
+```
+
+同一个工作区再跑一次,每一步接着上次那个 session 说 —— 靠
+`<run_dir>/lineage.json` 里的「步骤名 → session_id」。步骤名是跨进程稳定的键。
+显式 `resume_from` 的步骤不受影响,它优先。
+
+接续时想说别的话就给 `Step.resume_prompt`:对方上下文里已经有的东西不该重发。
+
+完整设计、代价(**上下文会一直涨**)和 `--new` 见 [continuity.md](continuity.md)。
+
 ## 事后再来一次
 
 每一步的 `session_id` 都写进 `runs/manifest.json`,所以**任意一步事后都能续跑、

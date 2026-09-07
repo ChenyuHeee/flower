@@ -5,6 +5,7 @@ from .core.brief import Brief
 from .core.goal import Goal, Verdict
 from .core.events import Event, normalize
 from .core.human import Ask, HumanChannel
+from .core.lineage import Lineage
 from .core.guard import (delegate_guard, index_guard, isolate_guard, isolated, merge_hooks,
                          spill_guard, wants_isolation, whitelist_guard, workbench_hooks)
 from .core.roles import (CLARIFIER_RULES, COORDINATOR_RULES, JUDGE_RULES, ORACLE_RULES,
@@ -18,12 +19,12 @@ from .stores.trim import EphemeralPolicy, is_ephemeral, TrimmingSessionStore, Tr
 from .workflow.base import Step, StepAbort, Workflow
 from .workflow.clarify import BRIEF_KEY, MISSING_KEY, clarify_step
 from .workflow.goal import GOAL_KEY, ROUND_KEY, VERDICT_KEY, goal_step, with_goal
-from .workflow.starter import starter_flow
+from .workflow.starter import starter_flow, wake_state
 
 __all__ = [
     "AgentSpec", "CompactPolicy", "build_options",
     "Event", "normalize",
-    "Ask", "HumanChannel", "Brief", "Goal", "Verdict",
+    "Ask", "HumanChannel", "Brief", "Goal", "Verdict", "Lineage",
     "Workbench", "coordinator", "worker", "clarify", "judge", "oracle",
     "COORDINATOR_RULES", "WORKER_RULES", "CLARIFIER_RULES", "JUDGE_RULES", "ORACLE_RULES",
     "delegate_guard", "spill_guard", "index_guard", "workbench_hooks", "merge_hooks",
@@ -35,6 +36,6 @@ __all__ = [
     "PruningSessionStore", "PrunePolicy",
     "Step", "Workflow", "StepAbort", "clarify_step", "BRIEF_KEY", "MISSING_KEY",
     "goal_step", "with_goal", "GOAL_KEY", "VERDICT_KEY", "ROUND_KEY",
-    "starter_flow",
+    "starter_flow", "wake_state",
 ]
 __version__ = "0.1.0"

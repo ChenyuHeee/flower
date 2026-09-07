@@ -330,6 +330,35 @@ def main() -> int:                                          # noqa: C901
           "没有 manifest —— Runtime.run() 一次都没进")
     check((ws / ".flower" / "INDEX.md").is_file(), "工作台索引生成在项目内")
 
+    # ---------------------------------------------------------------
+    print("\n[10] 唤醒:同一个目录再跑一次 `flower`(空回车 = 接着做,零请求)")
+    ws = fresh(tmp, "p6")
+    Brief.parse(COMPLETE_BRIEF).write(ws / ".flower" / "notes" / "需求.md")
+    before = (ws / ".flower" / "notes" / "需求.md").read_text(encoding="utf-8")
+    # 空 stdin = 直接回车。用过的目录里这**不是错误** —— 那就是"接着做"。
+    r = subprocess.run([str(exe), "--clarify-only"], input="\n",
+                       cwd=ws, capture_output=True, text=True, timeout=120)
+    check(r.returncode == 0,
+          f"空诉求在用过的目录里是合法的(退出码 {r.returncode}){r.stderr[-160:] if r.returncode else ''}")
+    check("接上上次" in r.stdout, "打了唤醒那一行 —— 否则'它记不记得'完全不可见")
+    check("总花费 $0" in r.stdout, "花费 $0 —— 确认书在,那一步跳过了")
+    check((ws / ".flower" / "notes" / "需求.md").read_text(encoding="utf-8") == before,
+          "什么都没说 → 确认书一个字都没动(不该凭空追加)")
+
+    # 同一条命令,这次说了一句话 → 必须落进确认书
+    r2 = subprocess.run([str(exe), "顺便支持配置文件", "--clarify-only"],
+                        cwd=ws, capture_output=True, text=True, timeout=120)
+    after = (ws / ".flower" / "notes" / "需求.md").read_text(encoding="utf-8")
+    check(r2.returncode == 0, f"退出码 0(实际 {r2.returncode})")
+    check("顺便支持配置文件" in after and "唤醒时追加" in after,
+          "唤醒时说的话追加进了确认书 —— 不落盘它活不过步骤边界")
+
+    # --new 走的是同一段代码,但它会归档确认书 → 澄清者**真的开跑**(要钱)。
+    # 归档已经在 tests/lineage_offline.py [8] 离线钉住,这里只验开关存在。
+    ap2 = build_parser()
+    check(ap2.parse_args(_with_default_cmd(["--new", "另一件事"], ap2)).new is True,
+          "`flower --new \"另一件事\"` 解析成 go --new(归档行为见 lineage_offline [8])")
+
     print(f"\n{'✓ 一键入口与模板验证全部通过' if not fail else f'✗ {fail} 项失败'}"
           f"(共 {ok + fail} 项)")
     return 1 if fail else 0
