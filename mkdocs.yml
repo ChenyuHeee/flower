@@ -3,59 +3,171 @@ site_description: 基于 Claude Agent SDK 的可移植长程 agent 框架
 site_url: https://chenyuheee.github.io/flower/
 repo_url: https://github.com/ChenyuHeee/flower
 repo_name: ChenyuHeee/flower
+edit_uri: edit/main/docs/
 docs_dir: docs
-copyright: flower —— 可移植长程 agent 框架
+copyright: flower · MIT · 基于 Claude Agent SDK
 
 theme:
   name: material
+  custom_dir: docs/overrides
   language: zh
+  logo: assets/images/logo.svg
+  favicon: assets/images/favicon.svg
+  icon:
+    repo: fontawesome/brands/github
   palette:
-    - scheme: default
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: 跟随系统
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
       primary: teal
       accent: teal
       toggle:
         icon: material/weather-night
         name: 切到暗色
-    - scheme: slate
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
       primary: teal
       accent: teal
       toggle:
         icon: material/weather-sunny
         name: 切到亮色
   features:
+    - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
     - navigation.top
     - navigation.tracking
-    - content.code.copy
-    - search.suggest
+    - navigation.footer
     - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.action.edit
+
+extra_css:
+  - assets/stylesheets/extra.css
 
 markdown_extensions:
+  - abbr
   - admonition
   - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
   - tables
   - toc:
       permalink: true
+      permalink_title: 本节链接
+      toc_depth: 3
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.details
   - pymdownx.highlight:
       anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.superfences
-  - pymdownx.details
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/ChenyuHeee/flower
+      name: GitHub
+
+hooks:
+  - hooks/redirects.py
+
+plugins:
+  - search:
+      separator: '[\s​\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - minify:
+      minify_html: true
+      htmlmin_opts:
+        remove_comments: true
+  - i18n:
+      docs_structure: folder
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: zh
+          name: 简体中文
+          default: true
+          build: true
+        - locale: en
+          name: English
+          build: true
+          site_description: A portable, long-horizon agent framework built on the Claude Agent SDK
+        - locale: ja
+          name: 日本語
+          build: true
+        - locale: ko
+          name: 한국어
+          build: true
+        - locale: fr
+          name: Français
+          build: true
+        - locale: de
+          name: Deutsch
+          build: true
+        - locale: es
+          name: Español
+          build: true
+        - locale: ru
+          name: Русский
+          build: true
+        - locale: pt-BR
+          name: Português (BR)
+          build: true
 
 nav:
-  - 开始: index.md
-  - 快速上手: start.md
+  - 首页: zh/index.md
+  - 入门:
+      - 安装: zh/getting-started/install.md
+      - 快速上手: zh/getting-started/quickstart.md
+      - 核心概念: zh/getting-started/concepts.md
   - 机制:
-    - 设计一个流程: workflow.md
-    - 前置确认: clarify.md
-    - 目标看守: goal.md
-    - 接续(同一路径续跑): continuity.md
-    - 换代(上下文满了不 compact): handoff.md
-    - 换交互层: interaction.md
-  - 真实运行案例:
-    - HT001 · 从零写一个终端 IDE: case-ht001.md
-    - HT002 · 装到 macOS 上跑起来: case-ht002.md
+      - 上下文经济学: zh/guide/context.md
+      - 设计流程: zh/guide/workflow.md
+      - 前置确认: zh/guide/clarify.md
+      - 目标看守: zh/guide/goal.md
+      - 接续: zh/guide/continuity.md
+      - 换代: zh/guide/handoff.md
+      - 交互层: zh/guide/interaction.md
+  - 参考:
+      - 命令行: zh/reference/cli.md
+      - Python API: zh/reference/api.md
+      - 配置: zh/reference/config.md
+      - 部署: zh/reference/deploy.md
+      - 常见问题: zh/reference/faq.md
+      - 术语表: zh/reference/glossary.md
+  - 案例:
+      - HT001 · 从零写一个终端 IDE: zh/cases/ht001.md
+      - HT002 · 装到 macOS 上跑起来: zh/cases/ht002.md
 
 validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
   links:
-    not_found: warn        # 指向仓库根 README 的相对链不在 site 里,只告警不失败
+    not_found: warn

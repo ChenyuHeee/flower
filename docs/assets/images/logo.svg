@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+  <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <!-- stem: the long-horizon main thread -->
+    <path d="M24 44V27" opacity=".85"/>
+    <!-- two leaves: work delegated off the main thread -->
+    <path d="M24 37c-3.2 0-6.4-1.6-7.6-4.8 3.4-1.2 6.6.2 7.6 4.8Z" opacity=".55"/>
+    <path d="M24 32.5c3.2 0 6.4-1.6 7.6-4.8-3.4-1.2-6.6.2-7.6 4.8Z" opacity=".55"/>
+    <!-- four petals: the four mechanisms -->
+    <path d="M24 22c-4.6-3-4.6-8.2 0-11.6 4.6 3.4 4.6 8.6 0 11.6Z"/>
+    <path d="M24 22c3-4.6 8.2-4.6 11.6 0-3.4 4.6-8.6 4.6-11.6 0Z"/>
+    <path d="M24 22c-3-4.6-8.2-4.6-11.6 0 3.4 4.6 8.6 4.6 11.6 0Z"/>
+    <path d="M24 22c4.6 3 4.6 8.2 0 11.6-4.6-3.4-4.6-8.6 0-11.6Z" opacity=".35"/>
+  </g>
+  <circle cx="24" cy="22" r="2.6" fill="currentColor"/>
+</svg>

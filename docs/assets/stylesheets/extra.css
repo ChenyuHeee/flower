@@ -1,0 +1,205 @@
+/* ============================================================
+   flower docs — theme refinements
+   Goals: readable CJK + Latin at the same time, calmer surfaces,
+   tables that survive long API signatures, a real landing page.
+   ============================================================ */
+
+:root {
+  --md-primary-fg-color:        #0f766e;
+  --md-primary-fg-color--light: #14b8a6;
+  --md-primary-fg-color--dark:  #115e59;
+  --md-accent-fg-color:         #0d9488;
+
+  --fl-hairline: rgba(15, 118, 110, .16);
+  --fl-surface:  rgba(15, 118, 110, .045);
+  --fl-code-bg:  rgba(15, 23, 42, .045);
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color:        #2dd4bf;
+  --md-primary-fg-color--light: #5eead4;
+  --md-primary-fg-color--dark:  #14b8a6;
+  --md-accent-fg-color:         #5eead4;
+
+  --md-default-bg-color:        hsl(210, 20%, 10%);
+  --md-code-bg-color:           hsl(210, 20%, 14%);
+
+  --fl-hairline: rgba(45, 212, 191, .20);
+  --fl-surface:  rgba(45, 212, 191, .06);
+  --fl-code-bg:  rgba(148, 163, 184, .10);
+}
+
+/* ---------- Typography ------------------------------------ */
+/* Latin first, then a CJK stack, so Chinese/Japanese/Korean text
+   does not fall back to a mismatched face mid-sentence. */
+:root {
+  --md-text-font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    "PingFang SC", "Hiragino Sans GB", "Hiragino Sans", "Noto Sans CJK SC",
+    "Noto Sans KR", "Microsoft YaHei", "Source Han Sans SC", sans-serif;
+}
+
+.md-typeset {
+  font-size: .78rem;
+  line-height: 1.75;
+}
+
+/* CJK reads better with a touch of letter-spacing; Latin does not. */
+html[lang="zh"] .md-typeset,
+html[lang="ja"] .md-typeset,
+html[lang="ko"] .md-typeset {
+  letter-spacing: .012em;
+}
+
+.md-typeset h1 {
+  font-weight: 700;
+  letter-spacing: -.012em;
+  margin-bottom: .6em;
+}
+
+.md-typeset h2 {
+  font-weight: 650;
+  letter-spacing: -.008em;
+  margin-top: 2.2em;
+  padding-bottom: .3em;
+  border-bottom: 1px solid var(--fl-hairline);
+}
+
+.md-typeset h3 { font-weight: 650; margin-top: 1.8em; }
+
+/* Inline code should not shout inside prose. */
+.md-typeset code {
+  background: var(--fl-code-bg);
+  border-radius: .2rem;
+  padding: .1em .34em;
+  font-size: .86em;
+}
+
+/* ---------- Tables ---------------------------------------- */
+/* API tables carry long signatures — let them scroll instead of
+   squeezing the column to one character per line. */
+.md-typeset__table { width: 100%; }
+.md-typeset table:not([class]) {
+  font-size: .72rem;
+  border: 1px solid var(--fl-hairline);
+  border-radius: .3rem;
+  box-shadow: none;
+}
+.md-typeset table:not([class]) th {
+  background: var(--fl-surface);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.md-typeset table:not([class]) td { vertical-align: top; }
+.md-typeset table:not([class]) td:first-child code { white-space: nowrap; }
+
+/* ---------- Admonitions ----------------------------------- */
+.md-typeset .admonition,
+.md-typeset details {
+  border-width: 0 0 0 .16rem;
+  border-radius: .25rem;
+  box-shadow: none;
+  background: var(--fl-surface);
+  font-size: .74rem;
+}
+.md-typeset .admonition-title,
+.md-typeset summary { background: transparent !important; font-weight: 650; }
+
+/* ---------- Code blocks ----------------------------------- */
+.md-typeset pre > code { font-size: .70rem; line-height: 1.6; }
+.md-typeset .highlight { border-radius: .3rem; }
+
+/* ---------- Landing page ---------------------------------- */
+.fl-hero {
+  padding: 2.2rem 0 1.4rem;
+  border-bottom: 1px solid var(--fl-hairline);
+  margin-bottom: 2rem;
+}
+.fl-hero__tagline {
+  font-size: 1.15rem;
+  line-height: 1.5;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  margin: 0 0 .6rem;
+}
+.fl-hero__sub {
+  font-size: .82rem;
+  line-height: 1.7;
+  opacity: .78;
+  margin: 0 0 1.2rem;
+  max-width: 42rem;
+}
+.md-typeset .fl-hero .md-button {
+  margin: 0 .4rem .4rem 0;
+}
+
+/* Feature grid — used on the landing page. */
+.fl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: .9rem;
+  margin: 1.4rem 0 2rem;
+}
+.fl-card {
+  border: 1px solid var(--fl-hairline);
+  border-radius: .35rem;
+  padding: .95rem 1.05rem;
+  background: var(--md-default-bg-color);
+  transition: border-color .18s ease, transform .18s ease;
+}
+.fl-card:hover {
+  border-color: var(--md-accent-fg-color);
+  transform: translateY(-1px);
+}
+.fl-card h3 {
+  margin: 0 0 .35rem !important;
+  font-size: .82rem;
+  font-weight: 650;
+}
+.fl-card h3 a { color: inherit; }
+.fl-card p {
+  margin: 0;
+  font-size: .72rem;
+  line-height: 1.65;
+  opacity: .8;
+}
+
+/* Stat strip — real measured numbers from the case studies. */
+.fl-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: .8rem;
+  margin: 1.6rem 0;
+}
+.fl-stat {
+  border-left: 2px solid var(--md-primary-fg-color);
+  padding: .1rem 0 .1rem .8rem;
+}
+.fl-stat b {
+  display: block;
+  font-size: 1.28rem;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.fl-stat span {
+  display: block;
+  font-size: .66rem;
+  opacity: .7;
+  margin-top: .15rem;
+}
+
+/* ---------- Nav / chrome ---------------------------------- */
+.md-header { box-shadow: none; border-bottom: 1px solid rgba(0,0,0,.06); }
+.md-nav { font-size: .70rem; }
+.md-nav__title { font-weight: 650; }
+.md-typeset .md-typeset__scrollwrap { margin: 0; }
+
+/* The language switcher lists nine locales — keep it scrollable. */
+.md-select__list { max-height: 20rem; overflow-y: auto; }
+
+@media screen and (max-width: 76.1875em) {
+  .fl-hero { padding-top: 1.2rem; }
+  .fl-hero__tagline { font-size: 1rem; }
+}
