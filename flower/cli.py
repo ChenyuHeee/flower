@@ -97,12 +97,36 @@ def answer_from_stdin(channel) -> threading.Event:
     """
     stop = threading.Event()
 
+    def drain_stale() -> None:
+        """丢掉"提问出现之前"就已经躺在缓冲里的输入。
+
+        为什么必须丢:没有待答提问的时候这个循环**不读 stdin**(见下面),
+        于是用户在干活那几小时里敲的任何东西都留在终端缓冲里。
+        下一次提问时 ``input()`` 会立刻把那行陈货当成答案吃掉 ——
+        用户还没看见问题,问题就被"回答"了,而且答得驴唇不对马嘴。
+
+        只在**从"无提问"跳到"有提问"的那一刻**丢一次,所以丢掉的严格是
+        问题出现之前敲的内容;问题出现之后敲的答案不受影响。
+        """
+        if not sys.stdin.isatty():
+            return
+        try:
+            import termios
+            termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
+        except Exception:          # 不是所有平台/终端都支持,失败不该影响主流程
+            pass
+
     def loop() -> None:
+        had_pending = False
         while not stop.is_set():
             pend = channel.pending()
             if not pend:
+                had_pending = False
                 time.sleep(0.15)
                 continue
+            if not had_pending:
+                drain_stale()      # 刚冒出新提问 —— 先把陈货清掉
+                had_pending = True
             ask = pend[0]
             try:
                 raw = input(f"{C['ylw']}你的回答{C['off']} {C['dim']}(回车=跳过,让它自己判断)"
