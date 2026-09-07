@@ -11,6 +11,8 @@ import argparse
 import asyncio
 import collections
 import importlib
+import os
+import re
 import select
 import shutil
 import signal
@@ -38,14 +40,74 @@ C = {
     "blu": "\033[34m", "mag": "\033[35m", "cyn": "\033[36m",
 }
 
+# 图标一律用 ASCII。emoji(💭 ❓ ✉)和框线/几何/箭头字符(━ │ └ ◆ ● ⏺ ↩ …)
+# 会走终端的字形回退和彩色字形渲染 —— 两次终端崩溃的栈都落在那条路上
+# (CGContextClipToRect / CoreText 字形布局)。**颜色留着**(SGR 转义是每个终端
+# 都验了几十年的东西,不在崩溃栈上),只把"图标"换成 ASCII。见 issue #7。
+G = {
+    "rule": "=",        # 步骤分隔线的填充
+    "gutter": "| ",     # subagent 缩进竖线
+    "think": "~",       # 主 agent 思考(青)
+    "dispatch": ">",    # 派人(洋红)
+    "tool": "*",        # 工具调用
+    "status": "-",      # 上下文/花费状态行
+    "ask": "?",         # 提问(黄)
+    "yes": "+",         # 答复 / 完成(绿)
+    "no": "x",          # 错误 / 失败(红)
+    "handoff": "#",     # 换代(黄)
+    "item": "-",        # 交接分段项
+    "resume": "<-",     # 接上次
+    "warn": "!",        # 告警
+    "mail": "+",        # 收件箱
+    "retry": "~",       # 重试
+    "skip": ".",        # 跳过
+    "wait": "!",        # 无人应答 / 超时
+}
+
 # 一把锁管住所有输出。**stdin 线程和事件流是两个线程**,不加锁会在半行中间
 # 交错(这是加了"一直读 stdin"之后引入的真 bug)。
 _OUT = threading.Lock()
 
+# flower 自己的颜色码。消毒时**只放行它**,别的转义序列(清屏、移光标、OSC)
+# 和裸控制字节一律清掉 —— 模型或工具吐的字节不该直接驱动你的终端。
+_SGR = re.compile("\x1b\\[[0-9;]*m")
 
-def _say(text: str = "") -> None:
-    with _OUT:
-        print(text, flush=True)
+# 任意转义序列。非 SGR 的**整段吞掉**,不能只删 ESC —— 只删 ESC 会把
+# "[2J"、"]0;title" 这种残骸留在屏幕上当普通文字显示,又脏又看不懂。
+_ESC_ANY = re.compile(
+    "\x1b\\][^\x07\x1b]*(?:\x07|\x1b\\\\)?"      # OSC ... BEL / ST
+    "|\x1b\\[[0-?]*[ -/]*[@-~]"                  # CSI(移光标、清屏 …)
+    "|\x1b[P X^_][^\x1b]*(?:\x1b\\\\)?"          # DCS / SOS / PM / APC
+    "|\x1b[@-Z\\\\-_]"                           # 双字符转义
+    "|\x1b"                                      # 落单的 ESC
+)
+
+
+def _sanitize(line: str) -> str:
+    """清掉一行里除 SGR 颜色码之外的所有转义和控制字节。
+
+    这是**唯一输出口的最后一道闸**(见 :func:`_say`)。模型/工具/用户吐进来的
+    `\\r`、`\\x1b[2J`(清屏)、光标移动、DCS/OSC 序列会在这里整段消失,
+    而 flower 自己插的 `\\x1b[36m` 这类 SGR 原样通过。**危险的转义即便来自模型
+    也拦得住** —— 判据是"是不是 `\\x1b[...m`",别的转义整段吞掉。"""
+    out, i, n = [], 0, len(line)
+    while i < n:
+        if m := _SGR.match(line, i):
+            out.append(m.group())               # 自己的颜色,放行
+            i = m.end()
+            continue
+        if m := _ESC_ANY.match(line, i):
+            i = m.end()                         # 别的转义,整段吞掉
+            continue
+        ch = line[i]
+        if ch == "\t":
+            out.append(" ")                     # 制表符转空格,免得列宽算不准
+        elif ch < " " or ch == "\x7f" or "\x80" <= ch <= "\x9f":
+            pass                                # C0 / DEL / C1 → 丢
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
 
 
 def _width() -> int:
@@ -56,9 +118,54 @@ def _width() -> int:
 
 
 def _cols(text: str) -> int:
-    """字符串占几列。**中日韩字符占两列** —— 按 len() 算的话中文段落会超宽,
-    在窄终端上折行折不准(textwrap 不认这个)。"""
-    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in text)
+    """字符串占几列。SGR 颜色码不占列;**中日韩双宽字符占两列**。
+
+    歧义宽度(East Asian ``A`` 类,如 — … · 以及框线字符)按 **2** 算 ——
+    保守取宽:宁可折早一点,也绝不让终端把它渲成双宽而我们以为是单宽,
+    从而生成一条超出屏幕的行(第一次崩溃的栈正在 ``CGContextClipToRect``,
+    宽度算错正是那条路的诱因)。"""
+    return sum(2 if unicodedata.east_asian_width(c) in "WFA" else 1
+               for c in _SGR.sub("", text))
+
+
+def _fit(line: str, limit: int) -> str:
+    """把一行截到 limit 显示列以内,保住颜色码、补上重置。
+
+    **最后一道兜底**:哪条渲染路径万一漏了折行,也不会有超宽行真的到达终端。
+    正常情况下每条路径都已按列折过,这里几乎不触发。"""
+    if _cols(line) <= limit:
+        return line
+    out, w, i = [], 0, 0
+    while i < len(line):
+        m = _SGR.match(line, i)
+        if m:
+            out.append(m.group())
+            i = m.end()
+            continue
+        ch = line[i]
+        cw = 2 if unicodedata.east_asian_width(ch) in "WFA" else 1
+        if w + cw > limit - 3:
+            break
+        out.append(ch)
+        w += cw
+        i += 1
+    return "".join(out) + "..." + C["off"]
+
+
+def _say(text: str = "") -> None:
+    """唯一输出口。每一行都过消毒 + 硬性不超宽,再打出去。
+
+    把安全性收在这一个函数里:无论上游哪条路径生成的行,到这里都保证
+    (1) 不含能驱动终端的转义/控制字节,(2) 不超过屏幕宽度。"""
+    limit = _width()
+    lines = []
+    for ln in str(text).split("\n"):
+        ln = _sanitize(ln)
+        if _cols(ln) > limit:
+            ln = _fit(ln, limit)
+        lines.append(ln)
+    with _OUT:
+        print("\n".join(lines), flush=True)
 
 
 def _tokens(text: str):
@@ -89,7 +196,7 @@ def _wrap(text: str, indent: str = "", hang: str | None = None,
           width: int | None = None) -> str:
     """按**显示列数**折行。模型正文常是几百字一段,不折就是一堵墙。
 
-    ``hang`` 是续行的前缀:标记(💭 / ◆)只该出现在首行,
+    ``hang`` 是续行的前缀:标记(~ / #)只该出现在首行,
     每行都带一个的话读起来像列表,不像一段话。
     """
     limit = (width or _width())
@@ -140,7 +247,7 @@ class Render:
     涨到多少、累计花了多少、subagent 是不是正在干活(决定缩进)。
     """
 
-    GUTTER = "  │ "          # subagent 的活缩进到这条竖线后面
+    GUTTER = "  " + G["gutter"]   # subagent 的活缩进到这条竖线后面
 
     def __init__(self, verbose: bool = False) -> None:
         self.verbose = verbose
@@ -166,7 +273,8 @@ class Render:
         if sub and not self.in_sub:
             self.in_sub = True
         elif not sub and self.in_sub:
-            _say(f"{C['dim']}  └{C['off']}")
+            # 不再打收尾符号:下一条输出本来就不带缩进,视觉上已经分开了,
+            # 少一个字形就少一份让终端去做字形回退的机会。
             self.in_sub = False
 
     # ---- 主入口 ----------------------------------------------------
@@ -182,9 +290,9 @@ class Render:
         # 而那正是这一层的全部价值。
         tail = f"{i}/{total}"
         if ev.payload.get("resumed"):
-            tail += f"  ↩ 接上次 · 第 {ev.payload.get('woke', 1)} 次唤醒"
-        bar = "━" * max(4, _width() - _cols(ev.text) - _cols(tail) - 6)
-        _say(f"\n{C['bold']}{C['cyn']}━━ {ev.text} {bar}{C['off']}"
+            tail += f"  {G['resume']} 接上次 · 第 {ev.payload.get('woke', 1)} 次唤醒"
+        bar = G["rule"] * max(4, _width() - _cols(ev.text) - _cols(tail) - 6)
+        _say(f"\n{C['bold']}{C['cyn']}{G['rule'] * 2} {ev.text} {bar}{C['off']}"
              f" {C['dim']}{tail}{C['off']}\n")
 
     LABEL = {"doing": "现在在做", "decided": "已定的事",
@@ -199,10 +307,10 @@ class Render:
         self._enter(False)
         p = ev.payload
         if p.get("phase") in ("near", "writing"):
-            _say(f"{C['ylw']}◆ {ev.text}{C['off']}")
+            _say(f"{C['ylw']}{G['handoff']} {ev.text}{C['off']}")
             return
         ctx, win = p.get("context", 0), p.get("window", 0)
-        _say(f"\n{C['bold']}{C['ylw']}◆ 上下文 {_human(ctx)}/{win // 1000}K"
+        _say(f"\n{C['bold']}{C['ylw']}{G['handoff']} 上下文 {_human(ctx)}/{win // 1000}K"
              f" —— 写交接准备换代{C['off']}")
         if p.get("degraded"):
             _say(f"{C['red']}  交接没写成,用了降级版本 —— 接手的人会自己去现场看{C['off']}")
@@ -213,13 +321,13 @@ class Render:
         for k, label in self.LABEL.items():
             if body := (p.get("sections") or {}).get(k, "").strip():
                 label += " " * (pad - _cols(label))
-                _say(f"  {C['ylw']}●{C['off']} {label}  "
+                _say(f"  {C['ylw']}{G['item']}{C['off']} {label}  "
                      f"{_wrap(' '.join(body.split()), gut).lstrip()}")
         if path := p.get("path"):
-            _say(f"{C['dim']}↪ 交接写在 {_short(path)}{C['off']}")
+            _say(f"{C['dim']}{G['resume']} 交接写在 {_short(path)}{C['off']}")
         # 水位归零,状态行才不会一直挂着旧峰值
         self.context = 0
-        _say(f"{C['dim']}↪ 新会话接手,上下文从 {_human(ctx)} 重新开始{C['off']}\n")
+        _say(f"{C['dim']}{G['resume']} 新会话接手,上下文从 {_human(ctx)} 重新开始{C['off']}\n")
 
     def _on_text(self, ev: Event) -> None:
         sub = bool(ev.payload.get("subagent"))
@@ -233,7 +341,7 @@ class Render:
             return
         # 主 agent 的正文 = 决策。最高对比度,它是这次运行的主线。
         _say(_wrap(ev.text, "  "))
-        _say(f"  {C['dim']}⌁ {self._status()}{C['off']}")
+        _say(f"  {C['dim']}{G['status']} {self._status()}{C['off']}")
         self.quiet = time.time()
 
     def _on_thinking(self, ev: Event) -> None:
@@ -242,7 +350,7 @@ class Render:
         self._enter(False)
         # 主 agent 的思考:青色。**默认就显示** —— 它是"为什么这么决定"的唯一线索,
         # 藏在 -v 后面等于把这次运行最有信息量的部分默认关掉。
-        _say(f"{C['cyn']}{_wrap(ev.text, '  💭 ', hang='     ')}{C['off']}")
+        _say(f"{C['cyn']}{_wrap(ev.text, '  ' + G['think'] + ' ', hang='    ')}{C['off']}")
 
     def _on_tool_call(self, ev: Event) -> None:
         sub = bool(ev.payload.get("subagent"))
@@ -253,71 +361,78 @@ class Render:
             inp = ev.payload.get("input") or {}
             who = inp.get("subagent_type", "?")
             what = (inp.get("description") or inp.get("prompt") or "")[:60].replace("\n", " ")
-            _say(f"{pad}{C['mag']}⏺ 派人{C['off']} {C['bold']}{who}{C['off']} "
+            _say(f"{pad}{C['mag']}{G['dispatch']} 派人{C['off']} {C['bold']}{who}{C['off']} "
                  f"{C['dim']}{what}{C['off']}")
             return
         color = C["dim"] if sub else C["blu"]
-        _say(f"{pad}{color}⏺ {ev.tool}{C['off']} {C['dim']}{arg}{C['off']}")
+        _say(f"{pad}{color}{G['tool']} {ev.tool}{C['off']} {C['dim']}{arg}{C['off']}")
 
     def _on_tool_result(self, ev: Event) -> None:
         sub = bool(ev.payload.get("subagent"))
         if ev.payload.get("is_error"):
             self._enter(sub)
-            _say(f"{self.GUTTER if sub else '  '}{C['red']}✗ {ev.text[:200]}{C['off']}")
+            pad = self.GUTTER if sub else "  "
+            _say(f"{C['red']}{_wrap(ev.text, pad + G['no'] + ' ', hang=pad)}{C['off']}")
         elif self.verbose:
             self._enter(sub)
-            _say(f"{self.GUTTER if sub else '  '}{C['dim']}{ev.text[:200]}{C['off']}")
+            pad = self.GUTTER if sub else "  "
+            _say(f"{C['dim']}{_wrap(ev.text, pad)}{C['off']}")
 
     def _on_prompt(self, ev: Event) -> None:
         if self.verbose:
             self._enter(bool(ev.payload.get("subagent")))
-            _say(f"{C['dim']}{_wrap(ev.text[:400], '  → ')}{C['off']}")
+            _say(f"{C['dim']}{_wrap(ev.text, '  ' + G['dispatch'] + ' ', hang='    ')}{C['off']}")
 
     def _on_ask(self, ev: Event) -> None:
         self._enter(False)
         p = ev.payload
         if p.get("kind") == "mail":                    # 收件箱,不是提问
             tag = "收到" if p.get("state") == "queued" else "已送达"
-            _say(f"  {C['grn']}✉ {tag}{C['off']} {C['dim']}{ev.text[:100]}{C['off']}")
+            _say(f"  {C['grn']}{G['mail']} {tag}{C['off']} "
+                 f"{C['dim']}{_fit(ev.text, _width() - 12)}{C['off']}")
             return
         state = p.get("state")
         if state == "asked":
-            _say(f"\n{C['ylw']}{C['bold']}  ❓ {ev.text}{C['off']}")
+            _say(f"\n{C['ylw']}{C['bold']}"
+                 f"{_wrap(ev.text, '  ' + G['ask'] + ' ', hang='    ')}{C['off']}")
             for i, opt in enumerate(p.get("options") or [], 1):
-                _say(f"     {C['ylw']}{i}){C['off']} {opt}")
+                _say(f"{C['ylw']}{_wrap(opt, f'     {i}) ', hang='        ')}{C['off']}")
             if (left := p.get("remaining", -1)) >= 0:
                 _say(f"     {C['dim']}(还能问 {left} 次){C['off']}")
         elif state == "answered":
-            _say(f"  {C['grn']}✓{C['off']} {ev.payload.get('answer', '')[:120]}")
+            _say(f"{C['grn']}"
+                 f"{_wrap(ev.payload.get('answer', ''), '  ' + G['yes'] + ' ', hang='    ')}"
+                 f"{C['off']}")
         elif state == "timeout":
-            _say(f"  {C['ylw']}⏱ 无人应答 —— 它会自己判断,把假设记进「未知与假设」{C['off']}")
+            _say(f"  {C['ylw']}{G['wait']} 无人应答 —— 它会自己判断,把假设记进「未知与假设」{C['off']}")
         elif state == "over_budget":
-            _say(f"  {C['ylw']}⛔ 提问额度用完{C['off']}")
+            _say(f"  {C['ylw']}{G['warn']} 提问额度用完{C['off']}")
         elif state == "declined":
-            _say(f"  {C['dim']}↷ 已跳过{C['off']}")
+            _say(f"  {C['dim']}{G['skip']} 已跳过{C['off']}")
 
     def _on_task(self, ev: Event) -> None:
         self._enter(False)
-        _say(f"{C['mag']}{_wrap(ev.text, '  ◆ ', hang='    ')}{C['off']}")
+        _say(f"{C['mag']}{_wrap(ev.text, '  ' + G['handoff'] + ' ', hang='    ')}{C['off']}")
 
     def _on_error(self, ev: Event) -> None:
         self._enter(False)
-        _say(f"  {C['red']}⚠ {ev.text[:300]}{C['off']}")
+        _say(f"{C['red']}{_wrap(ev.text, '  ' + G['warn'] + ' ', hang='    ')}{C['off']}")
 
     def _on_retry(self, ev: Event) -> None:
         self._enter(False)
-        _say(f"  {C['ylw']}⟳ {ev.text}{C['off']}")
+        _say(f"{C['ylw']}{_wrap(ev.text, '  ' + G['retry'] + ' ', hang='    ')}{C['off']}")
 
     def _on_reset(self, ev: Event) -> None:
         self._enter(False)
-        _say(f"  {C['ylw']}↻ {ev.text}{C['off']}")
+        _say(f"{C['ylw']}{_wrap(ev.text, '  ' + G['retry'] + ' ', hang='    ')}{C['off']}")
 
     def _on_result(self, ev: Event) -> None:
         self._enter(False)
         p = ev.payload
         self.cost += p.get("cost_usd") or 0.0
         bad = p.get("is_error")
-        _say(f"  {C['red'] if bad else C['grn']}{'✗ 失败' if bad else '✓ 完成'}{C['off']}"
+        _say(f"  {C['red'] if bad else C['grn']}"
+             f"{G['no'] + ' 失败' if bad else G['yes'] + ' 完成'}{C['off']}"
              f" {C['dim']}{p.get('num_turns', 0)} 轮 · ${p.get('cost_usd', 0):.4f}"
              f" · 用时 {self._elapsed()}{C['off']}")
 
@@ -390,10 +505,10 @@ async def ask_aside(question: str, rt: Runtime, recent: Recent, *, verbose: bool
             step_name="旁路问答",
             on_event=Render(verbose=True) if verbose else None,
         )
-        _say(f"\n{C['mag']}◆ 旁路{C['off']}\n{_wrap(r.text or '(没有回答)', '  ')}"
+        _say(f"\n{C['mag']}{G['handoff']} 旁路{C['off']}\n{_wrap(r.text or '(没有回答)', '  ')}"
              f"\n{C['dim']}  (${r.cost_usd:.4f},没有打扰正在跑的运行){C['off']}")
     except Exception as exc:             # noqa: BLE001 —— 旁路失败不该带走主流程
-        _say(f"\n{C['red']}◆ 旁路问答失败:{type(exc).__name__}: {exc}{C['off']}")
+        _say(f"\n{C['red']}{G['handoff']} 旁路问答失败:{type(exc).__name__}: {exc}{C['off']}")
     finally:
         side.close()
 
@@ -481,7 +596,7 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
                 if m is not None:
                     extra = ("已追加进确认书" if getattr(channel, "amend_path", None)
                              else "没有确认书可落盘 —— 它可能活不过下一个步骤")
-                    _say(f"{C['grn']}✓ 收到{C['off']} {C['dim']}"
+                    _say(f"{C['grn']}{G['yes']} 收到{C['off']} {C['dim']}"
                          f"(它下次查收件箱时会看到;{extra}){C['off']}")
 
     threading.Thread(target=loop, daemon=True, name="flower-stdin").start()
@@ -636,7 +751,7 @@ async def _drive(wf, args, *, trim: bool | None = None) -> None:
             raise KeyboardInterrupt                            # 第二次:真退出
         armed["quit"] = True
         pend = len(wf.channel.pending()) if getattr(wf, "channel", None) else 0
-        _say(f"\n{C['ylw']}⚠ 已打断这一轮。正在跑的 subagent 会丢掉半成品。{C['off']}\n"
+        _say(f"\n{C['ylw']}{G['warn']} 已打断这一轮。正在跑的 subagent 会丢掉半成品。{C['off']}\n"
              f"{C['dim']}  要说什么?(直接回车 = 什么都不说,接着跑;"
              f"再按一次 Ctrl+C = 退出){C['off']}")
         try:
@@ -650,6 +765,27 @@ async def _drive(wf, args, *, trim: bool | None = None) -> None:
 
     prev_sigint = signal.signal(signal.SIGINT, on_sigint) if sys.stdin.isatty() else None
 
+    # ---- 终端死了(SIGHUP)/ 被 kill(SIGTERM):抢救账本再走 -------------
+    # 实测起因:2026-09-07 Terminal.app 崩了两次,内核给 flower 发 SIGHUP,
+    # 默认动作是**直接终止** —— `finally` 不跑、manifest 不写、血缘不落。
+    # novel 那次连 manifest.json 都没有,整次运行花了多少钱无账可查。见 issue #6。
+    #
+    # 这里只做同步的小写盘,**不试图接着跑**:pty 已经没了,再 print 会 EIO。
+    def on_hangup(signum, frame) -> None:                      # noqa: ARG001
+        try:
+            rt.rescue()                    # 在飞的那一步也记进 manifest,标 killed
+        finally:
+            signal.signal(signum, signal.SIG_DFL)
+            os.kill(os.getpid(), signum)   # 按默认动作真的走掉,别赖着不死
+
+    prev_hup = {}
+    for _sig in (getattr(signal, "SIGHUP", None), getattr(signal, "SIGTERM", None)):
+        if _sig is not None:
+            try:
+                prev_hup[_sig] = signal.signal(_sig, on_hangup)
+            except (ValueError, OSError):
+                pass                       # 非主线程 / 平台不支持 —— 不装就是了
+
     try:
         # workflow 自己挂了提问通道 → 给它接上标准输入。
         # 通道的 on_event 由 Workflow.run 自动接到同一个出口,这里只管"谁来答"。
@@ -657,13 +793,18 @@ async def _drive(wf, args, *, trim: bool | None = None) -> None:
             if not sys.stdin.isatty():
                 # 非交互(管道、nohup、CI)。不拦,但要说清楚 ——
                 # 否则第一个问题被当成"输入已关闭"跳过,之后每个问题都要干等满超时。
-                print(f"{C['ylw']}⚠ 标准输入不是终端,没人能回答提问。"
+                print(f"{C['ylw']}{G['warn']} 标准输入不是终端,没人能回答提问。"
                       f"想让它自己判断就加 --timeout 0{C['off']}", flush=True)
             stop = answer_from_stdin(wf.channel, on_aside=on_aside)
         ctx = await wf.run(rt, on_event=sink)
     finally:
         if prev_sigint is not None:
             signal.signal(signal.SIGINT, prev_sigint)
+        for _sig, _old in prev_hup.items():
+            try:
+                signal.signal(_sig, _old)
+            except (ValueError, OSError):
+                pass
         if stop is not None:
             stop.set()
         if asides:
@@ -703,7 +844,7 @@ def _wake_banner(st: dict, args) -> None:
                     bits.append(f"干活上下文 {_human(n)}")
             finally:
                 rt.close()
-    _say(f"{C['cyn']}↩ 在 {_short(args.workspace)} 接上上次{C['off']} "
+    _say(f"{C['cyn']}{G['resume']} 在 {_short(args.workspace)} 接上上次{C['off']} "
          f"{C['dim']}{' · '.join(bits)} · 第 {st['woke'] + 1} 次唤醒{C['off']}")
 
 

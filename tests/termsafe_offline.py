@@ -1,0 +1,162 @@
+"""终端安全 —— 离线验证。**不打网络,不花钱。**
+
+起因是两次真实事故:2026-09-07 19:53 和 20:16,Terminal.app 各崩了一次
+(一次 `libmalloc` 堆损坏在 `CGContextClipToRect`,一次 SwiftUI use-after-free),
+把正在跑的 flower 进程一起带走。
+
+**终端的 bug 我们修不了,但"喂给终端什么"完全在我们手里。**
+这个文件钉住的就是那条边界上的三个不变式:
+
+  1. **不超宽** —— 任何一行到终端时都不超过屏幕列数。宽度算错会让终端反复
+     回绕重排,而第一次崩溃的栈正落在 `CGContextClipToRect`(裁剪矩形)上。
+  2. **不带危险转义** —— 模型/工具吐的清屏、移光标、OSC、`\\r` 一律拦掉,
+     只放行 flower 自己的 SGR 颜色码。子进程的字节不该直接驱动你的终端。
+  3. **不用 emoji / 框线 / 几何字符** —— 它们要走字形回退和彩色字形渲染,
+     那正是两次崩溃栈所在的路径。颜色留着(SGR 是安全的),图标一律 ASCII。
+
+历史坑(实测量出来的,别再犯):
+  * `answer[:120]` 按 `len()` 截 —— 120 个中文字 = **240 列**,实测打出 200 列
+  * 提问原文完全不折行 —— 实测 **225 列**
+  * `tool_result[:200]` / `error[:300]` —— 实测 **392 / 593 列**
+"""
+
+from __future__ import annotations
+
+import io
+import re
+import sys
+import unicodedata
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from flower.cli import (C, G, Render, _cols, _fit,          # noqa: E402
+                        _sanitize, _SGR, _width)
+from flower.core.events import Event                         # noqa: E402
+
+ok = True
+
+
+def check(cond, msg):
+    global ok
+    print(f"  {'✓' if cond else '✗'} {msg}")
+    if not cond:
+        ok = False
+
+
+def draw(evs, *, verbose=True) -> str:
+    """把一串事件渲染成终端会真正收到的文本。"""
+    buf, old = io.StringIO(), sys.stdout
+    sys.stdout = buf
+    try:
+        r = Render(verbose=verbose)
+        for e in evs:
+            r(e)
+    finally:
+        sys.stdout = old
+    return buf.getvalue()
+
+
+# 一段带各种脏东西的模型/工具输出
+NASTY = ("恶意输出\x1b[2J\x1b[10;10H清屏移光标\r回车覆盖\x1b]0;改标题\x07"
+         "\x1bPq#0;2\x1b\\" + "长" * 400)
+LONG_CJK = "很长的中文回答" * 60
+
+
+def main() -> int:
+    W = _width()
+    print(f"\n[1] 消毒:只放行 SGR,别的转义整段吞掉")
+    cases = [
+        ("a\rb", "ab", "回车(会覆盖整行)"),
+        ("a\x1b[2Jb", "ab", "清屏"),
+        ("a\x1b[10;10Hb", "ab", "移光标"),
+        ("a\x1b]0;title\x07b", "ab", "OSC 改标题"),
+        ("a\x1b[?25lb", "ab", "隐藏光标"),
+        ("a\x1bPq#0;2\x1b\\b", "ab", "DCS / Sixel"),
+        ("a\x07b", "ab", "响铃"),
+        ("a\tb", "a b", "制表符 → 空格(免得列宽算不准)"),
+        (f"{C['cyn']}青{C['off']}", f"{C['cyn']}青{C['off']}", "**自己的颜色原样通过**"),
+    ]
+    for src, want, why in cases:
+        check(_sanitize(src) == want, f"{why}:{src!r} → {_sanitize(src)!r}")
+    check(_sanitize("\x1b[31m红\x1b[0m\x1b[2J") == f"{C['red']}红{C['off']}",
+          "混在颜色后面的清屏也拦得住(模型学会吐 ANSI 也没用)")
+
+    print("\n[2] 列宽:颜色码不占列,CJK 和歧义宽度都按 2 算")
+    check(_cols("abc") == 3, "ascii 三个字符 = 3 列")
+    check(_cols("中文") == 4, "中文两个字 = 4 列")
+    check(_cols(f"{C['red']}abc{C['off']}") == 3, "SGR 不计入列宽")
+    check(_cols("—") == 2 and _cols("…") == 2 and _cols("·") == 2,
+          "歧义宽度(— … ·)**保守按 2 列** —— 宁可折早,绝不让终端渲成双宽而我们算成单宽")
+
+    print("\n[3] 兜底截断:保住颜色、补上重置、绝不超宽")
+    cut = _fit(f"{C['red']}{'很长' * 40}{C['off']}", 20)
+    check(_cols(cut) <= 20, f"截到 {_cols(cut)} 列(上限 20)")
+    check(cut.startswith(C["red"]) and cut.endswith(C["off"]), "颜色开头保住、结尾补了重置")
+    check(_fit("短", 20) == "短", "没超宽就原样返回,不做无谓改动")
+
+    print("\n[4] 图标全是 ASCII —— emoji/框线/几何字符要走字形回退,那是崩溃栈所在")
+    bad = {k: v for k, v in G.items() if any(ord(c) > 127 for c in v)}
+    check(not bad, f"G 里全是 ASCII(违规:{bad})")
+    check(all(ord(c) < 128 for c in Render.GUTTER), f"缩进竖线是 ASCII:{Render.GUTTER!r}")
+
+    print("\n[5] 端到端:一串脏事件渲染出来,三条不变式都不许破")
+    evs = [
+        Event("step", text="确认需求", payload={"index": 1, "total": 3,
+                                            "resumed": True, "woke": 3}),
+        Event("thinking", text=LONG_CJK, payload={}),
+        # 这两条是历史上超宽最狠的:提问原文 225 列、回显回答 200 列
+        Event("ask", text=LONG_CJK, payload={"state": "asked",
+                                             "options": [LONG_CJK, "短选项"]}),
+        Event("ask", text="", payload={"state": "answered", "answer": LONG_CJK}),
+        Event("text", text=LONG_CJK, payload={"context": 34010}),
+        Event("tool_call", text="git status", payload={"subagent": True}, tool="Bash"),
+        Event("tool_result", text=NASTY, payload={"is_error": True, "subagent": True}),
+        Event("tool_result", text=NASTY, payload={"is_error": False}),
+        Event("prompt", text=LONG_CJK, payload={"subagent": True}),
+        Event("error", text="API Error: " + LONG_CJK, payload={}),
+        Event("ask", text="", payload={"kind": "mail", "state": "queued", "text": LONG_CJK}),
+        Event("handoff", text="", payload={
+            "phase": "done", "context": 152000, "window": 200000,
+            "path": "/tmp/交接-干活.md", "degraded": False,
+            "sections": {k: LONG_CJK for k in ("doing", "decided", "deadends", "next")}}),
+        Event("retry", text=LONG_CJK, payload={}),
+        Event("task", text=LONG_CJK, payload={}),
+        Event("result", text="", payload={"num_turns": 9, "cost_usd": 0.53}),
+    ]
+    out = draw(evs)
+    plain = _SGR.sub("", out)
+
+    over = [ln for ln in out.split("\n") if _cols(ln) > W]
+    check(not over, f"没有超宽行(屏宽 {W},最宽 {max((_cols(l) for l in out.split(chr(10))), default=0)})")
+
+    esc = re.findall("\x1b.", plain)
+    check(not esc, f"没有非 SGR 转义(残留:{esc[:3]})")
+
+    ctrl = sorted({repr(c) for c in plain if c != "\n" and c < " "})
+    check(not ctrl, f"没有控制字节(残留:{ctrl})")
+
+    icons = sorted({c for c in plain if unicodedata.category(c) in ("So", "Sk")
+                    or ord(c) > 0x1F000})
+    check(not icons, f"没有 emoji / 几何 / 框线字符(残留:{icons})")
+
+    check("清屏移光标" in plain and "回车覆盖" in plain,
+          "**正文没被消毒吃掉** —— 拦的是转义,不是内容")
+
+    print("\n[6] 窄屏也不破(40 列是 _width 的下限)")
+    narrow = draw(evs)
+    import flower.cli as cli
+    real, cli._width = cli._width, lambda: 40
+    try:
+        narrow = draw(evs)
+        over40 = [ln for ln in narrow.split("\n") if cli._cols(ln) > 40]
+        check(not over40, f"40 列屏幕下也没有超宽行(超宽 {len(over40)} 条)")
+    finally:
+        cli._width = real
+
+    print(f"\n{'✓ 终端安全全部通过' if ok else '✗ 有失败'}")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

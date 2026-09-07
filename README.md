@@ -569,6 +569,7 @@ cp .env.example .env   # 填 token;.env 已被 gitignore
 .venv/bin/python tests/toolwall.py        # 工具墙:allowed_tools 不是排他白名单,hook 补差额,不花钱
 .venv/bin/python tests/lineage_offline.py # 接续:同一路径接上上次 / 判定者永远新会话,不花钱
 .venv/bin/python tests/handoff_offline.py # 换代:写交接换新会话 / 降级路径 / 防跑飞闸,不花钱
+.venv/bin/python tests/termsafe_offline.py # 终端安全:不超宽 / 不带危险转义 / 图标全 ASCII,不花钱
 .venv/bin/python tools/analyze_run.py <run_dir>   # 从 sessions.db 量一次运行(上下文曲线/缓存/复用),不花钱
 sudo -v && .venv/bin/python tests/resilience_live.py   # 真掐网,需要 sudo
 ```

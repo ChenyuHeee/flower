@@ -234,14 +234,23 @@ class Workflow:
                     # 名字不同,manifest 里一眼能看出这一步是怎么走完的。
                     label = (f"{step.name}#round{attempt + 1}" if step.on_reject
                              else f"{step.name}#retry{attempt}")
-                result = await runtime.run(
-                    step.spec,
-                    prompt_cur,
-                    step_name=label,
-                    resume=resume_cur,
-                    fork=fork_cur,
-                    on_event=on_event,
-                )
+                # 血缘钩子**只罩这一句**,gate 之前必须摘掉:判定者用的是
+                # 同一个 Runtime,还挂着的话它的 session 会被写进这一步的血缘,
+                # 「判定者永远是新会话」就破了(见 tests/lineage_offline.py 第 4 节)。
+                if lin is not None and hasattr(runtime, "on_session"):
+                    runtime.on_session = lambda sid, _n=step.name: lin.remember(_n, sid)
+                try:
+                    result = await runtime.run(
+                        step.spec,
+                        prompt_cur,
+                        step_name=label,
+                        resume=resume_cur,
+                        fork=fork_cur,
+                        on_event=on_event,
+                    )
+                finally:
+                    if hasattr(runtime, "on_session"):
+                        runtime.on_session = None
                 # gate 每次尝试只调一次,并把结论留到后面用 ——
                 # 它可能有副作用(比如把需求确认书落盘),不该被重复触发。
                 try:

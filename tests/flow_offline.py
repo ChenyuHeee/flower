@@ -244,8 +244,13 @@ async def interrupt_tests():
     # 这一条是真实路径上栽过的:session_id 原来只从末尾那条 result 事件取,
     # 于是中途打断时它是 None —— 打断永远续不上,十小时的活白干。
     # 假 Runtime 抓不到这个(它自己造 session_id),只有对着真实的消息流才暴露。
-    check('if (sid := getattr(message, "session_id", None)):' in src,
+    check('sid = getattr(message, "session_id", None)' in src
+          and "if sid and sid != result.session_id:" in src,
           "**每条消息都记 session_id** —— 只等末尾那条的话,中途打断根本没得续")
+    # 拿到就立刻回调 —— 这是"被硬杀也接得上"的地基(issue #6)。
+    # 没有它,终端崩溃时血缘还是空的,第一步之内的活全丢。
+    check("if self.on_session:" in src and "self.on_session(sid)" in src,
+          "**拿到 session_id 立刻回调**,不等步骤跑完(SIGHUP 时来不及)")
 
 
 async def main():

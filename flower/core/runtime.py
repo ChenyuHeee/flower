@@ -124,6 +124,13 @@ class Runtime:
         self._prior_rows = self._load_manifest()
         self._interrupt: str | None = None
         """人按下 Ctrl+C 时想说的话。见 :meth:`interrupt`。"""
+        self.on_session: "Callable[[str], None] | None" = None
+        """拿到新 session_id 时立刻回调。血缘用它,好在进程被硬杀前就落盘。
+        **只该罩在 runtime.run 这一句上**(见 workflow/base.py):判定者用的是
+        同一个 Runtime,gate 期间还挂着的话会把判定者的 session 写进干活的血缘,
+        「判定者永远是新会话」这条不变式当场破掉。"""
+        self._current: "StepResult | None" = None
+        """正在飞的这一步。SIGHUP 处理器要靠它把在飞的账也落一份。"""
 
         # 工作台:脚本/产出/笔记落到磁盘,索引注入 system prompt。
         # 它承担的是"别重写、别贴回来"这两件事,和压缩无关 —— 压缩清得掉上下文,
@@ -179,6 +186,7 @@ class Runtime:
     ) -> StepResult:
         name = step_name or spec.name
         result = StepResult(step=name, started_at=time.time())
+        self._current = result        # SIGHUP 时要靠它把在飞的账也落一份
         # 水位是**每一步**的:上一步在 150K 收尾,这一步是新会话,不能一开局
         # 就被上一步的读数逼着换代。(漏掉这一句的后果是第二步立刻空转换代。)
         self._ctx, self._warned = 0, False
@@ -252,6 +260,7 @@ class Runtime:
                 result.resumed = True
 
         result.ended_at = time.time()
+        self._current = None
         self.results.append(result)
         self._persist()
         return result
@@ -438,9 +447,21 @@ class Runtime:
                 # session_id 尽早抓住:它此前只从末尾那条 result 事件取,
                 # 于是**中途打断时根本没有 session 可续**(实测:打断后
                 # session_id 是 None,只能停下,十小时的活白干)。
-                # SDK 的 init 系统消息一开始就带它,这里见一条记一条。
-                if (sid := getattr(message, "session_id", None)):
+                # 见一条记一条。**注意**:init 系统消息在 Python SDK 里
+                # **不带** session_id(SystemMessage 只有 subtype/data),
+                # 所以实际最早拿到它是第一条 assistant 消息 —— 已经够早。
+                sid = getattr(message, "session_id", None)
+                if not sid and isinstance(getattr(message, "data", None), dict):
+                    sid = message.data.get("session_id")     # init 的 data 里有
+                if sid and sid != result.session_id:
                     result.session_id = sid
+                    if self.on_session:
+                        # 拿到就立刻落盘 —— 进程被硬杀(终端崩溃 → SIGHUP)时,
+                        # "步骤跑完才写血缘"那条根本来不及。见 issue #6。
+                        try:
+                            self.on_session(sid)
+                        except Exception:        # noqa: BLE001 —— 落盘失败不该带走这次运行
+                            pass
                 if self._handoff_due(result):
                     # 上下文越线。在**消息边界**断开,和打断同一个道理:
                     # 干净地断,不撕裂状态。代价也一样(在飞的 subagent 会丢),
@@ -499,6 +520,26 @@ class Runtime:
         except (OSError, ValueError):
             return []
         return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
+    def rescue(self) -> None:
+        """**被硬杀之前**尽量把账落全。
+
+        由 SIGHUP / SIGTERM 处理器调用(终端崩溃时内核发的就是 SIGHUP,
+        默认动作是直接终止 —— 见 issue #6:novel 那次连 manifest 都没有)。
+        只做同步的小写盘,不试图继续跑:pty 已经没了,再 print 会 EIO。
+
+        在飞的那一步也写进 manifest,标上 ``killed`` —— 事后能看出
+        "这一步没跑完,是被外面掐的",而不是无声无息地消失。
+        """
+        try:
+            if (cur := self._current) is not None and cur.ended_at == 0.0:
+                cur.ended_at = time.time()
+                cur.error = cur.error or "killed-by-signal"
+                self.results.append(cur)
+                self._current = None
+            self._persist()
+        except Exception:              # noqa: BLE001 —— 抢救失败也不能再抛
+            pass
 
     def _persist(self) -> None:
         """运行清单:step → session_id 的血缘,事后 resume/fork 靠它。

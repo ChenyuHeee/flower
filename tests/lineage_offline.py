@@ -58,6 +58,7 @@ class FakeRuntime:
         self.known = set(known or [])
         self.script = list(script or [])      # [(step 名子串, text), ...]
         self.calls = []                       # [(step_name, prompt, resume), ...]
+        self.on_session = None                # 真 Runtime 有它,假的也必须有
 
     def has_session(self, sid: str) -> bool:
         return sid in self.known
@@ -73,6 +74,8 @@ class FakeRuntime:
                 break
         sid = resume or f"sid-{name}"
         self.known.add(sid)
+        if self.on_session:               # 和真 Runtime 一样:拿到就立刻回调
+            self.on_session(sid)
         return StepResult(step=name, session_id=sid, ok=True, text=text)
 
     def _hit(self, name: str, frag: str, exact: bool) -> bool:
@@ -153,10 +156,30 @@ async def main() -> int:
             check(rt.resume_of("干活") == [None], "  第 1 次:干活也是新会话")
         else:
             check(rt.resume_of("干活") == ["sid-干活"], "  第 2 次:干活接上了")
-    check("判定" not in Lineage.open(rd2, ws).steps,
-          f"血缘里根本没有判定者({list(Lineage.open(rd2, ws).steps)})—— 它不是 Step")
+    lin2 = Lineage.open(rd2, ws)
+    check("判定" not in lin2.steps,
+          f"血缘里根本没有判定者({list(lin2.steps)})—— 它不是 Step")
+    check(lin2.steps.get("干活") == "sid-干活",
+          f"**干活的血缘没被判定者顶掉**(={lin2.steps.get('干活')})—— "
+          "钩子必须在 gate 之前摘掉,否则判定者用同一个 Runtime 会把自己写进去")
 
     # -----------------------------------------------------------------
+    print("\n[4b] 血缘钩子只罩 runtime.run,gate 期间必须摘掉")
+    rd_h = tmp / "hook"
+    seen_in_gate = []
+    hook_rt = FakeRuntime(rd_h, ws)
+
+    def gate_peek(result, ctx):
+        seen_in_gate.append(hook_rt.on_session)
+        return True
+
+    await Workflow(steps=[Step("干活", spec=SPEC, prompt="做", gate=gate_peek)]).run(hook_rt)
+    check(seen_in_gate == [None],
+          f"gate 里看到的 on_session 是 {seen_in_gate} —— 必须是 None")
+    check(hook_rt.on_session is None, "跑完也摘干净了")
+    check(Lineage.open(rd_h, ws).steps.get("干活") == "sid-干活",
+          "而血缘照样写上了(拿到 session_id 的那一刻就写,不等步骤跑完)")
+
     print("\n[5] resume_prompt:接续时说的不是从头开始那句")
     check("照需求做" in rt1.prompt_of("干活")[0], "第一次:发的是完整 prompt")
     check(rt2.prompt_of("干活")[0] == "接着做。", "接续:发的是 resume_prompt")
