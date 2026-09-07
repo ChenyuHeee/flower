@@ -110,6 +110,21 @@ def main() -> int:
     check(not (wb_block < wall_at < wb_end),
           "whitelist_guard 的调用不在 `if self.workbench is not None` 那个块里")
 
+    print("\n[8] 上网是只读的,不该要人逐个确认;但给了它也不能削弱那道墙")
+    from flower.core.roles import WEB_TOOLS                      # noqa: PLC0415
+    w = set(worker("干活", "").tools or [])
+    check(set(WEB_TOOLS) <= w, f"worker 有上网能力(调研/查文档本来就该能){sorted(WEB_TOOLS)}")
+    c = set(clarify("确认者", ch).allowed_tools or [])
+    check(set(WEB_TOOLS) <= c, "确认者也有 —— 问需求时常要查'官方怎么说'")
+    check(not ({"Write", "Edit", "Bash"} & c), "**但确认者仍然没有任何写工具**")
+    g = whitelist_guard(clarify("确认者", ch).allowed_tools, role="确认者")
+    check(decide(g, "Write") == "deny" and decide(g, "Bash") == "deny",
+          "加了 Web 之后,那道墙照样拦住 Write/Bash(墙是从白名单派生的,没被削弱)")
+    j = set(judge("判定者", ch).allowed_tools or [])
+    check(not (set(WEB_TOOLS) & j), "判定者**不给** —— 判定该看现场,不该看网页")
+    co = set(coordinator("协调者", "", {}).allowed_tools or [])
+    check(not (set(WEB_TOOLS) & co), "协调者**不给** —— 它只协调,查资料派人去")
+
     print(f"\n{'✓ 工具墙全部通过' if ok else '✗ 有失败'}")
     return 0 if ok else 1
 

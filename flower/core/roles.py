@@ -26,8 +26,14 @@ from .guard import isolated
 # 主 agent 能用的工具:派活 + 记待办 + 按需读一份报告。没有 Bash/Write/Edit。
 COORDINATOR_TOOLS = ["Agent", "TodoWrite", "Read"]
 
-# subagent 的默认工具:干活的那一套。
-WORKER_TOOLS = ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
+# 上网:**只读、无副作用,不该要人逐个点确认**。
+# 放进白名单 = 免审批(见 guard.whitelist_guard 的说明:白名单是免审批清单,
+# 不是排他白名单)。不给的后果实测过 —— HT002 里确认者照样调了 WebFetch,
+# 只是每次都卡在权限确认上,看起来像"没有这个工具"。
+WEB_TOOLS = ["WebFetch", "WebSearch"]
+
+# subagent 的默认工具:干活的那一套。调研、查文档、看 API 参考本来就该能上网。
+WORKER_TOOLS = ["Read", "Write", "Edit", "Bash", "Glob", "Grep", *WEB_TOOLS]
 
 COORDINATOR_RULES = """\
 # 你的角色:协调者
@@ -253,7 +259,9 @@ def clarify(
     设 16 就等于"最多问十几个",于是通道里"不限次数"变成一句空话。
     这两个地方必须一起放开,漏一个另一个就白设。
     """
-    tools = [channel.tool_name] + (["Read", "Glob", "Grep"] if can_read else [])
+    # 确认者要问清需求,常需要查一下"这个东西是什么、官方怎么说" —— 给它上网,
+    # 但**仍然没有任何写工具**(那道墙由 whitelist_guard 保证,不是靠这里)。
+    tools = [channel.tool_name] + (["Read", "Glob", "Grep", *WEB_TOOLS] if can_read else [])
     return AgentSpec(
         name=name,
         instructions=f"{CLARIFIER_RULES}\n{instructions}".strip(),

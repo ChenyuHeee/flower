@@ -174,6 +174,26 @@ class _TtyGuard:
 
 _TTY = _TtyGuard()
 
+# 最下面那一行输入提示符。**这是"能不能插话"的全部关键**:
+# 提示符原来只在文字变化时打一次,之后每条事件输出都把它冲到屏幕上方 ——
+# 于是最后一行永远是 agent 的输出,用户根本看不到哪里能打字,只好 Ctrl+C。
+# 现在 _say 输出前擦掉它、输出后重画,让最后一行永远是 "> "。
+_PROMPT = {"text": ""}          # 空 = 当前没有输入提示符(比如非交互)
+_ERASE = "\r\x1b[K"             # 回到行首 + 清到行尾。最基础的两个光标操作,
+                                # 每个进度条都在用,比 alternate screen 安全得多。
+
+
+def set_prompt(text: str) -> None:
+    """挂/摘最下面那行输入提示符。``""`` = 摘掉。"""
+    _PROMPT["text"] = text or ""
+
+
+def _draw_prompt() -> None:
+    """把提示符画在最下面(不换行,光标停在它后面等你打字)。"""
+    if _PROMPT["text"]:
+        sys.stdout.write(_PROMPT["text"])
+        sys.stdout.flush()
+
 # flower 自己的颜色码。消毒时**只放行它**,别的转义序列(清屏、移光标、OSC)
 # 和裸控制字节一律清掉 —— 模型或工具吐的字节不该直接驱动你的终端。
 _SGR = re.compile("\x1b\\[[0-9;]*m")
@@ -276,7 +296,12 @@ def _say(text: str = "") -> None:
     # 两个进程会把彼此的行拦腰切开,连 UTF-8 字符都断成半个)。
     with _OUT, _TTY:
         try:
+            # 有提示符挂在最下面就先擦掉,免得输出和它挤在同一行(实测就是这样),
+            # 输出完再把它画回来 —— 于是最后一行永远是可输入的那行。
+            if _PROMPT["text"]:
+                sys.stdout.write(_ERASE)
             sys.stdout.write(blob)      # 一次写完,不让 print 拆成多次系统调用
+            _draw_prompt()
             sys.stdout.flush()
         except (OSError, ValueError):
             pass                        # 终端已经没了(SIGHUP 之后)—— 别因此抛
@@ -667,6 +692,13 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
 
     def loop() -> None:
         shown = None
+        try:
+            _loop_body()
+        finally:
+            set_prompt("")                 # 无论怎么退出,都别留下提示符
+
+    def _loop_body() -> None:
+        shown = None
         while not stop.is_set():
             pend = channel.pending()
             ask = pend[0] if pend else None
@@ -674,9 +706,14 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
                     if ask else
                     f"{C['dim']}(直接说 = 加需求,下个检查点送达;"
                     f"? 开头 = 顺便问一句,不打扰它干活){C['off']} > ")
-            if hint != shown:              # 状态变了才重打提示符,否则会刷屏
-                with _OUT:
-                    print(hint, end="", flush=True)
+            if hint != shown:
+                # 交给 _say 去画:它会在**每条输出之后**把提示符重新放到最下面。
+                # 自己 print 一次的话,第一条事件输出就把它冲走了(实测)。
+                set_prompt(hint)
+                with _OUT, _TTY:
+                    sys.stdout.write(_ERASE)
+                    _draw_prompt()
+                    sys.stdout.flush()
                 shown = hint
             if not readable(0.2):
                 continue
@@ -684,9 +721,10 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
             if not line:                   # EOF
                 if ask:
                     channel.decline(ask.id, "输入已关闭")
+                set_prompt("")             # 摘掉,别在收尾输出后留个孤零零的 >
                 return
             raw = line.strip()
-            shown = None                   # 处理完这一行,下一轮重打提示符
+            shown = None                   # 处理完这一行,下一轮重画提示符
             if not raw:
                 if ask:
                     channel.decline(ask.id)
