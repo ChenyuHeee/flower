@@ -9,7 +9,7 @@
 ## 装
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ChenyuHeee/flower/main/install.sh | sh
+curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
 ```
 
 自动找 `uv` / `pipx` / `pip` 装好 `flower` 命令。然后进任意项目目录:

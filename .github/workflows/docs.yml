@@ -24,6 +24,9 @@ jobs:
           python-version: '3.x'
       - run: pip install mkdocs-material
       - run: mkdocs build
+      # 安装脚本挂到 Pages 域名上 —— raw.githubusercontent.com 在国内不通,
+      # 而 *.github.io 通(实测)。朋友 curl 的是这个 URL。
+      - run: cp install.sh site/install.sh
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

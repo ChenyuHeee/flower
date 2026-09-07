@@ -7,7 +7,7 @@
 ## 装
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ChenyuHeee/flower/main/install.sh | sh
+curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
 ```
 
 然后进任意项目目录 `flower` 就能用。第一次会问你要 API key / 网关,配一次

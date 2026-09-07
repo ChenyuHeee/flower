@@ -1,7 +1,7 @@
 #!/bin/sh
 # flower 安装器 —— 一句话装好可移植长程 agent 框架。
 #
-#   curl -fsSL https://raw.githubusercontent.com/ChenyuHeee/flower/main/install.sh | sh
+#   curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
 #
 # 它做的事:找一个 Python 工具安装器(uv > pipx > pip),从 GitHub 装 flower,
 # 然后告诉你下一步。**不碰你的凭证** —— 第一次跑 `flower` 会问你要,存到
