@@ -761,7 +761,8 @@ async def ask_aside(question: str, rt: Runtime, recent: Recent, *, verbose: bool
         side.close()
 
 
-def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
+def answer_from_stdin(channel, *, on_aside=None, on_interrupt=None,
+                      interrupt_req=None) -> threading.Event:
     """参考实现:另起一个 daemon 线程读标准输入。
 
     **它一直在读**,不只在有提问时读。这一条是有意的:
@@ -865,7 +866,14 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
         while not stop.is_set():
             pend = channel.pending()
             ask = pend[0] if pend else None
-            hint = (f"{C['ylw']}你的回答{C['off']} {C['dim']}(回车=跳过,让它自己判断){C['off']} > "
+            # 人按了 Ctrl+C:**收那句话的活在这个线程做,不在信号处理器里做**。
+            # 处理器只置位就返回 —— 它跑在主线程上,一阻塞就冻住 asyncio 事件循环
+            # (MCP 提问答不了、所有超时全停),而且它和本线程抢同一个 fd 0。见 issue #8。
+            catching = interrupt_req is not None and interrupt_req.is_set()
+            hint = (f"{C['ylw']}打断了,要说什么?{C['off']} "
+                    f"{C['dim']}(直接回车 = 什么都不说,接着跑){C['off']} > "
+                    if catching else
+                    f"{C['ylw']}你的回答{C['off']} {C['dim']}(回车=跳过,让它自己判断){C['off']} > "
                     if ask else
                     f"{C['dim']}(直接说 = 加需求,下个检查点送达;"
                     f"? 开头 = 顺便问一句,不打扰它干活){C['off']} > ")
@@ -899,6 +907,12 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
                     return
             raw_line = line.strip()
             shown = None                   # 处理完这一行,下一轮重画提示符
+            if catching:
+                # 这一行是打断时要说的话(空行 = 只打断不说话)。
+                interrupt_req.clear()
+                if on_interrupt is not None:
+                    on_interrupt(raw_line)
+                continue
             if not raw_line:
                 if ask:
                     channel.decline(ask.id)
@@ -1077,22 +1091,36 @@ async def _drive(wf, args, *, trim: bool | None = None) -> None:
     # 那比"没有打断功能"更糟。现在第一次打断、第二次才退出(和常见 TUI 一致)。
     armed = {"quit": False}
 
+    interrupt_req = threading.Event()     # 处理器置位,stdin 线程去收那句话
+
     def on_sigint(signum, frame) -> None:                      # noqa: ARG001
+        """**只置位,立刻返回。** 不读、不打印、不拿锁。
+
+        原来这里直接 `input("> ")` 收人要说的话,三个问题:
+
+          1. 处理器跑在**主线程**上,而主线程正在跑 asyncio 事件循环 ——
+             `input()` 一阻塞,事件循环整个冻住:MCP 提问答不了、所有超时停摆。
+             实测的表现就是"按了 Ctrl+C 之后卡死,再按一次才退出,而且没有 manifest",
+             和终端崩溃硬杀**长得一模一样**,事后分不清是哪种。
+          2. 它和 stdin 线程**抢同一个 fd 0**,谁拿到那一行是随机的。
+          3. `_say` 要拿 `_OUT` 锁 —— 若主线程正持锁时信号到达,处理器再拿就死锁
+             (`threading.Lock` 不可重入)。
+
+        现在:置位 → 返回。提示符和收行都由 stdin 线程做,它本来就是唯一合法的
+        stdin 读者。见 issue #8。
+        """
         if armed["quit"]:
             raise KeyboardInterrupt                            # 第二次:真退出
         armed["quit"] = True
-        pend = len(wf.channel.pending()) if getattr(wf, "channel", None) else 0
-        _say(f"\n{C['ylw']}{G['warn']} 已打断这一轮。正在跑的 subagent 会丢掉半成品。{C['off']}\n"
-             f"{C['dim']}  要说什么?(直接回车 = 什么都不说,接着跑;"
-             f"再按一次 Ctrl+C = 退出){C['off']}")
-        try:
-            said = input("> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            raise KeyboardInterrupt from None
-        armed["quit"] = False
+        interrupt_req.set()
+
+    def take_interrupt(said: str) -> None:
+        """stdin 线程收到那句话之后回调(在 stdin 线程上跑,可以安全地打印)。"""
+        armed["quit"] = False              # 收到了,下次 Ctrl+C 重新算第一次
         rt.interrupt(said)
-        if pend:
-            _say(f"{C['dim']}  (有 {pend} 个提问还等着,打断不影响它们){C['off']}")
+        pend = len(wf.channel.pending()) if getattr(wf, "channel", None) else 0
+        _say(f"{C['ylw']}{G['warn']} 已打断这一轮。正在跑的 subagent 会丢掉半成品。{C['off']}"
+             + (f"\n{C['dim']}  (有 {pend} 个提问还等着,打断不影响它们){C['off']}" if pend else ""))
 
     prev_sigint = signal.signal(signal.SIGINT, on_sigint) if sys.stdin.isatty() else None
 
@@ -1126,7 +1154,9 @@ async def _drive(wf, args, *, trim: bool | None = None) -> None:
                 # 否则第一个问题被当成"输入已关闭"跳过,之后每个问题都要干等满超时。
                 print(f"{C['ylw']}{G['warn']} 标准输入不是终端,没人能回答提问。"
                       f"想让它自己判断就加 --timeout 0{C['off']}", flush=True)
-            stop = answer_from_stdin(wf.channel, on_aside=on_aside)
+            stop = answer_from_stdin(wf.channel, on_aside=on_aside,
+                                     on_interrupt=take_interrupt,
+                                     interrupt_req=interrupt_req)
         ctx = await wf.run(rt, on_event=sink)
     finally:
         if prev_sigint is not None:

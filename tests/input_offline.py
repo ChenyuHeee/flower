@@ -27,6 +27,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 ROOT = Path(__file__).resolve().parent.parent
+BEAT_CHILD = 'import asyncio, signal, threading\nclass RT:\n    def interrupt(self, m):\n        sys.stderr.write(f"INTERRUPT<{m!r}>\\n"); sys.stderr.flush()\nrt = RT()\nreq = threading.Event(); armed = {\'quit\': False}\ndef on_sigint(s_, f_):\n    if armed[\'quit\']:\n        raise KeyboardInterrupt\n    armed[\'quit\'] = True; req.set()\ndef take(said):\n    armed[\'quit\'] = False; rt.interrupt(said)\nstop = answer_from_stdin(ch, on_interrupt=take, interrupt_req=req)\nsignal.signal(signal.SIGINT, on_sigint)\nasync def hb():\n    n = 0\n    while n < 200:\n        n += 1; sys.stderr.write(f"BEAT{n}\\n"); sys.stderr.flush()\n        await asyncio.sleep(0.2)\nasyncio.run(hb())'
+
 ok = True
 
 
@@ -163,6 +165,62 @@ def main() -> int:
     tail = [l for l in screen(txt) if l.strip()]
     check(any(l.rstrip().endswith(">") for l in tail[-3:]),
           "输出之后提示符被重画回最下面")
+
+    print("\n[3b] Ctrl+C 打断:**事件循环不许被冻住**(issue #8)")
+    # #8 的核心。旧写法在信号处理器里直接 input() 收人要说的话 —— 处理器跑在主线程,
+    # 而主线程正跑 asyncio 事件循环,一阻塞就全停:MCP 提问答不了、超时停摆。
+    # 表现是"按了 Ctrl+C 卡死,再按一次才退出,而且没有 manifest",
+    # 和终端崩溃硬杀长得一模一样,事后分不清是哪种。
+    # 判据:Ctrl+C 之后心跳还跳不跳。做过对照 —— 旧写法 0 次,新写法 8 次。
+    import signal as _sig
+    beat_child = BEAT_CHILD
+    src = CHILD.format(root=str(ROOT), extra="", wait=1).split("stop = answer_from_stdin")[0]
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.execv(sys.executable, ["python", "-u", "-c", src + beat_child])
+
+    def drain(secs):
+        buf, t0 = b"", time.time()
+        while time.time() - t0 < secs:
+            if not select.select([fd], [], [], 0.2)[0]:
+                continue
+            try:
+                d = os.read(fd, 8192)
+            except OSError:
+                break
+            if not d:
+                break
+            buf += d
+        return buf.decode("utf-8", "replace")
+
+    drain(1.2)
+    os.kill(pid, _sig.SIGINT)
+    during = drain(1.5)
+    beats = len(re.findall(r"BEAT(\d+)", during))
+    os.write(fd, "别改那两行\n".encode())
+    tail_txt = drain(1.5)
+    try:
+        os.kill(pid, 9)
+    except OSError:
+        pass
+    os.waitpid(pid, 0)
+    check(beats >= 3, f"Ctrl+C 之后事件循环还在跑(1.5s 内 {beats} 次心跳;冻住的话是 0)")
+    check("INTERRUPT<" in (during + tail_txt), "打断要说的话由 stdin 线程收到并转交")
+
+    src_cli = (ROOT / "flower" / "cli.py").read_text(encoding="utf-8")
+    handler = src_cli.split("def on_sigint", 1)[1].split("def take_interrupt", 1)[0]
+    # 只看**代码行**:处理器的 docstring 里正解释着"原来这里直接 input()",
+    # 连注释一起搜会误报(第一版就是这么红的)。
+    body = handler.split('"""')[2] if handler.count('"""') >= 2 else handler
+    code_lines = [l for l in body.splitlines()
+                  if l.strip() and not l.strip().startswith("#")]
+    code = "\n".join(code_lines)
+    check("input(" not in code,
+          "**信号处理器里没有 input()** —— 有的话事件循环会被冻住")
+    check("_say(" not in code,
+          "处理器里不打印 —— _say 要拿 _OUT 锁,主线程正持锁时会死锁")
+    check("interrupt_req.set()" in code and "raise KeyboardInterrupt" in code,
+          "处理器只做两件事:置位(第一次) / 抛 KeyboardInterrupt(第二次)")
 
     print("\n[4] 退化路径还在 —— 输入是唯一入口,拿不到 raw 模式也必须能用")
     src = (ROOT / "flower" / "cli.py").read_text(encoding="utf-8")
