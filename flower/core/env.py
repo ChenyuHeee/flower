@@ -172,7 +172,14 @@ def probe_credentials(timeout: float = 20.0) -> tuple[str, str]:
             pass
         if e.code in (401, 403):
             return PROBE_AUTH, f"HTTP {e.code} 认证被拒 {detail}"
-        if e.code == 404 or (e.code == 400 and "model" in detail.lower()):
+        low = detail.lower()
+        # **判据要严**:Anthropic 风格的错误 JSON 里几乎必然出现 "model" 这个词,
+        # 拿它当"模型名不对"会把瞬时 400 误判成配置错误,然后逼人重配。
+        # 必须明说"找不到/不存在"才算。
+        model_gone = any(k in low for k in
+                         ("not_found", "not found", "does not exist", "unknown model",
+                          "no such model", "invalid model"))
+        if e.code == 404 or (e.code == 400 and model_gone):
             return PROBE_CONFIG, f"HTTP {e.code} 网关地址或模型名不对 {detail}"
         if e.code >= 500:
             return PROBE_NET, f"HTTP {e.code} 服务端错误(不是你的凭证)"

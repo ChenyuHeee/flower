@@ -139,7 +139,11 @@ def normalize(message: Any) -> list[Event]:
                       }, raw=message)]
 
     if isinstance(message, (TaskStartedMessage, TaskProgressMessage, TaskUpdatedMessage)):
-        return [Event("task", text=type(message).__name__, raw=message)]
+        # **不要把类名当正文打**。`TaskProgressMessage` 这种是 SDK 的内部消息类型,
+        # 打到屏幕上是纯噪音,而且混在 agent 的正文里看着像出错了(实测就是这样)。
+        # 归成一条无正文的 task 事件,UI 自己决定要不要显示。
+        return [Event("task", text="", payload={"kind": type(message).__name__},
+                      raw=message)]
 
     if isinstance(message, ConversationResetMessage):
         return [Event("reset", text="conversation reset", raw=message)]

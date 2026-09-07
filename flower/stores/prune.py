@@ -92,6 +92,66 @@ def is_interrupt_result(entry: dict[str, Any]) -> bool:
     )
 
 
+def heal_orphans(entries: list[dict[str, Any]], text: str) -> list[dict[str, Any]]:
+    """给没有 tool_result 的孤儿 tool_use 补一条合成的 tool_result。
+
+    打断在消息边界断开时,当时在飞的 tool_use 后面可能什么都没有。API 要求
+    每个 tool_use 紧跟一个 tool_result,否则整段历史一 resume 就 400,而且
+    **每次都 400**(坏历史不会自己消失)。这里在含孤儿的那条 assistant 之后
+    插一条 user 消息,把缺的结果补齐。
+
+    **补而不删**:删孤儿要重接 assistant 的父子链(同一条里可能还有正常的块、
+    文本、thinking),容易连累。补一条新 user 条目最小侵入。
+    """
+    # 先全局统计:哪些 tool_use 有结果了
+    resulted: set[str] = set()
+    for e in entries:
+        for b in _content(e):
+            if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id"):
+                resulted.add(b["tool_use_id"])
+
+    out: list[dict[str, Any]] = []
+    for e in entries:
+        out.append(e)
+        orphans = [b["id"] for b in _content(e)
+                   if isinstance(b, dict) and b.get("type") == "tool_use"
+                   and b.get("id") and b["id"] not in resulted]
+        if not orphans:
+            continue
+        # 紧跟一条 user 消息,把这条 assistant 里所有孤儿的结果一次补齐。
+        # 复制外层字段(sessionId/cwd/agentId 等)以和相邻条目一致,
+        # 换掉 uuid/parentUuid 把它接在这条 assistant 后面。
+        import uuid as _uuid
+        heal_uuid = f"heal-{_uuid.uuid4().hex[:12]}"
+        healed = {k: v for k, v in e.items()
+                  if k in ("sessionId", "cwd", "gitBranch", "version", "agentId",
+                           "isSidechain", "userType", "entrypoint")}
+        healed.update({
+            "type": "user",
+            "uuid": heal_uuid,
+            "parentUuid": e.get("uuid"),
+            "message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": oid,
+                 "content": text, "is_error": False}
+                for oid in orphans]},
+        })
+        out.append(healed)
+        resulted.update(orphans)     # 同一批里别重复补
+        # 后续条目的 parentUuid 若指向这条 assistant,改指到补的这条,保持链连续
+        e_uuid = e.get("uuid")
+        for later in entries[entries.index(e) + 1:]:
+            if later.get("parentUuid") == e_uuid:
+                later["parentUuid"] = heal_uuid
+                break
+    return out
+
+
+def _content(entry: dict[str, Any]) -> list:
+    msg = entry.get("message")
+    c = msg.get("content") if isinstance(msg, dict) else None
+    return c if isinstance(c, list) else []
+
+
 def relink(entries: list[dict[str, Any]], drop: set[str]) -> list[dict[str, Any]]:
     """摘除 ``drop`` 里的 uuid,并把断掉的 parentUuid 接到最近的存活祖先。
 
@@ -131,6 +191,17 @@ class PrunePolicy:
     """中断残留的 tool_result 换成一句中性说明(块保留)。"""
 
     interrupt_text: str = "[上一轮在此处被中断,该工具结果未产生]"
+
+    heal_orphans: bool = True
+    """给"有 tool_use 却没有 tool_result"的孤儿调用补一个合成结果。
+
+    **不补的话 resume 直接炸,而且每次都炸**:打断在消息边界断开时,当时在飞的
+    tool_use 可能后面根本没有 tool_result(实测:中断过的 session 里真有这种孤儿)。
+    API 要求每个 tool_use 紧跟一个 tool_result,否则 400 —— 而这条坏历史留在
+    transcript 里,于是**打断之后每一次调用都被它打回**。补比删安全:删要重接
+    assistant 消息的父子链,容易连累同一条里没出问题的块。"""
+
+    orphan_text: str = "[这一步被打断了,没有结果。需要的话重做。]"
 
     keep_denials: int = 1
     """保留最近 N 次被拒的工具调用,更早的连**调用带结果一起**摘掉。
@@ -205,4 +276,7 @@ class PruningSessionStore(TrimmingSessionStore):
                 e = {**e, "message": msg}
             out.append(e)
         self.pruned = len(drop)
-        return relink(out, drop)
+        out = relink(out, drop)
+        if pp.heal_orphans:
+            out = heal_orphans(out, pp.orphan_text)
+        return out
