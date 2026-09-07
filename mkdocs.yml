@@ -65,6 +65,10 @@ markdown_extensions:
       permalink: true
       permalink_title: 本节链接
       toc_depth: 3
+      # 默认 slugify 把非 ASCII 标题整个丢掉,中文/日文/韩文/俄文标题会退化成
+      # id="_2"、"_3" 这种序号 —— 插一节就让后面所有锚点错位,跨页链接静默指错。
+      # pymdownx 的 slugify 保留 Unicode,生成 id="上下文经济学"。
+      slugify: !!python/object/apply:pymdownx.slugs.slugify {kwds: {case: lower}}
   - pymdownx.betterem
   - pymdownx.caret
   - pymdownx.details
