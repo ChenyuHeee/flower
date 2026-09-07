@@ -195,7 +195,7 @@ Danach folgt eine Schleife mit vier Ausgängen:
 3. **Kontext voll** (`result.error == HANDOFF_DUE`, oder `handoff.enabled` und eine `session_id`
    erhalten und `is_overflow(...)` schlägt an) → **ebenfalls nicht durch `max_attempts` beschränkt**.
    Zuerst wird `len(result.retired) >= handoff.max_generations` geprüft; ist es überschritten, wird
-   der error durch eine Diagnosezeile ersetzt und ausgebrochen; sonst wird das [Handoff-Dokument](glossary.md#换代)
+   der error durch eine Diagnosezeile ersetzt und ausgebrochen; sonst wird das [Handoff-Dokument](glossary.md#交接书)
    geschrieben → `resume=None, fork=False` (**brandneue Session**) → prompt wird zu `h.prompt_block()`
    → Pegel auf null → `attempt -= 1`.
 4. **Wiederholbarer Fehler** → bei `not resilience.enabled or attempt >= max_attempts` ausbrechen;
@@ -757,7 +757,7 @@ def coordinator(
 ) -> AgentSpec
 ```
 
-Erzeugt den [Coordinator](glossary.md#协调者) auf dem [Main Thread](glossary.md#主线程): Aufgaben zerlegen, delegieren, Berichte lesen, entscheiden —
+Erzeugt den [Coordinator](glossary.md#主线程) auf dem [Main Thread](glossary.md#协调者): Aufgaben zerlegen, delegieren, Berichte lesen, entscheiden —
 **aber nicht selbst Hand anlegen**. Die ersten drei Parameter sind Positionsparameter.
 
 | Parameter | Typ | Default | Beschreibung |
