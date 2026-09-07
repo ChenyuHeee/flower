@@ -18,7 +18,8 @@
 它替你接好的三件事,自己写的时候容易漏:
 
   * **工作台挂在 `Workflow.workbench` 上**,`brief_path` 落在它的 `notes/` 里 ——
-    索引会注入每个 agent 的 system prompt,后面每个 subagent 开局就知道需求文件在哪。
+    索引会注入**主 agent** 的 system prompt(subagent 继承不到,实测见
+    `tests/prelude_live.py`),协调者据此在派活时把路径转述下去。
     自己拼路径会拼到别处,而且不报错。见 `docs/workflow.md`。
   * **开隔离时工作台移到仓库外** —— worktree 是每个 agent 的私有副本,
     工作台是跨 agent 的共享层,共享的东西不能放进私有围栏里。

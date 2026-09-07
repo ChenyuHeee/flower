@@ -165,7 +165,7 @@ agent 的私有副本,工作台是跨 agent 的共享层,共享的东西不能�
 | 开关 | 作用 |
 |---|---|
 | `-w PATH` | agent 的工作目录(默认当前目录) |
-| `-W` | 开工作台:脚本/产出/笔记落盘,索引注入每个 agent 的 system prompt |
+| `-W` | 开工作台:脚本/产出/笔记落盘,索引注入**主 agent** 的 system prompt(subagent 继承不到,见 [workflow.md](workflow.md)) |
 | `-T` | resume 时把旧的大工具结果换成文件指针 |
 | `-v` | 打印生效端点、思考过程、工具结果 |
 | `-r DIR` | 会话库与运行清单的位置(默认 `runs/`) |

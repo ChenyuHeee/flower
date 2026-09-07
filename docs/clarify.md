@@ -154,7 +154,11 @@ ctx[MISSING_KEY]      # "_brief_missing" —— 只在失败时有:缺哪几段,
 ### `brief_path` 必须放在**挂上去的那个** `Workbench.notes` 下
 
 工作台索引会自动注入**每个** agent 的 system prompt。确认书放在那里,
-后面每一个 subagent 开局就知道需求文件在哪,不用谁转述、也不占谁的正文。
+协调者开局就知道需求文件在哪,派活时把路径给下去即可,不必把内容抄进任务书。
+
+**注意**:索引只到主 agent。subagent 有自己的 system prompt,**继承不到** session 级
+那一段(实测 $0.2461,`tests/prelude_live.py`)—— 所以是"协调者转述路径",
+不是"每个 subagent 自动知道"。
 
 关键是"哪一个工作台"。写法只有一种是对的:**自己建,然后挂到 `Workflow` 上**,
 让驱动程序把同一个对象交给 `Runtime`。

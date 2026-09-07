@@ -111,7 +111,8 @@ class Workflow:
 
     为什么必须这样,而不是让 workflow 自己拼一个路径:``brief_path`` /
     ``log_path`` 这类文件**必须落在真正被注入索引的那个工作台里** ——
-    索引进的是每个 agent 的 system prompt,于是后面每一个 subagent 开局就知道
+    索引进的是**主 agent** 的 system prompt(subagent 继承不到,见
+    `tests/prelude_live.py`),协调者据此知道
     需求文件在哪。而 ``Runtime(workbench=True)`` 的默认位置是 ``<run_dir>/workbench``,
     workflow 在被 CLI 调用时**看不到** ``run_dir``,自己拼只会拼到别处去:
     确认书写在 A 目录,注入的索引扫的是 B 目录,那条承诺就静默失效了。

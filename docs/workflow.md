@@ -167,7 +167,9 @@ ctx = await wf.run(runtime, on_event=..., on_step=...)
 `workbench` 是同一个道理:`cli.py` 发现它以后,会把它交给 `Runtime`,
 而不是自己按 `-W` 造一个。**凡是 workflow 要往工作台里写文件的场合,这个字段是必须的**
 —— 典型是 `clarify_step(brief_path=...)`。工作台索引进的是每个 agent 的 system prompt,
-确认书必须落在**真正被注入的那个**工作台里,后面每一个 subagent 开局才知道需求文件在哪。
+确认书必须落在**真正被注入的那个**工作台里,协调者才知道需求文件在哪
+(索引只到主 agent,subagent 继承不到 —— 实测 `tests/prelude_live.py`;
+所以是协调者在派活时把路径转述下去)。
 
 而 `Runtime(workbench=True)` 的默认位置是 `<run_dir>/workbench`,`main()` 被 CLI 调用时
 看不到 `run_dir` —— 自己拼路径只会拼到别处,于是**确认书写进 A 目录、注入的索引扫 B 目录,

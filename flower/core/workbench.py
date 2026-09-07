@@ -13,8 +13,16 @@ instead of the shared-checkout path")。工作台是**跨 agent 共享**的沉�
 worktree 是**每个 agent 私有**的工作副本,两者正交:共享的东西不能放进私有围栏里。
 用 ``home=`` 指定仓库外的位置即可(实测:隔离 agent 写仓库外路径不受限)。
 
-`INDEX.md` 是它们的目录页,并且**被注入进每个 agent 的 system prompt**。
-这一条是关键:agent 开局就知道有哪些现成脚本,不用先花一次工具调用去发现。
+`INDEX.md` 是它们的目录页,并且**被注入进主 agent 的 system prompt**。
+agent 开局就知道有哪些现成脚本,不用先花一次工具调用去发现。
+
+**只到主 agent,不到 subagent** —— 这一条实测过($0.2461,`tests/prelude_live.py`):
+索引走的是 session 级 ``system_prompt.append``,而 subagent 有自己的 system prompt,
+**继承不到那一段**。探针在 append 里放了一个只可能来自那里的口令,
+subagent 逐项列举了自己的 system prompt,里面没有它。
+
+所以**工作台的位置和"长产出写 artifacts"这条规矩,必须由协调者在任务书里转述**
+(见 ``COORDINATOR_RULES``)。这不是啰嗦,是唯一通道。
 压缩能清掉工具结果,但清不掉磁盘上的文件,也清不掉 system prompt 里的索引 ——
 所以"微压缩后丢失、每次重写"这个问题在这一层被解决,而不是在压缩策略里。
 """

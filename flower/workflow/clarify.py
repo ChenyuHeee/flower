@@ -19,8 +19,12 @@
     ])
 
 把 ``brief_path`` 放进 :attr:`~flower.core.workbench.Workbench.notes`
-是推荐做法:工作台索引会自动注入每个 agent 的 system prompt,
-于是后面**每一个 subagent 开局就知道需求文件在哪**,不用谁转述。
+是推荐做法:工作台索引会自动注入**主 agent** 的 system prompt,
+于是协调者开局就知道需求文件在哪,派活时把路径给下去即可。
+
+(索引**不会**到 subagent —— 它有自己的 system prompt,继承不到 session 级的
+append。实测见 `tests/prelude_live.py`。所以是"协调者转述路径",
+不是"每个 subagent 自动知道"。)
 """
 
 from __future__ import annotations

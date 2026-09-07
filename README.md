@@ -76,7 +76,7 @@ subagent 默认 `model="inherit"` —— 干活的那个不该降级。省的是
 | `artifacts/` | 日志、数据、报告、diff | 对话里只出现路径和结论 |
 | `notes/` | 决策与理由 | 被压缩、被重启、换机器,结论都还在 |
 
-`INDEX.md` 自动生成,并且**注入进每个 agent 的 system prompt** —— agent 开局就知道有哪些
+`INDEX.md` 自动生成,并且**注入进主 agent 的 system prompt** —— 它开局就知道有哪些
 现成脚本,不用先花一次工具调用去发现。脚本首行写 `# desc: 一句话` 就会出现在索引里。
 
 压缩清得掉上下文,清不掉磁盘,也清不掉 system prompt 里的索引。这一层就是靠这个差别工作的。
@@ -181,8 +181,12 @@ wf = Workflow(channel=ch, workbench=wb, steps=[
 ])
 ```
 
-确认书要落在**挂在 workflow 上的那个工作台**里 —— 工作台索引会注入每个 agent 的
-system prompt,后面每一个 subagent 开局才知道需求文件在哪。自己另拼一个路径的话,
+确认书要落在**挂在 workflow 上的那个工作台**里 —— 工作台索引会注入主 agent 的
+system prompt,它才知道需求文件在哪、才能在派活时把路径转述给 subagent。
+
+**注意**:索引只到主 agent。subagent 有自己的 system prompt,**继承不到**
+session 级的那一段(实测 $0.2461,`tests/prelude_live.py`)——
+所以工作台位置必须由协调者在任务书里说,这是唯一通道。自己另拼一个路径的话,
 确认书写进一处、注入的索引扫的是另一处,那条承诺会**静默失效**。
 见 [docs/README.md](docs/README.md#工作台要挂在-workflow-上不能只拼路径)。
 
