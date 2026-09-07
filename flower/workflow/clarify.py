@@ -44,6 +44,18 @@ BRIEF_KEY = "_brief"
 ``ctx[step.name]`` 是它的 markdown(可以直接插进下游 prompt)。"""
 
 MISSING_KEY = "_brief_missing"
+
+CLARIFY_RESUME = """\
+接着刚才那次没问完的需求确认继续 —— **不是重新开始**。
+
+你这个会话里已经问过的、人已经答过的,都还在上文里,别再问一遍。看一下还差什么:
+四段(目标 / 验收标准 / 边界 / 未知与假设)哪几段还没敲定,就只补那几段。
+问清楚了就直接把完整的四段确认书交出来。
+
+(上一次是被中途打断的 —— 可能是进程被杀、终端崩了。不用管为什么,接着做就行。)
+"""
+"""确认途中崩了、再接续时对确认者说的话。见 issue #6 第 2 条:
+不给这句,接续会把原始诉求当新任务重发,确认者可能把已问过的重问一遍。"""
 """确认失败时,缺哪几段。给 UI 显示用。"""
 
 
@@ -102,6 +114,7 @@ def clarify_step(
         name=name,
         spec=agent,
         prompt=prompt,
+        resume_prompt=CLARIFY_RESUME,   # 崩在确认途中再接续,别把原始诉求当新任务重发
         when=when,
         gate=gate,
         reduce=reduce,

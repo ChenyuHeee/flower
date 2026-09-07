@@ -192,6 +192,16 @@ async def main() -> int:
           "没给 resume_prompt 就沿用 prompt(不是发空串)")
 
     # -----------------------------------------------------------------
+    print("\n[5b] 崩在确认途中再接续:发 resume_prompt,不把原始诉求当新任务重发(issue #6)")
+    from flower.workflow.clarify import clarify_step, CLARIFY_RESUME
+    from flower.core.human import HumanChannel as _HC
+    cs = clarify_step(_HC(), brief_path=tmp / "需求.md", prompt="帮我做个 X")
+    check(cs.resume_prompt is CLARIFY_RESUME, "clarify_step 带了 resume_prompt")
+    check(cs.render({}) == "帮我做个 X", "从头跑:发原始诉求")
+    r = cs.render({}, resuming=True)
+    check("不是重新开始" in r and "别再问一遍" in r,
+          "接续:发「接着刚才继续、别重问」,而不是把诉求当新任务")
+
     print("\n[6] 显式 resume_from 的步骤,行为一字未变")
     rd4 = tmp / "runs-chain"
     chain = lambda: Workflow(steps=[                                    # noqa: E731

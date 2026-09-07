@@ -19,7 +19,7 @@ from .stores.prune import PrunePolicy, PruningSessionStore
 from .stores.sqlite import SqliteSessionStore
 from .stores.trim import EphemeralPolicy, is_ephemeral, TrimmingSessionStore, TrimPolicy, trim_report
 from .workflow.base import Step, StepAbort, Workflow
-from .workflow.clarify import BRIEF_KEY, MISSING_KEY, clarify_step
+from .workflow.clarify import BRIEF_KEY, CLARIFY_RESUME, MISSING_KEY, clarify_step
 from .workflow.goal import GOAL_KEY, ROUND_KEY, VERDICT_KEY, goal_step, with_goal
 from .workflow.starter import starter_flow, wake_state
 
@@ -36,7 +36,7 @@ __all__ = [
     "SqliteSessionStore", "TrimmingSessionStore", "TrimPolicy", "EphemeralPolicy",
     "is_ephemeral", "trim_report",
     "PruningSessionStore", "PrunePolicy",
-    "Step", "Workflow", "StepAbort", "clarify_step", "BRIEF_KEY", "MISSING_KEY",
+    "Step", "Workflow", "StepAbort", "clarify_step", "BRIEF_KEY", "MISSING_KEY", "CLARIFY_RESUME",
     "goal_step", "with_goal", "GOAL_KEY", "VERDICT_KEY", "ROUND_KEY",
     "starter_flow", "wake_state",
 ]
