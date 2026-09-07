@@ -10,7 +10,7 @@ flower 的核心不知道 UI 存在。运行里发生的每一件事——模型
 
 SDK 的消息流是**内部类型**:`AssistantMessage`、`ToolUseBlock`、`ToolResultBlock`、
 `ResultMessage`、`SystemMessage`……UI 直接消费它们有两个后果:SDK 一升级前端就得跟着改;
-每种消息形状不一样,每个 UI 都要重写一遍“这是正文还是工具调用”的判断。
+每种消息形状不一样,每个 UI 都要重写一遍"这是正文还是工具调用"的判断。
 
 `normalize(message)` 把一条 SDK 消息转成 0 到 N 个 `Event`
 ([`core/events.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/events.py))。
@@ -25,7 +25,7 @@ SDK 的消息流是**内部类型**:`AssistantMessage`、`ToolUseBlock`、`ToolR
 2. **断线时的合成错误消息被分流成 `kind="error"`**。断线时 SDK 侧会把 `API Error: …`
    当成一条 assistant 消息写进 transcript,它长得像模型说的话(`model` 是 `"<synthetic>"`)。
    不在这里拦掉,它就进了 `StepResult.text`,再传给下一个[步骤](../reference/glossary.md#步骤)。
-3. **压缩边界被显式报出来**(`kind="reset"`)。边界之后模型“记得”的只有摘要,prompt 缓存
+3. **压缩边界被显式报出来**(`kind="reset"`)。边界之后模型"记得"的只有摘要,prompt 缓存
    也从这里断开——[长程](../reference/glossary.md#长程)运行必须能看见它。
 4. **上下文水位跟着每条消息出来**(`payload["context"]` = `input_tokens` +
    `cache_read_input_tokens` + `cache_creation_input_tokens`)。它是
@@ -92,7 +92,7 @@ asyncio.run(main())
     `Runtime(workbench=True)` 建的[工作台](../reference/glossary.md#工作台)在
     `<run_dir>/workbench`,而 `Workbench(ws)` 默认在 `<ws>/.flower` ——
     两个不是同一个目录。驱动程序自己拼路径去找 `需求.md`,会出现
-    “确认书写进 A 目录、注入的索引扫的是 B 目录”而且不报错。
+    "确认书写进 A 目录、注入的索引扫的是 B 目录"而且不报错。
     要么把 workflow 建好的那个交给 `Runtime`(上面的写法),
     要么用只读探测 `wake_state()` 问它在哪。
 
@@ -122,7 +122,7 @@ ch = HumanChannel(on_event=my_own_sink)     # 自己接,Workflow 不动它
 它是交互层的**参考实现,不是框架的一部分**,可以整份换掉;开关见 [CLI 参考](../reference/cli.md)。
 照实说规模。整份 `cli.py` 是 1264 行、57KB —— 但**要换的不是整份**。
 真正的替换点是里面的 `class Render`(`cli.py:382-578`,197 行),它的 docstring 就写着
-“Event → 终端。换 UI 就是换这一个类。”其余一千多行是打断、旁路顾问、收件箱回执、
+"Event → 终端。换 UI 就是换这一个类。"其余一千多行是打断、旁路顾问、收件箱回执、
 信号抢救这些**终端特有**的配套,换成 Web 或 HTTP 时本来就不需要照搬。
 
 所以"约 200 行可整体替换"这个说法成立 —— 前提是它指 `Render`,不是指 `cli.py`。
@@ -166,7 +166,7 @@ def start_input(ch: HumanChannel) -> threading.Event:
 - **用 `select` 轮询,不在循环里直接 `input()`。** 同样是取消不掉:阻塞在 `input()` 上的线程,
   `stop.set()` 再也叫不醒。
 - **一直读,不是只在有提问时读。** 只在有提问时读的话,干活那几小时里敲的东西留在终端缓冲里,
-  下一次提问时会被当成答案吃掉——人还没看见问题,问题就被“回答”了。
+  下一次提问时会被当成答案吃掉——人还没看见问题,问题就被"回答"了。
 
 ### Web:队列 + WebSocket
 
@@ -254,12 +254,12 @@ ctx = await wf.run(rt, on_event=None)       # 事件全丢弃
 `<工作台>/notes/问答记录.md`),事后能看它问过什么、自己假设了什么。
 
 不想让它开口就用 `max_asks=0`:提问直接被回绝(`state="over_budget"`),同样不阻塞。
-注意这**不是**“把工具拿掉”——`allowed_tools` 不排他,
+注意这**不是**"把工具拿掉"——`allowed_tools` 不排他,
 [协调者](../reference/glossary.md#协调者)一挂上 `channel` 就是 `mcp__human__ask` 和
 `mcp__human__inbox` 两个工具一起给,列不列都调得动。能挡住提问的只有额度和超时。
 
 !!! warning "无人值守时别让提问永远等"
-    `timeout_s=None` 是“永远等”。没人看着的时候,一次提问就能让十小时的运行原地停住,
+    `timeout_s=None` 是"永远等"。没人看着的时候,一次提问就能让十小时的运行原地停住,
     而且不报错、不超时、日志上看不出区别。无人值守只有两个正确取值:`0`(立刻落空)
     或者一个有限秒数。
 
@@ -301,7 +301,7 @@ class Event:
 
 **四个 kind 不由 `normalize()` 产生**:`ask` 来自 `HumanChannel`,`retry` 和 `handoff` 来自
 `Runtime`,`step` 来自 `Workflow.run`。放在同一个 `EventKind` 里是有意的——
-**UI 只认一套 `Event`,不必为“要人回答”或者“步骤边界”另开一条路。**
+**UI 只认一套 `Event`,不必为"要人回答"或者"步骤边界"另开一条路。**
 
 写 UI 时留一个 `else` 分支。`EventKind` 还会加新成员,老 UI 不该因此崩掉。
 
@@ -317,7 +317,7 @@ class Event:
 
 ### `ask` 的两种身份
 
-`Event("ask")` 同时承载“提问”和“人主动说的话”,**UI 必须先看 `payload["kind"]`**:
+`Event("ask")` 同时承载"提问"和"人主动说的话",**UI 必须先看 `payload["kind"]`**:
 
 | 身份 | 怎么认 | `payload` |
 |---|---|---|
@@ -363,7 +363,7 @@ HumanChannel(
 )
 ```
 
-`amend_path` 是最容易漏的一个,而它决定了“人中途改的需求活不活得过步骤边界”。
+`amend_path` 是最容易漏的一个,而它决定了"人中途改的需求活不活得过步骤边界"。
 每一步是新[会话](../reference/glossary.md#会话)、只读冻结件:运行途中说的话只进了当时那个
 agent 的上下文,下一步(比如[判定](../reference/glossary.md#判定))是全新会话,读的是
 `需求.md` 和 `目标.md`,**看不见你说过那句话**,于是仍按旧边界判,把改好的东西判成越界。
@@ -371,8 +371,8 @@ agent 的上下文,下一步(比如[判定](../reference/glossary.md#判定))是
 不覆盖,原来的需求是历史,看得见改了什么比看不见好。`starter_flow` 默认接的就是
 `<工作台>/notes/需求.md`。
 
-实测($0.6767)这条比预期还管用:人说“顺便报告总字节数”,协调者查收件箱看到后报告说——
-“hand 已经从 `.flower/notes/需求.md` 的运行中补充里读到并算了,不用再派一次”。
+实测($0.6767)这条比预期还管用:人说"顺便报告总字节数",协调者查收件箱看到后报告说——
+"hand 已经从 `.flower/notes/需求.md` 的运行中补充里读到并算了,不用再派一次"。
 **subagent 是从文件里读到的,不靠谁转述。**
 
 公开成员:
@@ -405,7 +405,7 @@ agent 的上下文,下一步(比如[判定](../reference/glossary.md#判定))是
 | **推** | `HumanChannel(on_event=…)`,收到 `kind == "ask"` 且 `payload["state"] == "asked"` | 事件驱动的 UI(Web 推送、TUI 重绘) |
 | **拉** | `await channel.next_ask()` | 一个独立的输入任务 |
 
-三个“0 / None”语义各不相同,记混了就是无人值守时挂死或者一句都不问:
+三个"0 / None"语义各不相同,记混了就是无人值守时挂死或者一句都不问:
 
 | 写法 | 意思 |
 |---|---|
@@ -420,7 +420,7 @@ agent 的上下文,下一步(比如[判定](../reference/glossary.md#判定))是
 `rt.interrupt("别改 Makefile,那两行直接改")`,空串就是只打断不说话。三条性质:
 
 - **续跑同一个会话**(`resume`),不是重头来——已经干完的活和上下文都在。复用的是断网重试
-  那条现成的路,只把“失败原因”换成“人打断了”、把 `resume_prompt` 换成人说的话。
+  那条现成的路,只把"失败原因"换成"人打断了"、把 `resume_prompt` 换成人说的话。
 - **不消耗 `max_attempts`**。那是给故障的额度,不是给人的。
 - **协作式**:在消息边界断开,不硬取消任务。代价是延迟到下一条消息(subagent 正跑着的话要等
   它回来),换来的是不会在半路撕裂状态。
@@ -434,7 +434,7 @@ agent 的上下文,下一步(比如[判定](../reference/glossary.md#判定))是
 
 ### 旁路顾问:问一句而不打扰运行
 
-想知道“现在到哪了”,不必打断,也不该问协调者:那段问答会**永久占住主线程上下文**
+想知道"现在到哪了",不必打断,也不该问协调者:那段问答会**永久占住主线程上下文**
 (它装的是决策,不是问答记录),而且它得停下手里的活。对一次十小时的运行,顺手问三句就把这
 两样代价都付了。
 
@@ -442,7 +442,7 @@ agent 的上下文,下一步(比如[判定](../reference/glossary.md#判定))是
 `Grep`,开着工作台,默认带闸:`max_turns=12`、`max_budget_usd=0.5`。终端里用 `?` 开头的一行
 触发,它拿两样东西作答:最近的事件窗口(固定 60 条)和工作台里的确认书、目标、笔记、产出。
 它用独立的 `Runtime`(`<run_dir>/aside`),所以花费和会话[血缘](../reference/glossary.md#血缘)
-**不会混进主 manifest**——那份清单记的是“这次运行做了哪些步骤”,顺口问一句不是一个步骤。
+**不会混进主 manifest**——那份清单记的是"这次运行做了哪些步骤",顺口问一句不是一个步骤。
 
 实测两问共 $0.5190,主运行的 manifest 一个字节都没多。
 

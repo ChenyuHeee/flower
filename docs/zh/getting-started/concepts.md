@@ -31,8 +31,8 @@ flower 有一批自己的词:运行、步骤、会话、协调者、执行者、
   这叫[换代](../reference/glossary.md#换代),发生在**同一次运行内部**。
 - **一次新的运行可以接上旧会话。** 同一个目录再敲一次 `flower`,每个步骤会接回上次那条会话 ——
   这叫[接续](../reference/glossary.md#接续),发生在**跨进程**之间。靠 `runs/lineage.json`
-  记住“哪个步骤名对应哪条 `session_id`”。
-- **判定那一轮永远是一条新会话。** 它不接续、不进血缘 —— 判“做完了没有”的人不能是刚才干活的人。
+  记住"哪个步骤名对应哪条 `session_id`"。
+- **判定那一轮永远是一条新会话。** 它不接续、不进血缘 —— 判"做完了没有"的人不能是刚才干活的人。
 
 按顺序串起来的一组步骤叫[流程](../reference/glossary.md#流程)。
 `flower` 裸跑时用的是框架自带的三步流程:确认需求 → 设定目标 → 干活。
@@ -79,8 +79,8 @@ flower 一共五个角色,都是同一套做法:一段注入的规则文本 + �
 | [协调者](../reference/glossary.md#协调者) coordinator | 拆活、派人、做决策 | `Agent` `TodoWrite` `Read` + 受限 `Bash` |
 | [执行者](../reference/glossary.md#执行者) worker | 写代码、跑测试、查资料 | `Read` `Write` `Edit` `Bash` `Glob` `Grep` `WebFetch` `WebSearch` |
 | [确认者](../reference/glossary.md#确认者) clarify | 动手之前只提问,问到清楚为止 | 提问工具 + 只读工具,**没有任何写工具** |
-| [判定者](../reference/glossary.md#判定者) judge | 设目标,或者判“这一轮做完了没有” | 提问工具 + `Read` `Glob` `Grep`(要它能跑命令得显式开) |
-| [旁路顾问](../reference/glossary.md#旁路顾问) oracle | 运行途中回答“现在到哪了” | `Read` `Glob` `Grep`。**说的话不进那次运行的上下文** |
+| [判定者](../reference/glossary.md#判定者) judge | 设目标,或者判"这一轮做完了没有" | 提问工具 + `Read` `Glob` `Grep`(要它能跑命令得显式开) |
+| [旁路顾问](../reference/glossary.md#旁路顾问) oracle | 运行途中回答"现在到哪了" | `Read` `Glob` `Grep`。**说的话不进那次运行的上下文** |
 
 工厂函数的参数和默认值见 [Python API](../reference/api.md#角色工厂)。
 
@@ -99,7 +99,7 @@ flower 一共五个角色,都是同一套做法:一段注入的规则文本 + �
 两条值得单独记住:
 
 **[判定](../reference/glossary.md#判定)有三种结论,不是两种。** 达成、没到、**这个环境验不了**。
-后两种是不同的结论 —— “这里没法验”绝对不判通过,而是停下来问人。
+后两种是不同的结论 —— "这里没法验"绝对不判通过,而是停下来问人。
 而且判定者判的是**产出物**,不是源码:[HT002](../cases/ht002.md) 里栽过一次,
 只看了 Makefile 的 macOS 分支就判通过,实际交付的是 Linux ELF。
 
@@ -131,7 +131,7 @@ flower 默认关掉原生的 auto-compact,用换代顶上。
 **三、凭证必须自带。** 这是第二条的代价。flower 按固定优先级找凭证(进程环境变量 →
 `$FLOWER_ENV` → 当前目录 `.env` → `~/.config/flower/.env` → 源码仓库根 `.env`),
 最后会去 `~/.claude/settings.json` 的 `env` 块里借那 9 个凭证键当兜底 ——
-**只借“去哪找 token”这一件事**,settings.json 里的其它任何东西都不影响 agent 行为。
+**只借"去哪找 token"这一件事**,settings.json 里的其它任何东西都不影响 agent 行为。
 完整顺序和每个变量的语义见[配置参考](../reference/config.md)。
 
 **四、它不替换系统提示词。** 领域指令是[叠加](../reference/glossary.md#叠加)在

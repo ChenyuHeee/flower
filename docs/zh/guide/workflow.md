@@ -18,7 +18,7 @@ Python 代码** —— 可读、可测、可以只重跑坏掉的那一步。
 - 决定每一步看得见前面的什么(三种会话接法 + 一个 `ctx` 字典)
 - 决定什么时候重试、什么时候提前退出
 
-它不含任何领域假设。切在哪、每步验收什么、不过怎么办 —— 这四件事就是“设计流程”。
+它不含任何领域假设。切在哪、每步验收什么、不过怎么办 —— 这四件事就是"设计流程"。
 
 ## 怎么用(最小代码)
 
@@ -71,7 +71,7 @@ ctx = await wf.run(rt, on_step=lambda step, r: print(f"{step.name} ok={r.ok} ${r
 - `prompt` —— `str`,或者 `(ctx) -> str`。可调用时拿到当前 `ctx`,
   **这是把上一步产出喂进来最便宜的方式**(另一种是接会话,见下)。
 
-这一步“返回”的是一个 `StepResult`,但在流程里你拿到的是两样东西:
+这一步"返回"的是一个 `StepResult`,但在流程里你拿到的是两样东西:
 
 - `ctx[step.name]` —— 默认是 `result.text`,给了 `reduce` 就换成 `reduce` 的返回值;
 - `ctx["_results"][step.name]` —— 完整的 `StepResult`(花费、轮数、尝试次数、`session_id`)。
@@ -128,7 +128,7 @@ Step("确认需求", spec=确认者, prompt="帮我做一个 X",
 
 ### 判定与打回:gate、on_reject、StepAbort
 
-`gate(result, ctx) -> bool` 判的是“跑完了,但合格吗”。两个必须知道的细节:
+`gate(result, ctx) -> bool` 判的是"跑完了,但合格吗"。两个必须知道的细节:
 
 - **`result.ok` 为假时 `gate` 根本不会被调用**(短路)。
 - **每次尝试只调一次**,结论留着后面用 —— 它可能有副作用。`clarify_step` 的 gate 会把
@@ -141,7 +141,7 @@ gate 不过之后怎么重来,取决于给没给 `on_reject`:
 | 只有 `retries` | 重头跑,原 prompt、原 `resume_from` | `X#retry1` |
 | 加上 `on_reject` | **续跑刚被否掉的那个会话**,prompt 换成 `on_reject` 的返回值,`fork` 强制 False | `X#round2` |
 
-第二种是“打回去、带上差在哪、让它接着补” —— 已经干完的活和上下文都还在。
+第二种是"打回去、带上差在哪、让它接着补" —— 已经干完的活和上下文都还在。
 `on_reject` 返回空字符串,或者那次尝试根本没拿到 `session_id`,都会退化成重头跑。
 
 `gate` 还可以抛 `StepAbort`,意思是**再试也没用,别消耗剩下的轮数**:
@@ -158,7 +158,7 @@ def gate(result, ctx):
 抛出之后:原因记进 `ctx["_aborted"]`,这一步按失败处理并走 `on_fail`(默认 `"stop"`),
 **重试循环当场 break**,剩下的 `retries` 一次都不消耗。
 
-区别记牢:**返回 False 是“这次不行,再来一轮”;`StepAbort` 是“再来也没用”。**
+区别记牢:**返回 False 是"这次不行,再来一轮";`StepAbort` 是"再来也没用"。**
 典型场合是目标被判为这个环境做不到、而且没人可问 —— 继续空转是最贵的选择。
 
 ### 两层重试别混
@@ -170,7 +170,7 @@ def gate(result, ctx):
 | 之前做什么 | 什么都不做 | DNS + TCP 探针挂着等网络回来(不发 HTTP、不带凭证,探针必须免费) |
 | 不可重试的 | —— | 凭证错、参数错立刻停,不死等 |
 
-续跑用的那句 prompt **有意不含任何错误细节** —— 模型需要知道“被打断了、接着做”,
+续跑用的那句 prompt **有意不含任何错误细节** —— 模型需要知道"被打断了、接着做",
 不需要知道是 ENOTFOUND 还是 503。
 
 ### 把步骤串起来
@@ -184,19 +184,19 @@ def gate(result, ctx):
 | `resume_from="上一步名"` + `fork=True` | 完整历史,但另开一条分支 | 复核 / 多方案并行 / 重试不脏原线 |
 
 `resume_from` 指向的那一步**必须真的产生过 session**。它被 `when` 跳过了、或者根本没跑,
-`Workflow.run` 直接抛 `ValueError` —— 不静默降级成新会话,因为那会让“连贯记忆”这个假设
+`Workflow.run` 直接抛 `ValueError` —— 不静默降级成新会话,因为那会让"连贯记忆"这个假设
 悄悄失效。
 
 几条反复吃过亏的设计经验:
 
 1. **一步一个可验收的目标。** 步骤边界就是上下文边界:`resume_from=None` 的地方,
    前面那些工具结果就彻底不再常驻。见[上下文经济学](context.md)。
-2. **不确定就先 `clarify_step`。** 长程里“目标理解错了”是最贵的错误,
+2. **不确定就先 `clarify_step`。** 长程里"目标理解错了"是最贵的错误,
    而它恰恰是剪枝清不掉的那一类。见[前置确认](clarify.md)。
 3. **派活的任务要自足。** subagent 是干净上下文,它不知道[协调者](../reference/glossary.md#协调者)
    知道的事。需要的背景写进任务书,或者告诉它去读哪个 artifact。
 4. **长产出走磁盘,不走回话。** 这条已经写进 `WORKER_RULES` 了,你的 `instructions` 别把它
-   抵消掉(“把完整日志贴回来给我看”)。
+   抵消掉("把完整日志贴回来给我看")。
 5. **`gate` 优先卡硬条件。** 文件在不在、退出码是不是 0,这种一行 Python 能判的别派模型。
    要模型来判就用现成的 `with_goal` —— 它把 gate 换成一个跑独立
    [判定者](../reference/glossary.md#判定者)的实现,别自己在 gate 里手搓一套。
@@ -259,7 +259,7 @@ Workflow([...], continuous=True)     # 默认值
 
 三条后果:
 
-- **`resume_from=None` 不等于“全新会话”。** 第一次跑是,第二次跑不是。要每次都是新会话,
+- **`resume_from=None` 不等于"全新会话"。** 第一次跑是,第二次跑不是。要每次都是新会话,
   显式写 `Workflow(..., continuous=False)`。
 - **[接续](../reference/glossary.md#接续)时上下文会一直涨。** 接续时想说别的话就给
   `Step.resume_prompt` —— 对方上下文里已经有的东西不该重发。
@@ -267,7 +267,7 @@ Workflow([...], continuous=True)     # 默认值
 
 !!! warning "步骤名是跨进程的键"
     改一个步骤名就等于断了那一步的血缘:下次跑不再接续,而且**不报错**。带 `#retry1` /
-    `#round2` 后缀的重试名**不进血缘**(记的永远是原名),这也是“判定者永远是新会话”的实现
+    `#round2` 后缀的重试名**不进血缘**(记的永远是原名),这也是"判定者永远是新会话"的实现
     方式之一。
 
 完整设计和 `--new` 见[接续](continuity.md)。
@@ -276,7 +276,7 @@ Workflow([...], continuous=True)     # 默认值
 
 - **只跑一个 agent、也不需要判定** —— 别套 `Workflow`。直接 `await rt.run(spec, "…")`,
   或者命令行 `flower once "读一眼这个仓库"`。
-- **形状就是“问清需求 → 定目标 → 干活”** —— 用现成的
+- **形状就是"问清需求 → 定目标 → 干活"** —— 用现成的
   [`starter_flow()`](https://github.com/ChenyuHeee/flower/blob/main/flower/workflow/starter.py),
   不用自己写:
 
@@ -293,9 +293,9 @@ Workflow([...], continuous=True)     # 默认值
     `Runtime(workbench=wf.workbench)` 直接拿来用,别另拼一个。
 
     不写代码也行,进项目目录 `flower "帮我做一个 X"` 跑的就是它。
-    **它不是“推荐的流程设计”**,只是让你零配置就能跑起来。
+    **它不是"推荐的流程设计"**,只是让你零配置就能跑起来。
 
-- **步骤切得比“一个可验收的目标”还细** —— 净亏。每一步都要起一条新会话,
+- **步骤切得比"一个可验收的目标"还细** —— 净亏。每一步都要起一条新会话,
   而一条新会话有启动地板(协调者实测约 34k 上下文),摊不薄。
 - **想事后回滚到某条消息** —— `Workflow` 这条路走不通,它从不传 `resume_at`。
   直接调 `Runtime.run(spec, "从这里重来", resume=sid, resume_at=uuid)`。

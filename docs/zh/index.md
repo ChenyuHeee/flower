@@ -67,7 +67,7 @@ curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
 
 </div>
 
-## 它凭什么“长程”
+## 它凭什么"长程"
 
 主线程上的[协调者](reference/glossary.md#协调者)只装决策,拿不到 `Write` 和 `Edit` ——
 写码、跑测试、查资料全派给 [subagent](reference/glossary.md#subagent),

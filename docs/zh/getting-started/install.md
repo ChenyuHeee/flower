@@ -2,7 +2,7 @@
 
 装 flower 只需要 Python ≥ 3.10。运行时依赖只有一个 `claude-agent-sdk` —— 发请求用的原生二进制
 就在它的 wheel 里,所以**不用装 Node,也不用装 Claude Code CLI**。这一页从零走一遍:一句话安装、
-从源码安装、第一次配凭证、以及一条能证明“确实装对了”的命令。跑通之后去
+从源码安装、第一次配凭证、以及一条能证明"确实装对了"的命令。跑通之后去
 [快速上手](quickstart.md)。
 
 ## 装之前:确认 Python
@@ -120,7 +120,7 @@ cp .env.example .env        # 填 ANTHROPIC_AUTH_TOKEN
 ```
 
 `.env` 已经被 `.gitignore` 忽略,不会进版本库。pip / pipx / uv 装出来的 flower **没有**这个位置
-可用 —— 它在 site-packages 里,没有“仓库根” —— 所以那种装法要用下面的全局凭证文件。
+可用 —— 它在 site-packages 里,没有"仓库根" —— 所以那种装法要用下面的全局凭证文件。
 
 ## 第一次跑:配凭证
 
@@ -164,7 +164,7 @@ cp .env.example .env        # 填 ANTHROPIC_AUTH_TOKEN
 | 模型名非空 | `ANTHROPIC_MODEL`、`ANTHROPIC_DEFAULT_OPUS_MODEL`、`ANTHROPIC_DEFAULT_SONNET_MODEL` **三个一起写** |
 
 文件位置是 `${XDG_CONFIG_HOME:-~/.config}/flower/.env`(`env.py:39-42`),**整份覆盖写**,
-写完 `chmod 0o600`(`cli.py:1157-1168`)。这就是“装一次处处生效”的那个文件 ——
+写完 `chmod 0o600`(`cli.py:1157-1168`)。这就是"装一次处处生效"的那个文件 ——
 换项目目录不用重配,每个变量的含义见[配置](../reference/config.md#环境变量)。
 
 ### 本机装过 Claude Code 的话,可能一个问题都不问
@@ -173,7 +173,7 @@ cp .env.example .env        # 填 ANTHROPIC_AUTH_TOKEN
 从它们的 `env` 块里取 9 个凭证键(`env.py:56-75`、`:109-111`)。本机已经配好 Claude Code 的人,
 直接跑 `flower` 就能开工,配置界面根本不会出现 —— `install.sh:77` 宣传的就是这条。
 
-!!! warning "产品内那句“flower 不读 ~/.claude/settings.json”是错的"
+!!! warning "产品内那句"flower 不读 ~/.claude/settings.json"是错的"
     完全找不到凭证时,flower 打印的错误里最后一行是
     `flower 不读 ~/.claude/settings.json —— 那是可移植性的代价。`
     (`env.py:184-194`,那一句在 `:192`)。**以代码为准:它读。**
@@ -184,7 +184,7 @@ cp .env.example .env        # 填 ANTHROPIC_AUTH_TOKEN
 ### 想重新配的时候
 
 `flower setup` 这个子命令注册过(`cli.py:1147-1149`),但 `_CMDS` 漏了它(`cli.py:758`),
-于是 `flower setup` 会被改写成 `flower go setup` —— 把 “setup” 当成一句诉求跑一遍完整流程。
+于是 `flower setup` 会被改写成 `flower go setup` —— 把 "setup" 当成一句诉求跑一遍完整流程。
 **目前没有任何命令行写法能到达那个子命令**,尽管好几处错误文案还在让你去跑它。要改凭证:
 
 ```bash
@@ -254,14 +254,14 @@ ANTHROPIC_MODEL = claude-opus-5[1m]
 | 症状 | 原因 | 怎么办 |
 |---|---|---|
 | `需要 Python 3.10+。先装一个…` | `python3` 和 `python` 都不满足 3.10+(`install.sh:31`) | `brew install python` / `apt install python3`,再跑一次脚本 |
-| 脚本说装好了,但 `flower: command not found` | 装到了不在 PATH 上的目录 | 见上面“`flower` 命令怎么上 PATH”。走到 `pip --user` 那条路时,macOS 上是 `~/Library/Python/3.X/bin` |
+| 脚本说装好了,但 `flower: command not found` | 装到了不在 PATH 上的目录 | 见上面"`flower` 命令怎么上 PATH"。走到 `pip --user` 那条路时,macOS 上是 `~/Library/Python/3.X/bin` |
 | `安装失败。手动试:uv tool install git+https://…` | 所有路径都失败,通常是到 GitHub 或 PyPI 的网络不通 | 按提示手动跑一次,看真实报错 |
 | `缺少凭证:需要 ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN。`(4 行) | 非交互环境(管道、CI、`nohup`)下没凭证 —— 那里不会弹配置界面,直接退出 | 先在真终端里跑一次 `flower` 配好,或者直接写 `~/.config/flower/.env` |
 | `! 凭证被拒:HTTP 401 …` | token 过期或写错 | 交互终端里会当场让你重配;非交互则退出 |
 | `! 网关地址或模型名不对:HTTP 404 …` | `ANTHROPIC_BASE_URL` 或模型名不对 | BASE_URL 写到网关根,别带 `/v1`;模型名用网关自己的那套 |
 | `(探针没打通:… —— 当作网络问题,照常开跑)` | DNS / TCP / 超时 / 5xx | **不是凭证问题**,flower 有意不让你重配,照常开跑,交给[韧性](../reference/glossary.md#韧性)那一层 |
 | `! 标准输入不是终端,没人能回答提问` | 在管道或 CI 里跑 | 加 `--timeout 0` 让它自己判断,别等人 |
-| `flower setup` 跑起来在问“要做什么” | `_CMDS` 漏了 `setup`(`cli.py:758`) | 直接改 `~/.config/flower/.env`,见上面“想重新配的时候” |
+| `flower setup` 跑起来在问"要做什么" | `_CMDS` 漏了 `setup`(`cli.py:758`) | 直接改 `~/.config/flower/.env`,见上面"想重新配的时候" |
 
 ## 下一步
 

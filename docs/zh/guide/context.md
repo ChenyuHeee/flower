@@ -12,7 +12,7 @@
 
 差别在时机。一次 `pytest` 的输出动辄几万字符,模型看一眼、拿一个结论,剩下的字符从此
 每一轮都重新发一遍;等窗口撑满,压缩把它连同旁边的决策一起总结成一段摘要 —— 省下的是体积,
-丢掉的是“当初为什么这么定”。auto-compact 的触发阈值是**窗口 − 33k**
+丢掉的是"当初为什么这么定"。auto-compact 的触发阈值是**窗口 − 33k**
 ([`core/agent.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/agent.py)),
 到那一刻,该丢的和不该丢的已经躺在一起了。
 
@@ -56,14 +56,14 @@ rt = Runtime(workspace="repo", workbench=True)
 
 ### 第一层:分工(省得最多)
 
-主 agent 扮演“一个会用 Claude Code 的人”:拆解、派活、读报告、决策。它拿不到
+主 agent 扮演"一个会用 Claude Code 的人":拆解、派活、读报告、决策。它拿不到
 Bash / Write / Edit —— 工具只有 `Agent`、`TodoWrite`、`Read`
 (`glance=True` 时另加一个受限的 `Bash`,见下)。动手的活全派给
 [执行者](../reference/glossary.md#执行者)。
 
 **什么时候触发**:主线程每次调 `Bash|Write|Edit|NotebookEdit`,`PreToolUse` hook
-`delegate_guard` 当场 deny,并且指路 —— “用 Agent 工具派一个 subagent 去做,任务里写清目标与
-验收标准,并要求它把长产出写进 `.flower/artifacts/`、回话只给路径与结论”。subagent 一律放行。
+`delegate_guard` 当场 deny,并且指路 —— "用 Agent 工具派一个 subagent 去做,任务里写清目标与
+验收标准,并要求它把长产出写进 `.flower/artifacts/`、回话只给路径与结论"。subagent 一律放行。
 判据是 hook 数据里有没有 `agent_id`:**没有的就是主线程**。
 
 **省多少**:subagent 的工具调用与试错**进的是它自己的 transcript**(会话存储里用 `subpath`
@@ -84,16 +84,16 @@ Bash / Write / Edit —— 工具只有 `Agent`、`TodoWrite`、`Read`
 分工唯一的反向成本是[任务书](../reference/glossary.md#任务书) —— 协调者派活时写的那段话,
 它进主线程,而且永久留着。实测 8/8 份任务书都在复述对方已知的纪律,最短一份 521 字符里
 只有约 120 字符是任务专属的,一轮白占约 4.8k 永久上下文。所以 `COORDINATOR_RULES` 里写死了
-一条:**任务书只写这次任务专属的东西**。唯一还需要交代的规矩是“工作台在哪 + 长产出写
-`artifacts/` + 回话只给路径与结论” —— 因为工作台索引进不了 subagent,任务书是唯一通道。
+一条:**任务书只写这次任务专属的东西**。唯一还需要交代的规矩是"工作台在哪 + 长产出写
+`artifacts/` + 回话只给路径与结论" —— 因为工作台索引进不了 subagent,任务书是唯一通道。
 
-### 第二层:工作台(治“每次重写”)
+### 第二层:工作台(治"每次重写")
 
 `.flower/` 下三个目录随工作区走:
 
 | 目录 | 放什么 | 解决什么 |
 |---|---|---|
-| `scripts/` | 会跑第二次的验证 / 复现脚本,首行写 `# desc: 一句话` | 写一次,以后直接跑。不再“压缩后丢失,每次重新编写” |
+| `scripts/` | 会跑第二次的验证 / 复现脚本,首行写 `# desc: 一句话` | 写一次,以后直接跑。不再"压缩后丢失,每次重新编写" |
 | `artifacts/` | 超过 2000 字符的长产出:日志、数据、报告、diff | 对话里只出现路径和结论 |
 | `notes/` | 关键决策与理由,一个决策一个文件 | 被压缩、被重启、换机器,结论都还在 |
 
@@ -110,8 +110,8 @@ Bash / Write / Edit —— 工具只有 `Agent`、`TodoWrite`、`Read`
 
 !!! warning "索引 subagent 继承不到"
     索引走的是会话级的 `system_prompt.append`,subagent 有自己的 system prompt,
-    **继承不到**(实测 $0.2461,`tests/prelude_live.py`)。所以“工作台在哪 + 长产出写
-    `artifacts/`”必须由协调者在任务书里转述 —— 那是唯一通道,不是冗余。
+    **继承不到**(实测 $0.2461,`tests/prelude_live.py`)。所以"工作台在哪 + 长产出写
+    `artifacts/`"必须由协调者在任务书里转述 —— 那是唯一通道,不是冗余。
 
 ### 第三层:当场剪枝
 
@@ -123,10 +123,10 @@ Bash / Write / Edit —— 工具只有 `Agent`、`TodoWrite`、`Read`
 所以 subagent 的结果也落盘。它只替换工具输出结构里过长的**字符串字段**,list 一律不碰
 (里面可能是图片块),因为 `updatedToolOutput` 必须保持原工具的输出结构。
 
-**读落盘文件本身放行,不再落盘。** 否则那行提示里的“需要全文用 Read 读它”是句空话:
+**读落盘文件本身放行,不再落盘。** 否则那行提示里的"需要全文用 Read 读它"是句空话:
 读回来又超阈值、又被落盘、又给它一行指针,无限循环。实测撞到过(`tests/handoff_live.py`
-头一次真跑),模型连试五种写法绕,自己说 “The spill read loops back on itself”,
-最后靠 40 行一段硬啃,白烧七八轮。落盘的意义是“**不自动**把大东西塞进上下文”;
+头一次真跑),模型连试五种写法绕,自己说 "The spill read loops back on itself",
+最后靠 40 行一段硬啃,白烧七八轮。落盘的意义是"**不自动**把大东西塞进上下文";
 它自己决定要看全文,那是它的选择。
 
 ```python
@@ -168,8 +168,8 @@ Runtime(workspace="repo", trim=TrimPolicy(keep_recent=20, min_chars=2000))   # T
 动作本身也会污染上下文:拒绝消息是一条 `tool_result`,和那条**从来没执行过的命令**一起永久
 留着。实测一次 273 字符(93 字拒绝语 + 180 字死命令),死命令比拒绝语还贵。
 
-比 token 更要紧的是它**会误导**:实测协调者读到几条“不直接使用 Bash”之后,连放行的
-`git status` 都不再尝试,直接说“Bash 被限制了,派个 agent 去看” —— 学成了习得性无助,
+比 token 更要紧的是它**会误导**:实测协调者读到几条"不直接使用 Bash"之后,连放行的
+`git status` 都不再尝试,直接说"Bash 被限制了,派个 agent 去看" —— 学成了习得性无助,
 反而多花一次 subagent 启动。默认留 1 条而不是 0:最新那次拒绝是有效信号,能防止模型在同一轮里
 反复重试同一条被拦的命令。识别靠 harness 自己打的结构性标记 `toolDenialKind: "permission-rule"`,
 不是匹配文案 —— 文案随时会改,标记不会。活体实测:2 次被拒 → 摘 1 留 1,链未断,resume 正常
@@ -187,11 +187,11 @@ Runtime(workspace="repo", trim=TrimPolicy(keep_recent=20, min_chars=2000))   # T
 
 ### 反例:看一眼的活自己干
 
-前三层都在说“派出去”,但有个反例:`git status`、`ls`、`cat` 这种命令,结果几十个字符,
+前三层都在说"派出去",但有个反例:`git status`、`ls`、`cat` 这种命令,结果几十个字符,
 而**派一个 subagent 光启动就要约 4.3k 上下文**(实测,不可摊薄)。为一条 `ls` 付这个价钱是净亏。
 
-所以协调者拿回一个受限的 Bash(`coordinator(..., glance=True)`,默认开)。判据不是“命令短”,
-而是**结果会不会过期**,并且“放行”和“过期”由同一个函数 `is_ephemeral()` 决定:
+所以协调者拿回一个受限的 Bash(`coordinator(..., glance=True)`,默认开)。判据不是"命令短",
+而是**结果会不会过期**,并且"放行"和"过期"由同一个函数 `is_ephemeral()` 决定:
 
 | | 放行自己跑 | 结果会被标记过期 |
 |---|---|---|
@@ -260,8 +260,8 @@ system_prompt = {"type": "preset", "preset": "claude_code", "append": spec.instr
 
 参数的完整默认值与签名见 [Python API](../reference/api.md);术语见[术语表](../reference/glossary.md)。
 
-<!-- TODO(核实): 术语表 #裁剪 写的是“写入会话存储时,按策略丢掉不值得留的消息”,但源码里
+<!-- TODO(核实): 术语表 #裁剪 写的是"写入会话存储时,按策略丢掉不值得留的消息",但源码里
      TrimmingSessionStore 的重写点是 load()(resume 前),SQLite 原文始终不动;本页按源码写成
-     “resume 之前重写”。另外术语表 #落盘 说 spill_guard 写到 `.flower/spill/`,源码是
+     "resume 之前重写"。另外术语表 #落盘 说 spill_guard 写到 `.flower/spill/`,源码是
      `<workbench.root>/spill/` —— 只有工作台正好在 `<workspace>/.flower` 时两者才相等,
      `Runtime(workbench=True)` 的默认位置是 `<run_dir>/workbench`。请协调者决定是否修术语表。 -->

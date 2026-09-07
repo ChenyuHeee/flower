@@ -95,7 +95,7 @@ flower 只读其中三个用来做自己的判断,其余是加载进来透传给
 **哪个文件赢**:第 3 条(项目 `.env`)赢第 4 条(全局 `.env`),第 4 条赢第 5 条(仓库根 `.env`),
 三者都赢第 6 条(Claude Code 的配置),而全部都赢不过第 1 条(进程环境)。
 
-实现方式是“**已经有值的键不覆盖**”(`env.py:90-93`):排在前面的先把键占住,后面的只补空缺。
+实现方式是"**已经有值的键不覆盖**"(`env.py:90-93`):排在前面的先把键占住,后面的只补空缺。
 所以优先级是**按键算的,不是按文件算的** —— 项目 `.env` 里只写了 `ANTHROPIC_BASE_URL`,
 token 照样可以来自全局那份。同名键第一次出现的值定终身。
 
@@ -116,7 +116,7 @@ ANTHROPIC_DEFAULT_HAIKU_MODEL    CLAUDE_CODE_SUBAGENT_MODEL    CLAUDE_CODE_EFFOR
 文件不存在、读不动、或者不是合法 JSON(`OSError` / `ValueError`),就返回空字典继续往下走 ——
 **回退失效不该带走这次运行**(`env.py:62-63`、`:66-69`)。
 
-代码里的立场是:借的只是“去哪找 token”,settings.json 里其它任何东西(权限规则、hook、
+代码里的立场是:借的只是"去哪找 token",settings.json 里其它任何东西(权限规则、hook、
 模型设置)一概不接管,所以这不违背 `setting_sources=[]` 的可移植承诺(`env.py:17-19`、`:59-61`)。
 `install.sh:77` 把它当成一个特性宣传:本机配好 Claude Code 的人,连配置界面都不会看到。
 
@@ -159,7 +159,7 @@ ANTHROPIC_DEFAULT_HAIKU_MODEL    CLAUDE_CODE_SUBAGENT_MODEL    CLAUDE_CODE_EFFOR
 | 多行值(用引号跨行) | 逐行处理,第二行不含 `=`,会被整行跳过 |
 
 **空值会把键占住**。`ANTHROPIC_AUTH_TOKEN=` 在高优先级的文件里出现,`take()` 会执行
-`os.environ["ANTHROPIC_AUTH_TOKEN"] = ""`,于是后面的文件因为“键已存在”补不进来
+`os.environ["ANTHROPIC_AUTH_TOKEN"] = ""`,于是后面的文件因为"键已存在"补不进来
 (`env.py:90-93`);而 `check_credentials()` 判的是真值,空字符串照样算没配(`env.py:186`)。
 **结果是既没有凭证、也拿不到回退。** 不想要某个键就整行删掉,别留一个空的。
 
@@ -262,7 +262,7 @@ runs/
 ```
 
 三个子目录加索引由 `Workbench` 建(`workbench.py:73-92`)。`INDEX.md` 走会话级的
-`system_prompt.append`,**subagent 继承不到** —— 所以“长产出写 `artifacts/`”这条规矩必须由
+`system_prompt.append`,**subagent 继承不到** —— 所以"长产出写 `artifacts/`"这条规矩必须由
 [协调者](glossary.md#协调者)在[任务书](glossary.md#任务书)里转述,那是唯一通道。
 
 `go` 路径在 `notes/` 下固定生成这些:
@@ -271,7 +271,7 @@ runs/
 |---|---|---|
 | `notes/需求.md` | 冻结的[需求确认书](glossary.md#需求确认书),四段:目标 / 验收标准 / 边界 / 未知与假设 | `brief.py:44-45`;`clarify.py:105` |
 | `notes/目标.md` | 冻结的两段:目标 / 判定清单 | `workflow/goal.py:124` |
-| `notes/问答记录.md` | 全部问答的追加记录,含“人主动说”的收件箱条目。**不进上下文,只作留档** | `human.py:421-433` |
+| `notes/问答记录.md` | 全部问答的追加记录,含"人主动说"的收件箱条目。**不进上下文,只作留档** | `human.py:421-433` |
 | `notes/交接-<步骤名>.md` | [交接书](glossary.md#交接书)。上一代收进 `notes/archive/交接/<步骤名>-<时间戳>.md` | `runtime.py:388-403` |
 | `notes/archive/<YYYYmmdd-HHMMSS>/` | `--new` / `/new` 归档的 `lineage.json` + `需求.md` + `目标.md`(**移动,不删除**) | `lineage.py:100-117` |
 
@@ -291,7 +291,7 @@ runs/
 必须够得到它。
 
 `spill_guard` 换上去的不是一行,是一行指针加**开头 400 字符**(`guard.py:132-140`)。
-读落盘文件本身的调用会被放行,不然“需要全文用 Read 读它”是句空话 —— 读回来又超阈值,又被落盘,
+读落盘文件本身的调用会被放行,不然"需要全文用 Read 读它"是句空话 —— 读回来又超阈值,又被落盘,
 无限循环(`guard.py:155-170`)。
 
 ### `sessions.db` 的表结构 {#sessions-db}
@@ -351,7 +351,7 @@ sqlite3 runs/sessions.db "select store_key, next_seq from meta;"
 !!! note "三层是继承链,不是可选组合"
     `PruningSessionStore` 继承 `TrimmingSessionStore` 继承 `SqliteSessionStore`。
     `Runtime` **永远**构造最外层那个(`runtime.py:109-112`),构造参数里没有换后端的入口。
-    “关掉某一层”的办法是把它的策略对象 `enabled` 设成 `False`,不是换类。
+    "关掉某一层"的办法是把它的策略对象 `enabled` 设成 `False`,不是换类。
 
 `append`(写)永远是全量落盘,一个字不改。三层只影响 `load`(读回去喂给模型的那一份)。
 `load` 的实际顺序是:
@@ -370,7 +370,7 @@ SqliteSessionStore.load     从 entries 表按 seq 读出全部
 | 3 | `PruningSessionStore` | 断线残渣、旧的被拒调用 | 是不是错误 |
 
 第 2 层是[裁剪](glossary.md#裁剪),第 3 层是[剪除](glossary.md#剪除) ——
-**裁剪按体积和价值丢,剪除按“是不是错误”丢**,别混。完整签名见 [Python API](api.md)。
+**裁剪按体积和价值丢,剪除按"是不是错误"丢**,别混。完整签名见 [Python API](api.md)。
 
 ### `SqliteSessionStore` —— 地基 {#sqlite-store}
 
@@ -409,12 +409,12 @@ TrimmingSessionStore(path, workspace, policy: TrimPolicy | None = None,
 `[工具结果已归档:N 字符。完整内容在 <路径>,需要时用 Read 读取]`(`trim.py:54-57`、`:308-317`)。
 
 `EphemeralPolicy` 管**时效**:`git status`、`ls`、`ps` 这类结果很短,按体积永远轮不到裁,
-但它们的正确性随时间衰减 —— 20 轮前那份 `git status` 不是“没用”,是**会误导**。
+但它们的正确性随时间衰减 —— 20 轮前那份 `git status` 不是"没用",是**会误导**。
 
 | 参数 | 类型 | 默认 | 语义 |
 |---|---|---|---|
 | `enabled` | `bool` | `True` | `Runtime(ephemeral=…)` 转换而来,**默认开** |
-| `keep_recent` | `int` | `6` | 最近 N 条保留原文。比 `TrimPolicy` 的 20 小得多 —— 这类东西“最近”的窗口本来就短 |
+| `keep_recent` | `int` | `6` | 最近 N 条保留原文。比 `TrimPolicy` 的 20 小得多 —— 这类东西"最近"的窗口本来就短 |
 | `max_chars` | `int` | `2000` | 超过就交给 `TrimPolicy` 落盘归档,不走这条路 |
 | `text` | `str` | `"[{cmd} 的结果已过期(第 {age} 轮前),当前状态可能已变。需要请重新执行]"` | 替换文案 |
 
@@ -452,12 +452,12 @@ PruningSessionStore(path, workspace, policy: TrimPolicy | None = None,
 `keep_denials` 是唯一透传到这一层的 `Runtime` 构造参数(`Runtime(keep_denials=N)`)。
 默认 1 而不是 0 的理由:最新那次拒绝是有效信号,能防止模型在同一轮里反复重试同一条被拦的命令。
 **别调大** —— 被拒的调用从来没执行过,结果里没有任何信息,实测一次占 273 字符
-(93 字拒绝语加 180 字死命令原文),而且它**会误导**:实测协调者读到几条“不直接使用 Bash”之后,
-连放行的 `git status` 都不再尝试,直接说“Bash 被限制了,派个 agent 去看”(`prune.py:135-148`)。
+(93 字拒绝语加 180 字死命令原文),而且它**会误导**:实测协调者读到几条"不直接使用 Bash"之后,
+连放行的 `git status` 都不再尝试,直接说"Bash 被限制了,派个 agent 去看"(`prune.py:135-148`)。
 
 三条结构性红线,违反了 API 直接报错:
 
-1. **`tool_result` 块本身必须在**,只能换 `content`。少一个就是 “Missing Tool Result Block”
+1. **`tool_result` 块本身必须在**,只能换 `content`。少一个就是 "Missing Tool Result Block"
    (`trim.py:20-22`;`prune.py:79-92`)。
 2. **`isCompactSummary` / `isMeta` 条目不能动** —— 那是被压掉的那段历史唯一的存在形式
    (`trim.py:179-181`)。
@@ -465,13 +465,13 @@ PruningSessionStore(path, workspace, policy: TrimPolicy | None = None,
    往回走,链断在哪里前面的历史就全丢(`prune.py:95-122`)。所以 `relink()` 要拿到**包含**待摘
    条目的完整列表,过滤由它自己做。
 
-**SQLite 里的原文一个字都不改** —— 三层只影响“喂回模型的那一份”(`trim.py:18`;`prune.py:8`)。
+**SQLite 里的原文一个字都不改** —— 三层只影响"喂回模型的那一份"(`trim.py:18`;`prune.py:8`)。
 
 ## 断网韧性 {#韧性}
 
 长程 workflow 一跑就是几小时,网络必然会断一次。默认行为很糟:断线那一刻 harness 往 transcript
 里塞一条合成 assistant 消息(`model="<synthetic>"`、`isApiErrorMessage=true`),正文是
-`API Error: Can't reach the API server …`;它成了会话的叶子,之后 resume 就被当成“模型上一句说的话”
+`API Error: Can't reach the API server …`;它成了会话的叶子,之后 resume 就被当成"模型上一句说的话"
 喂回去,模型以为自己在讨论网络故障;它还会混进 `StepResult.text`,顺着 workflow 传给下一步的
 prompt(`resilience.py:1-22`)。
 
@@ -505,7 +505,7 @@ min(base_delay * 2 ** (attempt - 1), max_delay) * (0.75 + random() * 0.5)
 - **探的是 `ANTHROPIC_BASE_URL` 的 host:port**,不是 `api.anthropic.com`(`resilience.py:67-72`)。
   用自建网关时,后者通说明不了前者通。
 - **只做 DNS 加 TCP 握手**:`getaddrinfo` 然后 `connect_tcp` 然后立刻关掉。不发 HTTP、
-  不带凭证、不花钱(`resilience.py:75-85`)。探针必须免费,否则“断网时每 15 秒探一次”
+  不带凭证、不花钱(`resilience.py:75-85`)。探针必须免费,否则"断网时每 15 秒探一次"
   本身就成了故障。
 - 任何失败都算不可达 —— 不区分是 DNS 挂了还是 TCP 拒绝。
 - `wait_online()` 挂在那里等:通了返回 `True`,等满 `max_offline_wait` 返回 `False`。
@@ -518,7 +518,7 @@ min(base_delay * 2 ** (attempt - 1), max_delay) * (0.75 + random() * 0.5)
 
 ### 错误分类 {#错误分类}
 
-`classify(text)` 返回三种之一。**先判致命**:401 之类的文本里常常也带着 “connection” 这种词,
+`classify(text)` 返回三种之一。**先判致命**:401 之类的文本里常常也带着 "connection" 这种词,
 顺序反了会死等(`resilience.py:53-64`)。
 
 | 分类 | 命中什么(正则见 `resilience.py:37-50`) | 行为 |
@@ -536,7 +536,7 @@ min(base_delay * 2 ** (attempt - 1), max_delay) * (0.75 + random() * 0.5)
    (`prune.py:27-32`、`:191-195`)。**SQLite 里原样保留**,只是不喂回去。
 2. **事件流里它是 `kind="error"` 而不是 `"text"`**,所以不进 `StepResult.text`,
    也就不会顺着 workflow 传给下一步的 prompt(`resilience.py:17-18`)。
-3. **`resume_prompt` 有意不含任何错误细节**。模型需要知道“被打断了、接着做”,不需要知道是
+3. **`resume_prompt` 有意不含任何错误细节**。模型需要知道"被打断了、接着做",不需要知道是
    `ENOTFOUND` 还是 `503`。**那属于日志,不属于上下文**(`resilience.py:112-113`)。
    日志去 `manifest.json` 的 `errors` 字段看。
 

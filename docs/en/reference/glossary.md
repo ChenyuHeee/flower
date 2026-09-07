@@ -105,9 +105,23 @@ The role that decides whether the work is actually done. It does one of two jobs
 goal** before the run (producing a goal plus a checklist), or **judging a round** at the end of
 each one (producing a [verdict](#verdict)). See [Goal guard](../guide/goal.md).
 
-**The critical part**: a judge assesses the **artifact**, not the source. See the failure in
-[HT002](../cases/ht002.md) — it read the macOS branch of a Makefile, passed the round, and what
-had actually been delivered was a Linux ELF binary.
+**The critical part**: a judge assesses the **artifact**, not the source.
+
+[HT001](../cases/ht001.md) got this wrong once. The acceptance criterion read "runs directly in a
+macOS terminal"; `file` on the delivered binary said
+`ELF 64-bit LSB pie executable, ARM aarch64, GNU/Linux`; the verdict was pass.
+
+Two things have to be said about that, or the example gets misread:
+
+1. **It was not the goal guard that got it wrong** — that run had no goal guard. The bad call came
+   from an auditor the coordinator dispatched on its own.
+2. **A default judge would likely have missed it too.** `judge()` defaults to `can_run=False`, with
+   only `Read`/`Glob`/`Grep` — **it cannot run `file`**. It would read the `Makefile`, see a real
+   Darwin branch, and pass.
+
+What actually worked was [HT002](../cases/ht002.md): the judge ran with `judge_can_run`, went and
+ran `file` and `lsof` itself, and stayed out of the hole. **So "judge the artifact" only becomes
+real with `can_run=True`.**
 
 ### oracle {#oracle}
 
@@ -238,7 +252,7 @@ How the code identifies it: the hook payload has **no** `agent_id`. Subagent hoo
 
 *Chinese: 工作台* · `Workbench`
 
-The on-disk working directory, `.flower/` by default, with three subdirectories:
+The on-disk working directory, with three subdirectories:
 
 | Directory | Holds |
 |---|---|
@@ -248,6 +262,18 @@ The on-disk working directory, `.flower/` by default, with three subdirectories:
 
 `INDEX.md` indexes all three and is **injected into the system prompt**, so the agent knows every
 round what it already has on hand.
+
+!!! warning "Two entry points, two default locations"
+    Where the workbench lands depends on how it was created, and this one catches people out:
+
+    | Created via | Workbench root |
+    |---|---|
+    | `Workbench(workspace)` — also the path `starter_flow()` / `wake_state()` take | `<workspace>/.flower` |
+    | `Runtime(workbench=True)` | `<run_dir>/workbench` (`runs/workbench` by default) |
+
+    The command line goes through the former, so a `flower` run gives you `.flower/`; calling
+    `Runtime(workbench=True)` from Python gives you `runs/workbench`. To pin the location, pass a
+    `Workbench` instance you built yourself rather than relying on the default.
 
 !!! warning "Subagents do not inherit the index"
     The index goes in via a session-level `system_prompt.append`, which **subagents never see**.
@@ -259,7 +285,12 @@ round what it already has on hand.
 *Chinese: 落盘*
 
 When a tool result exceeds a threshold (4000 characters by default), a `PostToolUse` hook writes
-it to `.flower/spill/` and leaves a single path in the context.
+it to `<workbench root>/spill/` and leaves a single path in the context.
+
+The path **follows the [workbench](#workbench)** rather than being fixed — it is only
+`.flower/spill/` when the workbench sits at its default `<workspace>/.flower`. Turn on
+[isolation](#isolation), point the workbench outside the repo with `home=`, and spill moves with
+it.
 
 **Pruned on the spot**, rather than [compacted](#compact) after the context is already full.
 
@@ -276,8 +307,12 @@ sets are always identical.
 
 *Chinese: 裁剪* · `TrimmingSessionStore`
 
-On write to the session store, drop messages not worth keeping: results of
+**Before a resume**, rewrite the copy of the messages being fed back to the model: results of
 [ephemeral commands](#ephemeral-command), oversized tool output.
+
+It overrides `load()` only — **the text in SQLite is never touched**. What gets trimmed is just the
+copy sent into this resume's context, which makes trimming reversible: resume again under a
+different policy and the full record is there.
 
 ### prune {#prune}
 
@@ -316,8 +351,30 @@ then the run resumes. Errors produced while waiting are kept out of the context 
 
 *Chinese: 血缘* · `Lineage`
 
-A cross-process record of which session this run was forked from. [Continuity](#continuity)
-relies on it to find where the last run got to.
+A cross-process record of which session this run was forked from, kept in `lineage.json`.
+[Continuity](#continuity) relies on it to find where the last run got to.
+
+**Do not confuse** with the [run manifest](#run-manifest) — that is `runs/manifest.json`, the
+accounting for each run.
+
+### run manifest {#run-manifest}
+
+*Chinese: 运行清单* · `runs/manifest.json`
+
+The accounting record for each [run](#run): what it cost, how long it took, how large the context
+got. Every number on the case pages is recomputable from here.
+
+### wake {#wake}
+
+*Chinese: 唤醒* · `wake_state()`
+
+A **read-only probe** before the run starts: does this workspace already have a
+[brief](#brief) and a goal, and therefore is this a fresh start or a
+[continuation](#continuity)? **It writes not one byte.**
+
+`wake_state()` is the single definition of where the workbench lives — a driver that wants to know
+where the brief is has to go through it too. Assembling that path by hand does not raise an error;
+it just silently fails to find anything.
 
 ### event {#event}
 
