@@ -6,7 +6,7 @@
 
 > **文档在 [`docs/`](docs/)**:[快速上手](docs/README.md) ·
 > [设计 workflow](docs/workflow.md) · [前置确认](docs/clarify.md) ·
-> [目标看守](docs/goal.md) · [接续](docs/continuity.md) ·
+> [目标看守](docs/goal.md) · [接续](docs/continuity.md) · [换代](docs/handoff.md) ·
 > [换交互层](docs/interaction.md) · [容器](docker/README.md) ·
 > **真实运行案例:[HT001](docs/case-ht001.md) · [HT002](docs/case-ht002.md)**。
 > 本页讲的是**为什么是这些设计** —— 实测数据、对照实验和踩过的坑。
@@ -84,6 +84,12 @@ subagent 默认 `model="inherit"` —— 干活的那个不该降级。省的是
 
 **第三层:当场剪枝。** PostToolUse hook 在工具结果**进模型之前**看一眼:超过 4000 字符的,
 落盘到 `.flower/spill/`,上下文里换成一行路径 + 开头 400 字符。内容没丢,只是不常驻。
+
+读落盘件本身**不再落盘** —— 否则那行提示里的"需要全文用 Read 读它"是句空话:
+读回来又超阈值、又被落盘、又给它一行指针,无限循环。实测撞到过
+(`tests/handoff_live.py` 头一次真跑),模型连试五种写法绕,自己说
+"The spill read loops back on itself",最后靠 40 行一段硬啃,白烧七八轮。
+落盘的意义是"**不自动**把大东西塞进上下文";它自己决定要看全文,那是它的选择。
 
 ```python
 Runtime(workspace="repo", workbench=True, spill_threshold=4000)   # None 关掉
@@ -553,6 +559,7 @@ cp .env.example .env   # 填 token;.env 已被 gitignore
 .venv/bin/python tests/delegation.py      # 协调者/执行者分工 + 量上下文分布(约 $0.71)
 .venv/bin/python tests/isolation.py       # 三个 issue 三个 worktree(约 $0.9)
 .venv/bin/python tests/wake_live.py       # 跨进程接续:两个 OS 进程,记忆探针(约 $0.24)
+.venv/bin/python tests/handoff_live.py    # 换代:真触发一次,验接手的人接不接得住
 .venv/bin/python tests/clarify.py         # 前置确认:通道/四段/白名单/接线,不花钱
 .venv/bin/python tests/flow_offline.py    # Workflow.run 语义(when/gate/reduce/on_fail),不花钱
 .venv/bin/python tests/glance.py          # 互补性不变式,不花钱
@@ -561,6 +568,7 @@ cp .env.example .env   # 填 token;.env 已被 gitignore
 .venv/bin/python tests/goal_offline.py    # 目标看守:三态判定 / 打回续跑 / 空转兜底,不花钱
 .venv/bin/python tests/toolwall.py        # 工具墙:allowed_tools 不是排他白名单,hook 补差额,不花钱
 .venv/bin/python tests/lineage_offline.py # 接续:同一路径接上上次 / 判定者永远新会话,不花钱
+.venv/bin/python tests/handoff_offline.py # 换代:写交接换新会话 / 降级路径 / 防跑飞闸,不花钱
 .venv/bin/python tools/analyze_run.py <run_dir>   # 从 sessions.db 量一次运行(上下文曲线/缓存/复用),不花钱
 sudo -v && .venv/bin/python tests/resilience_live.py   # 真掐网,需要 sudo
 ```

@@ -77,6 +77,44 @@ def _clean(body: str) -> str:
     return _BLANKS.sub("\n\n", "\n".join(lines)).strip()
 
 
+def _head_re(aliases: dict[str, str]) -> re.Pattern[str]:
+    """标题行匹配:容忍 `## X` / `**X**` / `X:` / `1. X`,也容忍标题后直接跟正文。
+
+    **长的别名排前面** —— 否则"未知"会先吃掉"未知与假设"。
+    """
+    labels = "|".join(sorted(aliases, key=len, reverse=True))
+    return re.compile(
+        r"^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*|__)?[ \t]*(?:\d+[.、)][ \t]*)?"
+        rf"({labels})"
+        r"(?:\*\*|__)?[ \t]*[:：]?[ \t]*(.*)$",
+        re.MULTILINE,
+    )
+
+
+def _sections(text: str, head: re.Pattern[str], aliases: dict[str, str]) -> dict[str, str]:
+    """按标题切段。**围栏代码块先剥掉** —— 模型贴进来的代码里可能有假标题。"""
+    body = _strip_code(text or "")
+    hits = list(head.finditer(body))
+    out: dict[str, str] = {}
+    for i, m in enumerate(hits):
+        key = aliases[m.group(1)]
+        end = hits[i + 1].start() if i + 1 < len(hits) else len(body)
+        chunk = _clean(f"{m.group(2) or ''}\n{body[m.end():end]}")
+        if chunk and key not in out:      # 同名段重复出现时取第一个
+            out[key] = chunk
+    return out
+
+
+def _bullets(text: str) -> list[str]:
+    """一条一行。去掉 `-` / `*` / `1.` 这些记号。"""
+    items = []
+    for ln in (text or "").splitlines():
+        s = re.sub(r"^[ \t]*(?:[-*+]|\d+[.、)])[ \t]*", "", ln).strip()
+        if s:
+            items.append(s)
+    return items
+
+
 @dataclass
 class Brief:
     """冻结下来的需求。四段都非空才算完整。"""

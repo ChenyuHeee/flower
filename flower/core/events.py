@@ -32,6 +32,8 @@ EventKind = Literal[
     "task", "system", "reset", "result", "error", "retry", "prompt", "ask",
     "step",      # 步骤边界。由 Workflow.run 发,不来自 normalize ——
                  # UI 靠它画出运行的骨架(确认需求 → 设定目标 → 干活 → 判定)
+    "handoff",   # 换代。由 Runtime 发:上下文快满了 / 已经写完交接换了新会话。
+                 # payload["phase"]:"near" 逼近 / "writing" 正在写 / "done" 换完了。
     "unknown",
 ]
 # "ask" 不由 normalize() 产生 —— 它来自 core/human.py 的提问通道。

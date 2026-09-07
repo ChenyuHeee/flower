@@ -19,9 +19,10 @@ from pathlib import Path
 import anyio
 from claude_agent_sdk import query
 
-from .agent import AgentSpec, build_options
+from .agent import AgentSpec, CompactPolicy, HandoffPolicy, build_options
 from .env import check_credentials, load_dotenv
 from .events import Event, normalize
+from .handoff import HANDOFF_PROMPT, Handoff, degraded
 from .guard import merge_hooks, whitelist_guard, workbench_hooks
 from .resilience import Resilience, classify
 from .workbench import Workbench
@@ -51,6 +52,13 @@ class StepResult:
     """历次失败原因。故障排查看这里,模型看不到。"""
     resumed: bool = False
     """是否靠 resume 从中断处接上(而不是重头跑)。"""
+    retired: list[str] = field(default_factory=list)
+    """这一步换代时烧掉的 session_id,按顺序。
+
+    ``session_id`` 永远是**最后接班的那个**(血缘要指向还活着的会话),
+    所以被换掉的那几代只能记在这里。事后追溯一次长跑靠它。"""
+    context: int = 0
+    """最后一轮主线程实际看到的上下文规模。换代判据,也给 UI。"""
 
     @property
     def duration_s(self) -> float:
@@ -72,6 +80,7 @@ class Runtime:
         workbench: Workbench | bool = False,
         spill_threshold: int | None = 4000,
         resilience: Resilience | bool = True,
+        handoff: "HandoffPolicy | bool" = True,
     ) -> None:
         self.workspace = Path(workspace).resolve()
         self.workspace.mkdir(parents=True, exist_ok=True)
@@ -97,6 +106,12 @@ class Runtime:
             prune=PrunePolicy(keep_denials=keep_denials))
         self.resilience = (resilience if isinstance(resilience, Resilience)
                            else Resilience(enabled=bool(resilience)))
+        # 上下文快满了:写交接换新会话,而不是 compact。见 core/handoff.py。
+        self.handoff = (handoff if isinstance(handoff, HandoffPolicy)
+                        else HandoffPolicy(enabled=bool(handoff)))
+        self._ctx = 0            # 本次 _attempt 里主线程见过的最大上下文
+        self._warned = False     # 逼近提醒每代只发一次
+        self._writing_handoff = False   # 见 _handoff_due:写交接那一轮豁免阈值
         self.results: list[StepResult] = []
         # 这次进程的标记 + 上次留下的账。manifest 是**跨进程累积**的:
         # 同一个目录接着跑(见 core/lineage.py),它就是唯一能查到
@@ -127,6 +142,7 @@ class Runtime:
             raise RuntimeError(err)
 
     INTERRUPTED = "interrupted-by-human"
+    HANDOFF_DUE = "context-full-handoff"
 
     def interrupt(self, message: str = "") -> None:
         """人要打断当前这一轮。**任何线程都能调**(UI 通常在别的线程)。
@@ -159,6 +175,9 @@ class Runtime:
     ) -> StepResult:
         name = step_name or spec.name
         result = StepResult(step=name, started_at=time.time())
+        # 水位是**每一步**的:上一步在 150K 收尾,这一步是新会话,不能一开局
+        # 就被上一步的读数逼着换代。(漏掉这一句的后果是第二步立刻空转换代。)
+        self._ctx, self._warned = 0, False
         r = self.resilience
         attempt, cur_prompt, cur_resume, cur_fork = 0, prompt, resume, fork
         while True:
@@ -182,6 +201,27 @@ class Runtime:
                               if said else r.resume_prompt)
                 result.resumed = True
                 attempt -= 1          # 打断不算一次失败尝试
+                continue
+            # 上下文满了:写交接,换一个新会话接手 —— 不 compact。
+            # 和打断一样不受 max_attempts 约束:换代不是故障。
+            if result.error == self.HANDOFF_DUE:
+                if len(result.retired) >= self.handoff.max_generations:
+                    # 阈值低于这个 agent 的启动地板时,每个新会话一开口就越线,
+                    # 于是永远换代下去(换代不吃重试额度)。这里是那道闸。
+                    result.error = (
+                        f"换代 {len(result.retired)} 次仍然一开局就越线 —— "
+                        f"阈值 {self.handoff.at} 很可能低于这个角色的启动地板。"
+                        f"把 window 调大(现在 {self.handoff.window}),或 --no-handoff。")
+                    break
+                retiring = result.session_id
+                h = await self._write_handoff(spec, prompt, result, on_event)
+                if retiring:
+                    result.retired.append(retiring)
+                cur_resume, cur_fork = None, False       # ← 全新会话,这是重点
+                cur_prompt = h.prompt_block()
+                result.session_id = None                 # 新会话会带来新的
+                self._ctx, self._warned = 0, False       # 水位跟着归零
+                attempt -= 1
                 continue
             if not r.enabled or attempt >= r.max_attempts:
                 break
@@ -213,6 +253,111 @@ class Runtime:
                 on_event(Event("retry", text=msg, payload={"step": step, "attempt": attempt}))
         return note
 
+    def _handoff_due(self, result: StepResult) -> bool:
+        """这一轮该换代了吗。
+
+        ``_writing_handoff`` 那个豁免不是小节 —— **漏掉它这套机制根本不工作**:
+        写交接是在越线之后、水位还挂在阈值之上的时候跑的,不豁免的话它第一条
+        消息就又判"该换代了",于是交接一个字都没写出来就被打断,每次都降级。
+        (实测:`tests/handoff_live.py` 头一次真跑,两代交接全是降级版本。
+        离线测试没抓到,因为那里把 ``_attempt`` 整个换掉了 —— 假的没跑这条判据。)
+        """
+        return bool(self.handoff.enabled and not self._writing_handoff
+                    and self._ctx >= self.handoff.at and result.session_id)
+
+    def _maybe_warn(self, on_event, step: str) -> None:
+        """逼近换代时提醒**一次**。每代只发一次,不刷屏。"""
+        h = self.handoff
+        if not (h.enabled and not self._warned and self._ctx >= h.warn_at):
+            return
+        self._warned = True
+        if on_event:
+            on_event(Event("handoff", text=(
+                f"上下文 {self._ctx / 1000:.1f}K/{h.window / 1000:.0f}K · "
+                f"还有约 {max(0, h.at - self._ctx) / 1000:.0f}K 到换代"),
+                payload={"phase": "near", "step": step, "context": self._ctx,
+                         "window": h.window, "at": h.at}))
+
+    async def _write_handoff(
+        self,
+        spec: AgentSpec,
+        prompt: str,
+        result: StepResult,
+        on_event: Callable[[Event], None] | None,
+    ) -> Handoff:
+        """让**当前这个会话**写一份交接,冻结到磁盘。
+
+        为什么是它自己写、不另派一个角色:只有它有那段上下文。换谁来写都得
+        先把上下文读一遍,那就白换了。
+
+        写不出来时降级(:func:`~flower.core.handoff.degraded`)而**不是停下**:
+        换代开着的时候 auto-compact 是关的,没有兵底 —— 停在这里等于撞窗口。
+        残缺的交接远胜于硬错。
+        """
+        h = self.handoff
+        before, name = self._ctx, result.step
+        probe = StepResult(step=name, session_id=result.session_id)
+        # 先说一声。写交接要十几秒,这段时间界面上一个字都没有 —— 看起来像卡住,
+        # 而用户明确要求这个过程是他知道的。
+        if on_event:
+            on_event(Event("handoff", text=(
+                f"上下文 {before / 1000:.1f}K/{h.window / 1000:.0f}K —— 正在写交接…"),
+                payload={"phase": "writing", "step": name,
+                         "context": before, "window": h.window}))
+        why = ""
+        self._writing_handoff = True
+        try:
+            await self._attempt(
+                replace(spec, max_budget_usd=None),   # 交接必须写得出来,别卡在预算上
+                HANDOFF_PROMPT.format(used=f"{before / 1000:.1f}K",
+                                      window=f"{h.window / 1000:.0f}K"),
+                probe, resume=result.session_id, fork=False, resume_at=None,
+                on_event=None,                        # 这一轮不往 UI 上刷,只出结果
+            )
+            result.cost_usd += probe.cost_usd
+            result.num_turns += probe.num_turns
+            doc = Handoff.parse(probe.text or "", step=name)
+            if not doc.complete():
+                why = f"缺{'/'.join(doc.missing())}"
+        except Exception as exc:                      # noqa: BLE001
+            doc, why = Handoff(step=name), f"{type(exc).__name__}"
+        finally:
+            self._writing_handoff = False
+        if why:
+            doc = degraded(name, prompt, why=why)
+            result.errors.append(f"交接降级({why})")
+
+        path = self._handoff_path(name)
+        if path is not None:
+            doc.write(path)
+        if on_event:
+            on_event(Event("handoff", text=f"上下文满了,写交接换新会话({name})",
+                           payload={"phase": "done", "step": name,
+                                    "context": before, "window": h.window,
+                                    "degraded": doc.degraded,
+                                    "path": str(path) if path else "",
+                                    "sections": {k: getattr(doc, k)
+                                                 for k in ("doing", "decided",
+                                                           "deadends", "next")}}))
+        return doc
+
+    def _handoff_path(self, step: str) -> Path | None:
+        """交接落在哪。没有工作台就不落盘 —— 文书照样通过 prompt 交给接手的人,
+        只是人事后翻不到。"""
+        if self.workbench is None:
+            return None
+        safe = "".join(c for c in step if c not in '/\\:*?"<>|').strip() or "step"
+        cur = self.workbench.notes / f"交接-{safe}.md"
+        if cur.exists():
+            # 上一代的交接收进档案 —— 和 --new 同一套动作,看得见每一代写了什么。
+            old_dir = self.workbench.notes / "archive" / "交接"
+            old_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                cur.replace(old_dir / f"{safe}-{time.strftime('%Y%m%d-%H%M%S')}.md")
+            except OSError:
+                pass
+        return cur
+
     async def _attempt(
         self,
         spec: AgentSpec,
@@ -225,6 +370,7 @@ class Runtime:
         on_event: Callable[[Event], None] | None,
     ) -> None:
         """跑一次。成功与否写进 result,不抛异常。"""
+        name = result.step
         prelude = ""
         hooks = spec.hooks
         if self.workbench is not None:
@@ -251,6 +397,10 @@ class Runtime:
                 hooks = merge_hooks(hooks, {"PreToolUse": [wall]})
         if hooks is not spec.hooks:
             spec = replace(spec, hooks=hooks)
+        if self.handoff.enabled and spec.compact is None:
+            # 换代和 auto-compact 同时开着的话,某次上下文回落到底是谁干的
+            # 就说不清了。spec 自己显式给了 compact 就尊重它,不覆盖。
+            spec = replace(spec, compact=CompactPolicy(mode="no_summary"))
         # 工作台在工作区外时,得显式授权 —— 不然写不进去(实测踩过)。
         extra = ([str(self.workbench.root)]
                  if self.workbench is not None and self.workbench.external else None)
@@ -276,6 +426,13 @@ class Runtime:
                 # SDK 的 init 系统消息一开始就带它,这里见一条记一条。
                 if (sid := getattr(message, "session_id", None)):
                     result.session_id = sid
+                if self._handoff_due(result):
+                    # 上下文越线。在**消息边界**断开,和打断同一个道理:
+                    # 干净地断,不撕裂状态。代价也一样(在飞的 subagent 会丢),
+                    # 而 headroom 那 50k 余量正是为这一下留的。
+                    result.error = self.HANDOFF_DUE
+                    result.ok = False
+                    break
                 if self._interrupt is not None:
                     # 人按了 Ctrl+C。在消息边界断开 —— 已经收到的都算数,
                     # 正在跑的 subagent 会丢(和断网那次同一个后果,已实测)。
@@ -285,6 +442,12 @@ class Runtime:
                 for ev in normalize(message):
                     if on_event:
                         on_event(ev)
+                    # 只看主线程:subagent 的上下文是它自己那条 transcript 的事,
+                    # 它跑完就散了,再大也不该逼主会话换代。
+                    if (n := ev.payload.get("context")) and not ev.payload.get("subagent"):
+                        self._ctx = max(self._ctx, int(n))
+                        result.context = self._ctx
+                        self._maybe_warn(on_event, name)
                     if ev.kind == "text" and not ev.payload.get("subagent"):
                         # 只收主线程的正文。subagent 的发言留在它自己的 transcript,
                         # 派给它的任务书是 kind="prompt",两者都不进 StepResult.text。

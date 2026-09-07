@@ -152,8 +152,27 @@ def spill_guard(
             return out if changed else None
         return None
 
+    def reading_spill(data: dict[str, Any]) -> bool:
+        """这次调用是不是在读落盘文件本身。
+
+        **必须放行**,否则落盘提示里那句"需要全文用 Read 读它"是句空话:
+        读回来的全文又超过阈值,又被落盘,又给它一行指针 —— 无限循环。
+        实测撞到过(`tests/handoff_live.py` 第一次真跑):模型连试五种写法绕,
+        自己说 "The spill read loops back on itself",最后靠 40 行一段
+        硬啃过去,白烧了七八轮。
+
+        落盘的意义是"**不自动**把大东西塞进上下文";它自己决定要看全文,
+        那是它的选择,拦住反而是错的。Grep 那条路照旧便宜。
+        """
+        for v in (data.get("tool_input") or {}).values():
+            if isinstance(v, str) and v and str(spill_dir) in v:
+                return True
+        return False
+
     async def hook(data: dict[str, Any], tool_use_id: str | None, context: Any) -> dict[str, Any]:
         if main_only and not _is_main_thread(data):
+            return {}
+        if reading_spill(data):
             return {}
         shrunk = shrink(data.get("tool_response"))
         if shrunk is None:

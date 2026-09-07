@@ -21,7 +21,7 @@ import time
 import unicodedata
 from pathlib import Path
 
-from .core.agent import AgentSpec
+from .core.agent import AgentSpec, HandoffPolicy
 from .core.env import describe, load_dotenv
 from .core.events import Event
 from .core.roles import oracle
@@ -80,6 +80,11 @@ def _tokens(text: str):
         yield buf
 
 
+# 避头尾:这些不能出现在行首。中文排版里一个句号被挤到下一行独占一行,
+# 看起来就像段落断了 —— 实测在换代那段里就是这么歪的。
+_NO_LEAD = "。,、;:!?」』）】》〉,.;:!?)]}%…"
+
+
 def _wrap(text: str, indent: str = "", hang: str | None = None,
           width: int | None = None) -> str:
     """按**显示列数**折行。模型正文常是几百字一段,不折就是一堵墙。
@@ -99,7 +104,9 @@ def _wrap(text: str, indent: str = "", hang: str | None = None,
         # 西文按空白切成词(只在词边界断)—— 否则会出现 "working tre / e" 这种截断。
         for tok in _tokens(para):
             w = _cols(tok)
-            if cur + w > limit and line.strip() != pre.strip():
+            # 宁可超一两列,也不让收尾标点独自换行(避头尾)
+            if (cur + w > limit and line.strip() != pre.strip()
+                    and not (len(tok) == 1 and tok in _NO_LEAD)):
                 out.append(line.rstrip())
                 first = False
                 pre = cont
@@ -179,6 +186,40 @@ class Render:
         bar = "━" * max(4, _width() - _cols(ev.text) - _cols(tail) - 6)
         _say(f"\n{C['bold']}{C['cyn']}━━ {ev.text} {bar}{C['off']}"
              f" {C['dim']}{tail}{C['off']}\n")
+
+    LABEL = {"doing": "现在在做", "decided": "已定的事",
+             "deadends": "走不通的", "next": "下一步"}
+
+    def _on_handoff(self, ev: Event) -> None:
+        """换代。**这件事必须看得见** —— 用户明确要求知道这个过程,
+
+        而且这正是和 compact 的分别所在:compact 是模型自己在暗处总结一段话,
+        换代是一份写在磁盘上、你能读能改的文书。
+        """
+        self._enter(False)
+        p = ev.payload
+        if p.get("phase") in ("near", "writing"):
+            _say(f"{C['ylw']}◆ {ev.text}{C['off']}")
+            return
+        ctx, win = p.get("context", 0), p.get("window", 0)
+        _say(f"\n{C['bold']}{C['ylw']}◆ 上下文 {_human(ctx)}/{win // 1000}K"
+             f" —— 写交接准备换代{C['off']}")
+        if p.get("degraded"):
+            _say(f"{C['red']}  交接没写成,用了降级版本 —— 接手的人会自己去现场看{C['off']}")
+        # 标签按**显示列数**对齐:"下一步" 比 "现在在做" 窄两列,用 len() 补齐
+        # 会让换行后的续行对不上第一行(实测就是这么歪的)。
+        pad = max(_cols(v) for v in self.LABEL.values())
+        gut = " " * (4 + pad + 2)
+        for k, label in self.LABEL.items():
+            if body := (p.get("sections") or {}).get(k, "").strip():
+                label += " " * (pad - _cols(label))
+                _say(f"  {C['ylw']}●{C['off']} {label}  "
+                     f"{_wrap(' '.join(body.split()), gut).lstrip()}")
+        if path := p.get("path"):
+            _say(f"{C['dim']}↪ 交接写在 {_short(path)}{C['off']}")
+        # 水位归零,状态行才不会一直挂着旧峰值
+        self.context = 0
+        _say(f"{C['dim']}↪ 新会话接手,上下文从 {_human(ctx)} 重新开始{C['off']}\n")
 
     def _on_text(self, ev: Event) -> None:
         sub = bool(ev.payload.get("subagent"))
@@ -549,8 +590,14 @@ async def _drive(wf, args, *, trim: bool | None = None) -> None:
     # workflow 自带工作台就用它的 —— 它把 brief/log 落在那里面,两边必须是同一个,
     # 否则确认书写在一处、注入索引扫的是另一处。见 Workflow.workbench。
     bench = getattr(wf, "workbench", None) or args.workbench
+    # 换代:上下文到阈值就写交接换新会话。`run` 这条路径上没有这两个开关
+    # (自己写的 workflow 自己给 Runtime),所以用 getattr 取默认。
+    win = getattr(args, "window", None)
+    hp = HandoffPolicy(enabled=not getattr(args, "no_handoff", False),
+                       **({"window": win} if win else {}))
     rt = Runtime(workspace=args.workspace, run_dir=args.run_dir,
-                 workbench=bench, trim=args.trim if trim is None else trim)
+                 workbench=bench, trim=args.trim if trim is None else trim,
+                 handoff=hp)
     stop = None
     recent = Recent()
     loop = asyncio.get_running_loop()
@@ -764,6 +811,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="等你多久回答:默认 1800;0 = 全自动,不等人")
     g.add_argument("--isolate", action="store_true",
                    help="每个 subagent 分一份 git worktree(要求工作区是 git 仓库)")
+    g.add_argument("--window", type=int, default=None, metavar="N",
+                   help="模型上下文窗口。**默认按模型名猜**(名字里带 1m 的算 100 万,"
+                        "其余按 20 万),猜错了用这个覆盖。到 窗口−50000 就写交接"
+                        "换新会话,而不是 compact")
+    g.add_argument("--no-handoff", action="store_true",
+                   help="关掉换代 —— 退回 SDK 自带的 auto-compact(把历史总结成一段话)")
     g.add_argument("--new", action="store_true",
                    help="这次别接上次:把上一段的需求/目标/血缘收进 "
                         "notes/archive/ 再从头开始(不删,只是移开)")

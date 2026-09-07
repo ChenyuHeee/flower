@@ -1,7 +1,9 @@
 """flower —— 基于 Claude Agent SDK 的可移植长程 agent 框架。"""
 
-from .core.agent import AgentSpec, CompactPolicy, build_options
+from .core.agent import (AgentSpec, CompactPolicy, HandoffPolicy,
+                         build_options, default_window)
 from .core.brief import Brief
+from .core.handoff import Handoff
 from .core.goal import Goal, Verdict
 from .core.events import Event, normalize
 from .core.human import Ask, HumanChannel
@@ -22,9 +24,9 @@ from .workflow.goal import GOAL_KEY, ROUND_KEY, VERDICT_KEY, goal_step, with_goa
 from .workflow.starter import starter_flow, wake_state
 
 __all__ = [
-    "AgentSpec", "CompactPolicy", "build_options",
+    "AgentSpec", "CompactPolicy", "HandoffPolicy", "build_options", "default_window",
     "Event", "normalize",
-    "Ask", "HumanChannel", "Brief", "Goal", "Verdict", "Lineage",
+    "Ask", "HumanChannel", "Brief", "Goal", "Verdict", "Lineage", "Handoff",
     "Workbench", "coordinator", "worker", "clarify", "judge", "oracle",
     "COORDINATOR_RULES", "WORKER_RULES", "CLARIFIER_RULES", "JUDGE_RULES", "ORACLE_RULES",
     "delegate_guard", "spill_guard", "index_guard", "workbench_hooks", "merge_hooks",

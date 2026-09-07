@@ -14,6 +14,7 @@ flower 是一个**可移植的长程 agent 框架**。它用 Claude Agent SDK wh
 | 让它先把需求问清楚再动手 | [clarify.md](clarify.md) |
 | 谁来判"做完了没有" | [goal.md](goal.md) |
 | **同一个目录再跑一次,它还记得吗** | [continuity.md](continuity.md) |
+| **上下文满了怎么办(不 compact)** | [handoff.md](handoff.md) |
 | **一次真实运行到底发生了什么(实测数据)** | [case-ht001.md](case-ht001.md) |
 | **目标看守首次真实运行,以及它把简单问题复杂化了** | [case-ht002.md](case-ht002.md) |
 | 换掉终端,接 Web / TUI / HTTP / 全自动 | [interaction.md](interaction.md) |
@@ -107,6 +108,8 @@ echo "帮我做一个 X" | flower --timeout 0     # 全自动,不等人
 | `--judge-can-run` | 让判定者能跑命令(判定更硬,但它能改动工作区)|
 | `--timeout 秒` | 等你多久,默认 1800;**`0` = 全自动,没人时不阻塞** |
 | `--isolate` | 每个 subagent 分一份 git worktree(要求项目是 git 仓库) |
+| `--window N` | 模型窗口。**默认按模型名猜**(带 `1m` 的算 100 万)。到 窗口−50000 就写交接换新会话,而不是 compact |
+| `--no-handoff` | 关掉换代,退回 SDK 的 auto-compact |
 | `--new` | 这次别接上次:上一段的需求/目标/血缘收进 `notes/archive/`(不删,只是移开) |
 | `-v` | 显示思考和工具结果 |
 
@@ -237,6 +240,7 @@ runs/
   sessions.db        全部 transcript(含每个 subagent 的独立 transcript)。原文永不改写
   manifest.json      step → session_id / 花费 / 重试次数 / 失败原因。**跨进程追加**
   lineage.json       步骤名 → session_id。同一个目录再跑一次就靠它接上
+  workbench/notes/交接-*.md   换代留下的交接书。可读可改,接手的会话读的就是它
   workbench/         开 -W 时的工作台:scripts/ artifacts/ notes/ + INDEX.md
 ```
 

@@ -29,7 +29,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .brief import _clean, _strip_code
+from .brief import _bullets, _head_re, _sections, _strip_code
 
 # --- 目标 -------------------------------------------------------------
 
@@ -74,42 +74,8 @@ _STATE_WORDS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _head_re(aliases: dict[str, str]) -> re.Pattern[str]:
-    """和 brief.py 同一个形状的标题行匹配:容忍 `## X` / `**X**` / `X:` / `1. X`。"""
-    labels = "|".join(sorted(aliases, key=len, reverse=True))
-    return re.compile(
-        r"^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*|__)?[ \t]*(?:\d+[.、)][ \t]*)?"
-        rf"({labels})"
-        r"(?:\*\*|__)?[ \t]*[:：]?[ \t]*(.*)$",
-        re.MULTILINE,
-    )
-
-
 _GOAL_HEAD = _head_re(_GOAL_ALIASES)
 _V_HEAD = _head_re(_V_ALIASES)
-
-
-def _sections(text: str, head: re.Pattern[str], aliases: dict[str, str]) -> dict[str, str]:
-    body = _strip_code(text or "")
-    hits = list(head.finditer(body))
-    out: dict[str, str] = {}
-    for i, m in enumerate(hits):
-        key = aliases[m.group(1)]
-        end = hits[i + 1].start() if i + 1 < len(hits) else len(body)
-        chunk = _clean(f"{m.group(2) or ''}\n{body[m.end():end]}")
-        if chunk and key not in out:      # 同名段重复出现时取第一个
-            out[key] = chunk
-    return out
-
-
-def _bullets(text: str) -> list[str]:
-    """一条一行。去掉 `-` / `*` / `1.` 这些记号。"""
-    items = []
-    for ln in (text or "").splitlines():
-        s = re.sub(r"^[ \t]*(?:[-*+]|\d+[.、)])[ \t]*", "", ln).strip()
-        if s:
-            items.append(s)
-    return items
 
 
 @dataclass

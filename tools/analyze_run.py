@@ -108,8 +108,12 @@ def main(run_dir: str) -> int:
                 print(f"  ── 第 {list(runs).index(rid) + 1} 次运行 {rid} · ${sub:.4f}")
             for s in group:
                 dur = s.get("duration_s") or (s.get("ended_at", 0) - s.get("started_at", 0))
+                # retired = 这一步换过几代(上下文满了写交接换新会话)。
+                # attempts 数的是失败重试,换代不算 —— 两个数字要分开看。
+                gen = len(s.get("retired") or [])
                 print(f"  {s['step']:<12} ${s['cost_usd']:>9.4f}  {s['num_turns']:>3}轮  "
-                      f"attempts={s['attempts']}  resumed={s['resumed']}  {dur/3600:.2f}h")
+                      f"attempts={s['attempts']}  resumed={s['resumed']}"
+                      f"{f'  换代×{gen}' if gen else ''}  {dur/3600:.2f}h")
 
     # ---------- 上下文经济学 ----------
     def agg(keys):

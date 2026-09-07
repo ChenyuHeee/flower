@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -54,6 +56,68 @@ class CompactPolicy:
         if self.window is not None:
             e["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] = str(self.window)
         return e
+
+
+def default_window() -> int:
+    """按配置里的模型名猜上下文窗口。猜不出来就按 200k 算。
+
+    **为什么值得猜**:这个数字定了什么时候换代,而它配错的后果是不对称的 ——
+    猜大了会来不及(撞窗口),猜小了只是换代偏早(浪费)。所以只认一个非常明确的
+    信号:模型名里带 ``1m``(``claude-opus-5[1m]`` / ``...-1m`` 这类写法)。
+    别的一律按保守的 200k 算,让人用 ``--window`` 自己说。
+
+    实测:开发这台机器的网关配的就是 ``claude-opus-5[1m]`` —— 按 200k 算的话
+    每 150k 就换一次代,而它其实能跑到 950k。差 5 倍。
+    """
+    name = (os.environ.get("ANTHROPIC_MODEL")
+            or os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL") or "").lower()
+    return 1_000_000 if re.search(r"(?:^|[^a-z0-9])1m(?:[^a-z0-9]|$)", name) else 200_000
+
+
+@dataclass
+class HandoffPolicy:
+    """上下文快满了怎么办:**写交接换新会话**,而不是 compact。
+
+    对照 :class:`CompactPolicy` —— 那是"满了才回头总结成一段话,你看不见也管不着"。
+    这里是"到阈值就写一份可读可改的文书,换一个新会话接手"。
+    机制和产物都在 :mod:`~flower.core.handoff`。
+
+    ``window`` 默认由 :func:`default_window` 按模型名猜(只认 ``1m`` 这个明确信号,
+    别的按 200k 算)。**换模型或换网关时最需要确认的就是它**:真实窗口更大时换代
+    偏早(浪费,不出错);更小时会来不及 —— **那种情况必须自己调小**。
+
+    ``headroom`` 为什么默认 50k:auto-compact 在窗口 −33k 触发,换代要赶在它前面;
+    而"写交接"本身还要再跑一轮。50k 同时满足这两件事。
+
+    开着它就会强制 ``DISABLE_AUTO_COMPACT=1``:两套机制同时在跑的话,
+    你分不清某次上下文回落到底是谁干的。代价是**没有兵底** ——
+    所以写交接那一步必须有降级路径,见 :func:`~flower.core.handoff.degraded`。
+    """
+
+    enabled: bool = True
+    window: int = field(default_factory=default_window)
+    headroom: int = 50_000
+    max_generations: int = 8
+    """一步最多换几代。**这是防跑飞的闸,不是容量规划。**
+
+    危险在于:``at`` 要是低于这个 agent 的**启动地板**(协调者实测约 34k,
+    光是系统提示 + 工作台索引就占掉了),那么每一个新会话一开口就越线 ——
+    于是写交接、换代、再越线,一轮一轮空转烧钱,而且**永远不会停**
+    (换代不吃重试额度,那是有意的)。
+
+    正常的长跑用不到 8 代:200k 窗口下那是上百万 token 的活。
+    真撞到这个数,几乎一定是 ``window`` 配小了。
+    """
+
+    @property
+    def at(self) -> int:
+        """越过这个数就换代。下限 10k —— 再小就连交接都写不出来了。"""
+        return max(10_000, self.window - self.headroom)
+
+    @property
+    def warn_at(self) -> int:
+        """逼近提醒的位置。只发一次,不刷屏。"""
+        return max(1_000, self.at - 20_000)
 
 
 @dataclass
