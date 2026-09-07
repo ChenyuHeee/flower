@@ -7,8 +7,8 @@ from .core.events import Event, normalize
 from .core.human import Ask, HumanChannel
 from .core.guard import (delegate_guard, index_guard, isolate_guard, isolated, merge_hooks,
                          spill_guard, wants_isolation, whitelist_guard, workbench_hooks)
-from .core.roles import (CLARIFIER_RULES, COORDINATOR_RULES, JUDGE_RULES, WORKER_RULES,
-                         clarify, coordinator, judge, worker)
+from .core.roles import (CLARIFIER_RULES, COORDINATOR_RULES, JUDGE_RULES, ORACLE_RULES,
+                         WORKER_RULES, clarify, coordinator, judge, oracle, worker)
 from .core.workbench import Workbench
 from .core.runtime import Runtime, StepResult
 from .core.resilience import Resilience, classify, endpoint, reachable
@@ -24,8 +24,8 @@ __all__ = [
     "AgentSpec", "CompactPolicy", "build_options",
     "Event", "normalize",
     "Ask", "HumanChannel", "Brief", "Goal", "Verdict",
-    "Workbench", "coordinator", "worker", "clarify", "judge",
-    "COORDINATOR_RULES", "WORKER_RULES", "CLARIFIER_RULES", "JUDGE_RULES",
+    "Workbench", "coordinator", "worker", "clarify", "judge", "oracle",
+    "COORDINATOR_RULES", "WORKER_RULES", "CLARIFIER_RULES", "JUDGE_RULES", "ORACLE_RULES",
     "delegate_guard", "spill_guard", "index_guard", "workbench_hooks", "merge_hooks",
     "isolate_guard", "isolated", "wants_isolation", "whitelist_guard",
     "Runtime", "StepResult",

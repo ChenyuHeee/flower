@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import collections
 import importlib
+import select
 import sys
 import threading
 import time
@@ -18,6 +20,7 @@ from pathlib import Path
 from .core.agent import AgentSpec
 from .core.env import describe, load_dotenv
 from .core.events import Event
+from .core.roles import oracle
 from .core.runtime import Runtime
 from .workflow.starter import starter_flow
 
@@ -85,62 +88,157 @@ def render(ev: Event, *, verbose: bool = False) -> None:
         )
 
 
-def answer_from_stdin(channel) -> threading.Event:
-    """参考实现:另起一个 daemon 线程读标准输入来回答提问。
+class Recent:
+    """最近发生了什么 —— 一个固定长度的事件窗口。
 
-    为什么是线程,不是 ``asyncio.to_thread``:``input()`` 阻塞时取消不掉,
+    给旁路问答(`?` 前缀)当上下文用:人在运行途中问"现在在干嘛",
+    答案主要就在这里面。做成固定长度是因为它常驻内存,而一次长程运行
+    的事件是几万条 —— 只留最后这些,够回答"刚刚"就行。
+
+    更早的事情不靠它,靠工作台上的冻结件和产出报告(旁路能自己去读)。
+    """
+
+    def __init__(self, size: int = 60) -> None:
+        self.buf: collections.deque = collections.deque(maxlen=size)
+
+    def add(self, ev: Event) -> None:
+        if ev.kind in ("thinking", "prompt"):
+            return                       # 噪音,不进窗口
+        who = "subagent" if ev.payload.get("subagent") else "主线程"
+        text = (ev.text or "")[:200].replace("\n", " ")
+        self.buf.append(f"[{ev.kind}{'/' + ev.tool if ev.tool else ''}·{who}] {text}")
+
+    def render(self) -> str:
+        return "\n".join(self.buf) or "(还没有事件)"
+
+
+ASIDE_PROMPT = """\
+有人在一次正在进行的运行旁边问你一句话。看现场,回答他。
+
+# 他问的
+{question}
+
+# 最近发生了什么(事件窗口,新的在下面)
+{recent}
+
+# 工作台
+{workbench}
+
+需要来龙去脉就去读工作台里的确认书、目标、笔记和产出报告。
+"""
+
+
+async def ask_aside(question: str, rt: Runtime, recent: Recent, *, verbose: bool = False) -> None:
+    """旁路问答:起一条只读 session 回答,**不碰正在跑的那次运行**。
+
+    独立的 ``Runtime``(自己的 run_dir),所以它的花费和 session 血缘不会
+    混进主 manifest —— 那份清单记的是"这次运行做了哪些步骤",
+    顺口问一句不是一个步骤。
+    """
+    wb = rt.workbench
+    side = Runtime(workspace=rt.workspace, run_dir=rt.run_dir / "aside",
+                   workbench=wb if wb is not None else False,
+                   resilience=False)
+    try:
+        r = await side.run(
+            oracle(),
+            ASIDE_PROMPT.format(
+                question=question,
+                recent=recent.render(),
+                workbench=(f"{wb.show(wb.root)}/ —— 里面有 notes/(确认书、目标、决策)、"
+                           f"artifacts/(产出报告)、scripts/" if wb else "(这次运行没开工作台)"),
+            ),
+            step_name="旁路问答",
+            on_event=(lambda e: render(e, verbose=True)) if verbose else None,
+        )
+        print(f"\n{C['mag']}◆ 旁路{C['off']} {r.text or '(没有回答)'}"
+              f"\n{C['dim']}  (${r.cost_usd:.4f},没有打扰正在跑的运行){C['off']}", flush=True)
+    except Exception as exc:             # noqa: BLE001 —— 旁路失败不该带走主流程
+        print(f"\n{C['red']}◆ 旁路问答失败:{type(exc).__name__}: {exc}{C['off']}", flush=True)
+    finally:
+        side.close()
+
+
+def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
+    """参考实现:另起一个 daemon 线程读标准输入。
+
+    **它一直在读**,不只在有提问时读。这一条是有意的:
+
+    * 旧行为是"没有待答提问时不读 stdin",于是用户在干活那几小时里敲的东西
+      留在终端缓冲里,**下一次提问时 `input()` 会把那行陈货当成答案吃掉** ——
+      用户还没看见问题,问题就被"回答"了。一直读就没有陈货,这个 bug
+      **由构造消失**(此前那个 `termios.tcflush` 补丁因此可以撤掉)。
+    * 而且这是"人主动说话"的前提 —— 见 issue #3。
+
+    按状态和前缀路由:
+
+        有待答提问   → 这一行是**答案**
+        `?` 开头     → **旁路提问**,交给 on_aside(不打扰正在跑的活)
+        其它         → 暂时只提示,收件箱还没做(issue #3 的第二件)
+
+    为什么是线程而不是 ``asyncio.to_thread``:``input()`` 阻塞时取消不掉,
     用 to_thread 的话进程退出前 asyncio 会 join 它 —— 活干完了还得按一次回车
     才能退出。daemon 线程不挡退出。
 
-    顺带这也演示了**跨线程回答**:Web 后端、TUI 输入线程都是这个形状,
-    ``channel.answer()`` 内部走 ``call_soon_threadsafe``,所以从哪个线程调都行。
+    ``channel.answer()`` 内部走 ``call_soon_threadsafe``,所以从哪个线程调都行;
+    ``on_aside`` 同理,由调用方负责跨线程调度。
     """
     stop = threading.Event()
 
-    def drain_stale() -> None:
-        """丢掉"提问出现之前"就已经躺在缓冲里的输入。
+    def readable(timeout: float) -> bool:
+        """stdin 上有没有一行在等着读。
 
-        为什么必须丢:没有待答提问的时候这个循环**不读 stdin**(见下面),
-        于是用户在干活那几小时里敲的任何东西都留在终端缓冲里。
-        下一次提问时 ``input()`` 会立刻把那行陈货当成答案吃掉 ——
-        用户还没看见问题,问题就被"回答"了,而且答得驴唇不对马嘴。
-
-        只在**从"无提问"跳到"有提问"的那一刻**丢一次,所以丢掉的严格是
-        问题出现之前敲的内容;问题出现之后敲的答案不受影响。
+        **不能用 `input()`** —— 它一阻塞就取消不掉,于是 ``stop.set()``
+        再也叫不醒这个线程(实测:改成"一直读"之后线程不退出了)。
+        select 轮询既保证一直在读,又保留对停止位的响应。
         """
-        if not sys.stdin.isatty():
-            return
         try:
-            import termios
-            termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
-        except Exception:          # 不是所有平台/终端都支持,失败不该影响主流程
-            pass
+            return bool(select.select([sys.stdin], [], [], timeout)[0])
+        except Exception:      # select 对某些流不适用(比如 Windows 的 stdin)
+            return True        # 退化成阻塞读 —— 功能对,只是退出时要等一行
 
     def loop() -> None:
-        had_pending = False
+        shown = None
         while not stop.is_set():
             pend = channel.pending()
-            if not pend:
-                had_pending = False
-                time.sleep(0.15)
+            ask = pend[0] if pend else None
+            hint = (f"{C['ylw']}你的回答{C['off']} {C['dim']}(回车=跳过,让它自己判断){C['off']} > "
+                    if ask else
+                    f"{C['dim']}(? 开头 = 顺便问一句,不打扰它干活){C['off']} > ")
+            if hint != shown:              # 状态变了才重打提示符,否则会刷屏
+                print(hint, end="", flush=True)
+                shown = hint
+            if not readable(0.2):
                 continue
-            if not had_pending:
-                drain_stale()      # 刚冒出新提问 —— 先把陈货清掉
-                had_pending = True
-            ask = pend[0]
-            try:
-                raw = input(f"{C['ylw']}你的回答{C['off']} {C['dim']}(回车=跳过,让它自己判断)"
-                            f"{C['off']} > ").strip()
-            except (EOFError, KeyboardInterrupt):
-                channel.decline(ask.id, "输入已关闭")
+            line = sys.stdin.readline()
+            if not line:                   # EOF
+                if ask:
+                    channel.decline(ask.id, "输入已关闭")
                 return
+            raw = line.strip()
+            shown = None                   # 处理完这一行,下一轮重打提示符
             if not raw:
-                channel.decline(ask.id)
+                if ask:
+                    channel.decline(ask.id)
                 continue
-            # 输了个序号就当选项处理
-            if ask.options and raw.isdigit() and 1 <= int(raw) <= len(ask.options):
-                raw = ask.options[int(raw) - 1]
-            channel.answer(ask.id, raw)
+
+            if raw.startswith("?") or raw.startswith("?"):
+                q = raw[1:].strip()
+                if q and on_aside:
+                    on_aside(q)
+                elif q:
+                    print(f"{C['dim']}(旁路问答没接上){C['off']}", flush=True)
+                continue
+
+            if ask is not None:
+                # 输了个序号就当选项处理
+                if ask.options and raw.isdigit() and 1 <= int(raw) <= len(ask.options):
+                    raw = ask.options[int(raw) - 1]
+                channel.answer(ask.id, raw)
+            else:
+                # 收件箱(issue #3 第二件)还没做 —— 先如实说,不要假装收下了
+                print(f"{C['ylw']}⚠ 现在还没有收件箱,这句话没人会读到。"
+                      f"想问点什么用 `?` 开头。{C['off']}", flush=True)
 
     threading.Thread(target=loop, daemon=True, name="flower-stdin").start()
     return stop
@@ -241,6 +339,31 @@ async def _drive(wf, args, *, trim: bool | None = None) -> None:
     rt = Runtime(workspace=args.workspace, run_dir=args.run_dir,
                  workbench=bench, trim=args.trim if trim is None else trim)
     stop = None
+    recent = Recent()
+    loop = asyncio.get_running_loop()
+
+    def sink(ev: Event) -> None:
+        recent.add(ev)                    # 旁路问答要靠它回答"刚刚在干嘛"
+        render(ev, verbose=args.verbose)
+
+    asides: set[asyncio.Task] = set()
+
+    def on_aside(q: str) -> None:
+        """从 stdin 线程被调用 —— 必须跨线程调度回事件循环。
+
+        用 create_task 而不是 await:旁路是**并发**跑的,
+        正在跑的那次运行一秒都不用等它。
+
+        任务存进 ``asides``:**问完就结束的话不能把答案丢掉**(实测踩过 ——
+        工作流瞬间完成时,刚调度的旁路随进程一起没了,人什么都没看到)。
+        退出前会等它们。
+        """
+        def spawn() -> None:
+            t = asyncio.create_task(ask_aside(q, rt, recent, verbose=args.verbose))
+            asides.add(t)
+            t.add_done_callback(asides.discard)
+        loop.call_soon_threadsafe(spawn)
+
     try:
         # workflow 自己挂了提问通道 → 给它接上标准输入。
         # 通道的 on_event 由 Workflow.run 自动接到同一个出口,这里只管"谁来答"。
@@ -250,11 +373,16 @@ async def _drive(wf, args, *, trim: bool | None = None) -> None:
                 # 否则第一个问题被当成"输入已关闭"跳过,之后每个问题都要干等满超时。
                 print(f"{C['ylw']}⚠ 标准输入不是终端,没人能回答提问。"
                       f"想让它自己判断就加 --timeout 0{C['off']}", flush=True)
-            stop = answer_from_stdin(wf.channel)
-        ctx = await wf.run(rt, on_event=lambda e: render(e, verbose=args.verbose))
+            stop = answer_from_stdin(wf.channel, on_aside=on_aside)
+        ctx = await wf.run(rt, on_event=sink)
     finally:
         if stop is not None:
             stop.set()
+        if asides:
+            # 人问了就该收到答案,哪怕活刚好干完了。给个上限,别让一条旁路
+            # 卡住整个退出。
+            print(f"{C['dim']}(等 {len(asides)} 条旁路问答收尾…){C['off']}", flush=True)
+            await asyncio.wait(set(asides), timeout=120)
         rt.close()
     print(f"\n{C['dim']}总花费 ${rt.total_cost()} · 清单 {rt.run_dir/'manifest.json'}{C['off']}")
     if failed := ctx.get("_failed_at"):
