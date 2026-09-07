@@ -11,7 +11,9 @@
 from __future__ import annotations
 
 import json
+import os
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
@@ -120,8 +122,11 @@ class Runtime:
         # 这次进程的标记 + 上次留下的账。manifest 是**跨进程累积**的:
         # 同一个目录接着跑(见 core/lineage.py),它就是唯一能查到
         # "哪一步用了哪个 session" 的地方,不能被后一次运行冲掉。
-        self.run_id = time.strftime("%Y%m%d-%H%M%S")
-        self._prior_rows = self._load_manifest()
+        # **必须每个实例唯一**,不能只是秒级时间戳:_persist 按 run 去重,
+        # 两个 id 撞上时后写的会把对方的行当成"自己上次写的"删掉(实测踩过)。
+        # 时间戳给人看,后缀保证唯一 —— 同一秒启动的两个进程也不会撞。
+        self.run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
+        self._prior_rows = self._load_manifest()   # 只用于启动时了解已有多少行
         self._interrupt: str | None = None
         """人按下 Ctrl+C 时想说的话。见 :meth:`interrupt`。"""
         self.on_session: "Callable[[str], None] | None" = None
@@ -551,7 +556,12 @@ class Runtime:
         ``duration_s`` 要手工补:它是 ``@property``,而 ``asdict()`` 只收 dataclass
         字段 —— 不补的话清单里没有时长,得自己拿 started_at/ended_at 去减。
         """
-        rows = self._prior_rows + [
+        # **每次都重读**,不用启动时缓存的那份:同一个目录里并行跑两个 flower 时,
+        # 缓存版会让后写的那个把对方这段时间新增的行整个冲掉。
+        # 按 run 去重:文件里属于本进程的行是我们上一次写的,换成最新的;
+        # 别人的行原样留着。这样并行追加是安全的。
+        others = [r for r in self._load_manifest() if r.get("run") != self.run_id]
+        rows = others + [
             {**asdict(r), "duration_s": r.duration_s, "run": self.run_id}
             for r in self.results
         ]

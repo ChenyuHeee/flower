@@ -109,9 +109,22 @@ class _TtyGuard:
         try:
             import fcntl                                  # noqa: PLC0415
             self._flock = fcntl.flock
-            self._ex, self._un = fcntl.LOCK_EX, fcntl.LOCK_UN
+            self._nb = fcntl.LOCK_EX | fcntl.LOCK_NB
+            self._un = fcntl.LOCK_UN
         except Exception:                                 # noqa: BLE001
             self._flock = None                            # Windows / 无 fcntl
+
+    WAIT = 0.25
+    """最多为抢锁等多久(秒)。
+
+    **并行不该有上限,所以这把锁绝不能是阻塞的。** 阻塞版实测:一个进程攥着锁
+    (比如它正卡在往终端写 —— 终端不读了、被 Ctrl+S 挂起、或者正在崩),
+    同一终端上**所有**别的 flower 跟着一起冻住,一个卡住会传染给全部。
+    改之前一个卡住只卡它自己,那是退步。
+
+    所以改成限时抢:正常情况锁持有时间是微秒级,0.25 秒抢不到说明有进程卡死了 ——
+    这时候**宁可交错也要写出去**。交错只是难看,冻住是真的没法用。
+    """
 
     def _ensure(self) -> None:
         """按**当前** stdout 的 tty 解析锁文件。tty 变了就换一把。"""
@@ -135,19 +148,27 @@ class _TtyGuard:
 
     def __enter__(self):
         self._ensure()
-        if self._fd is not None:
+        self._held = False
+        if self._fd is None:
+            return self
+        deadline = time.monotonic() + self.WAIT
+        while True:
             try:
-                self._flock(self._fd, self._ex)
+                self._flock(self._fd, self._nb)
+                self._held = True
+                return self
             except OSError:
-                pass
-        return self
+                if time.monotonic() >= deadline:
+                    return self                # 抢不到就照写 —— 绝不拖住这个进程
+                time.sleep(0.002)
 
     def __exit__(self, *exc) -> None:
-        if self._fd is not None:
+        if self._fd is not None and getattr(self, "_held", False):
             try:
                 self._flock(self._fd, self._un)
             except OSError:
                 pass
+            self._held = False
 
 
 _TTY = _TtyGuard()

@@ -225,6 +225,50 @@ def main() -> int:
             import os as _o
             _o.close(g._fd)
 
+    print("\n[7c] 锁绝不能阻塞 —— 一个卡住不许拖死同终端上所有 flower")
+    # 这是"并行无上限"的关键:阻塞版实测过,一个进程攥着锁(它正卡在写终端),
+    # 别人全部冻住,一个卡住传染给全部。改之前一个卡住只卡它自己,那是退步。
+    import fcntl as _fc, os as _o2, time as _t2
+    lockp = str(Path(_tf.gettempdir()) / ".flower-nb-test.lock")
+    _cli._tty_lock_path = lambda: lockp
+    try:
+        g2 = _cli._TtyGuard()
+        hog = _o2.open(lockp, _o2.O_CREAT | _o2.O_RDWR, 0o600)
+        _fc.flock(hog, _fc.LOCK_EX)                    # 别人攥着不放
+        t0 = _t2.monotonic()
+        with g2:
+            held = g2._held
+        waited = _t2.monotonic() - t0
+        check(not held and waited < g2.WAIT + 0.2,
+              f"抢不到锁 {waited:.2f}s 就放行(上限 {g2.WAIT}s),照样写出去")
+        _fc.flock(hog, _fc.LOCK_UN)
+        _o2.close(hog)
+        with g2:
+            check(g2._held, "没人抢时正常拿到锁")
+        if g2._fd is not None:
+            _o2.close(g2._fd)
+    finally:
+        _cli._tty_lock_path = _real
+        try:
+            _o2.unlink(lockp)
+        except OSError:
+            pass
+
+    print("\n[7d] 同一目录并行:账本互相追加,不许冲掉对方")
+    from flower.core.runtime import Runtime as _RT, StepResult as _SR
+    d = Path(_tf.mkdtemp())
+    ra, rb = _RT(workspace=d / "ws", run_dir=d / "runs"), _RT(workspace=d / "ws", run_dir=d / "runs")
+    check(ra.run_id != rb.run_id,
+          "两个 Runtime 的 run_id 不同 —— 只用秒级时间戳会撞,撞了就互删")
+    for r, tag in ((ra, "A"), (rb, "B"), (ra, "A2"), (rb, "B2")):
+        r.results.append(_SR(step=tag, session_id="s" + tag, ok=True))
+        r._persist()
+    import json as _j
+    steps = {x["step"] for x in _j.loads((d / "runs" / "manifest.json").read_text())}
+    check(steps == {"A", "B", "A2", "B2"}, f"四条都在(实际 {sorted(steps)})")
+    ra.close()
+    rb.close()
+
     print(f"\n{'✓ 终端安全全部通过' if ok else '✗ 有失败'}")
     return 0 if ok else 1
 
