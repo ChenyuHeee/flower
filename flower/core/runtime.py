@@ -160,6 +160,16 @@ class Runtime:
     INTERRUPTED = "interrupted-by-human"
     HANDOFF_DUE = "context-full-handoff"
 
+    INTERRUPT_NOTE = (
+        "【关于刚才那次打断】打断是在消息边界干净断开的,所以**当时正在飞的工具调用**"
+        "会返回 \"interrupted\" 或 \"user doesn't want to take this action\" ——"
+        "包括你发的提问/收件箱、以及 subagent 当时正在请求的命令。\n"
+        "**这些失败是这次打断的正常副作用,不是环境故障、不是有人否决那个具体操作。**"
+        "不要为它们排查、不要据此改变策略、不要给自己加防御性规矩;需要那个结果就直接重试。"
+        "已经干完的活和上下文都还在,接着做就行。"
+    )
+    """打断续跑时附在人的话后面的一段。见 :meth:`run` 里的打断分支和 issue #9。"""
+
     def interrupt(self, message: str = "") -> None:
         """人要打断当前这一轮。**任何线程都能调**(UI 通常在别的线程)。
 
@@ -213,9 +223,14 @@ class Runtime:
                 note = self._notifier(on_event, name, attempt)
                 note("已打断,带着你的话续跑" if said else "已打断,继续跑")
                 cur_resume, cur_fork = result.session_id, False
-                cur_prompt = (f"人在这里打断了你,说:\n\n{said}\n\n"
-                              "按这句话调整,接着做 —— 不要重头开始。"
-                              if said else r.resume_prompt)
+                # **必须解释打断的副作用**,否则模型会把它误判成环境故障:
+                # 打断在消息边界断开时,当时在飞的工具调用(flower 自己的 ask/inbox、
+                # subagent 请求的 Bash)会回 "interrupted" / "user doesn't want"。
+                # 实测栽过(HT002 第二轮):模型看到一串裸的 interrupted,花两轮思考
+                # 排查一个不存在的"环境抖动",还给自己加了道防御规矩。见 issue #9。
+                head = (f"人在这里打断了你,说:\n\n{said}\n\n按这句话调整,接着做。"
+                        if said else "人打断了一下,现在继续。")
+                cur_prompt = f"{head}\n\n{self.INTERRUPT_NOTE}"
                 result.resumed = True
                 attempt -= 1          # 打断不算一次失败尝试
                 continue

@@ -231,7 +231,19 @@ async def interrupt_tests():
     check(len(resumed) == 1, "打断之后续跑了一次")
     check(resumed[0][2] == "sid-1", f"**续的是同一个 session**({resumed[0][2]}),不是重头来")
     check("别改 Makefile" in resumed[0][1], "人说的话进了续跑的 prompt")
-    check("不要重头开始" in resumed[0][1], "并明确告诉它接着做")
+
+    # 打断续跑必须解释"在飞的工具失败是打断的副作用",否则模型把它误判成环境故障
+    # (issue #9 实测:花两轮排查一个不存在的抖动,还自加防御规矩)。
+    # 假 Runtime 会复刻话术、掩盖真实现,所以直接对着**真实源码**断言。
+    src = Path("flower/core/runtime.py").read_text(encoding="utf-8")
+    check("INTERRUPT_NOTE" in src, "有专门的打断说明常量")
+    note = Runtime.INTERRUPT_NOTE
+    check("副作用" in note and ("不是环境故障" in note or "不是故障" in note),
+          "说明里点明:在飞的工具失败是打断的副作用,不是故障")
+    check("重试" in note and "防御" in note,
+          "并明确:直接重试,别为它排查、别自加防御规矩")
+    check(f"{Runtime.INTERRUPT_NOTE}" in src.replace('\\"', '"') or "self.INTERRUPT_NOTE" in src,
+          "run() 的打断分支真的把它拼进了续跑 prompt")
     check("_failed_at" not in ctx, "打断不算失败,workflow 照常走完")
 
     # 真实 Runtime 的常量与方法(上面那个假的照着它做)
