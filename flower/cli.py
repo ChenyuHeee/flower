@@ -204,7 +204,8 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
             ask = pend[0] if pend else None
             hint = (f"{C['ylw']}你的回答{C['off']} {C['dim']}(回车=跳过,让它自己判断){C['off']} > "
                     if ask else
-                    f"{C['dim']}(? 开头 = 顺便问一句,不打扰它干活){C['off']} > ")
+                    f"{C['dim']}(直接说 = 加需求,下个检查点送达;"
+                    f"? 开头 = 顺便问一句,不打扰它干活){C['off']} > ")
             if hint != shown:              # 状态变了才重打提示符,否则会刷屏
                 print(hint, end="", flush=True)
                 shown = hint
@@ -236,9 +237,12 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
                     raw = ask.options[int(raw) - 1]
                 channel.answer(ask.id, raw)
             else:
-                # 收件箱(issue #3 第二件)还没做 —— 先如实说,不要假装收下了
-                print(f"{C['ylw']}⚠ 现在还没有收件箱,这句话没人会读到。"
-                      f"想问点什么用 `?` 开头。{C['off']}", flush=True)
+                m = channel.send(raw)
+                if m is not None:
+                    extra = ("已追加进确认书" if getattr(channel, "amend_path", None)
+                             else "没有确认书可落盘 —— 它可能活不过下一个步骤")
+                    print(f"{C['grn']}✓ 收到{C['off']} {C['dim']}"
+                          f"(它下次查收件箱时会看到;{extra}){C['off']}", flush=True)
 
     threading.Thread(target=loop, daemon=True, name="flower-stdin").start()
     return stop

@@ -254,6 +254,45 @@ async def main():
     brief_tests()
     role_tests()
     step_tests()
+    # ---------------------------------------------------------------
+    print("\n[收件箱] 人主动说话(issue #3 第二件)")
+    import tempfile
+    d = Path(tempfile.mkdtemp())
+    brief = d / "需求.md"
+    brief.write_text("# 目标\n做个 X\n", encoding="utf-8")
+    seen = []
+    ch2 = HumanChannel(amend_path=brief, on_event=seen.append)
+
+    check(ch2.send("") is None, "空消息不入队")
+    m1 = ch2.send("还要支持 .cc")
+    m2 = ch2.send("那两行改了没关系")
+    check(len(ch2.pending_mail()) == 2, f"两条待取,实际 {len(ch2.pending_mail())}")
+
+    # **最重要的一条**:改需求必须落进冻结件,否则活不过步骤边界
+    txt = brief.read_text(encoding="utf-8")
+    check("还要支持 .cc" in txt and "那两行改了没关系" in txt,
+          "两条都追加进了确认书 —— 下一步是新 session,只读冻结件,不落盘就丢了")
+    check(txt.startswith("# 目标"), "**追加不覆盖** —— 原来的需求还在(和 Goal.amend 同一个道理)")
+
+    out = (await ch2._handle_inbox({}))["content"][0]["text"]
+    check("还要支持 .cc" in out and "那两行改了没关系" in out, "工具把两条都交给了 agent")
+    check("追加进需求确认书" in out, "告诉 agent 这些话后面的步骤读得到")
+    check(not ch2.pending_mail(), "取走之后收件箱空了")
+
+    out2 = (await ch2._handle_inbox({}))["content"][0]["text"]
+    check("空的" in out2, f"再取一次:不阻塞,直接说空({out2[:14]}…)")
+
+    mail_ev = [e for e in seen if e.payload.get("kind") == "mail"]
+    check(len(mail_ev) == 4, f"事件:2 条 queued + 2 条 delivered,实际 {len(mail_ev)}")
+    check({e.payload["state"] for e in mail_ev} == {"queued", "delivered"},
+          "两种状态都发了 —— UI 既能显示「收到了」也能显示「被取走了」")
+
+    # 没有 amend_path 时必须**如实说**没落盘,不能假装
+    ch3 = HumanChannel()
+    ch3.send("孤儿消息")
+    out3 = (await ch3._handle_inbox({}))["content"][0]["text"]
+    check("没有落盘" in out3, "没有确认书时如实告知 agent「这句话可能活不过这一步」")
+
     print("\n" + ("✓ 前置确认 flow 全部通过" if ok else "✗ 未通过"))
     return 0 if ok else 1
 

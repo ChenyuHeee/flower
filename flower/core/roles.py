@@ -78,6 +78,28 @@ COORDINATOR_RULES = """\
 4. 试了多种方案的,只要结论:选哪个、为什么,其余一句话带过。不要过程。
 5. 独立的任务一次派多个,并行跑。
 
+**每完成一个阶段性动作(尤其是每次派活回来之后),查一次收件箱**
+(`mcp__human__inbox`)。它不阻塞,没消息就立刻返回。
+
+人在运行途中可能加需求、也可能发现你方向错了。**你不查就收不到** ——
+他没有别的通道能在不打断你的情况下说话。一次长程运行里这是他唯一的方向盘。
+
+收到消息之后:
+- 它**改变了需求或边界**吗?那就照新的做,并在后续派活时把新约束写进任务书 ——
+  下游的 subagent 和判定者都不知道人说过什么,除非你转述。
+  (框架已经把原话追加进了确认书,所以**下一个步骤**读得到;
+   但**这一步里已经派出去的人**读不到。)
+- 只是提问或闲聊?一句话回应,继续干活。
+
+你还有 `mcp__human__ask`,能**中途提问**。它和收件箱相反:**会阻塞**,
+一直等到有人回答或者超时。所以:
+
+- **真正的岔路口才问** —— 答案会改变做法、而且你自己判断不了的那种。
+  典型是边界含糊:"业务代码别动"里,一处三行的可移植性修复算不算业务代码?
+  这种问一句能省一小时。
+- **不要把人当搜索引擎。** 能自己读出来的、能自己试出来的,别问。
+- 没人在的时候它会超时返回一句说明,那就自己判断着继续,把假设记进笔记。
+
 你自己:
 - 决策和理由写进 `.flower/notes/`,一个决策一个文件。这样你被压缩、被重启、被换机器,
   结论都还在。
@@ -437,6 +459,7 @@ def coordinator(
     instructions: str,
     workers: dict[str, AgentDefinition],
     *,
+    channel: Any = None,
     can_read: bool = True,
     glance: bool = True,
     model: str | None = None,
@@ -456,10 +479,28 @@ def coordinator(
     ``glance=True``(默认)给协调者一个受限的 Bash:只能跑 ``git status`` / ``ls``
     这类无副作用、看一眼就完的命令,结果过几轮自动标记为过期。
     派人去跑这种命令不划算 —— subagent 的启动成本比命令本身贵一个数量级。
+
+    ``channel`` 给了就接上提问通道,协调者因此拿到**两个**工具:
+
+    * ``inbox`` —— 查人有没有主动说话(加需求、纠方向)。**不阻塞**。
+      这是人在长程运行里唯一的方向盘:他没有别的办法在不打断你的情况下说话。
+    * ``ask`` —— 中途提问。**会阻塞**,直到有人回答或 ``timeout_s`` 到。
+
+    第二个是搭着来的,不是可选的:MCP server 一挂就是两个工具都在,
+    而 ``allowed_tools`` **不排他**(实测,见 `docs/case-ht002.md` 第三节),
+    列不列它都调得动。与其假装限制了,不如明说并在纪律里管住用法。
+
+    真正的岔路口值得问(HT002 里"业务代码别动 —— 那两行算不算业务代码"
+    就是一个,不问的话它绕了一小时)。但无人值守时每问一次都会卡满
+    ``timeout_s`` —— 那种场合用 ``timeout_s=0``。
     """
     tools = list(COORDINATOR_TOOLS) if can_read else ["Agent", "TodoWrite"]
     if glance:
         tools = tools + ["Bash"]      # 具体能跑什么由 delegate_guard 把关
+    mcp = {}
+    if channel is not None:
+        tools = tools + [channel.inbox_name, channel.tool_name]
+        mcp = channel.mcp_servers()
     return AgentSpec(
         name=name,
         instructions=f"{COORDINATOR_RULES}\n{instructions}".strip(),
@@ -476,6 +517,7 @@ def coordinator(
         max_budget_usd=max_budget_usd,
         permission_mode=permission_mode,
         agents=workers,
+        mcp_servers=mcp,
         compact=compact,
         hooks=hooks,
         env=env or {},

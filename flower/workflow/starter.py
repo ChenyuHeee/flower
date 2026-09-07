@@ -95,7 +95,10 @@ def starter_flow(
     home = (ws.parent / f".flower-{ws.name}") if isolate else None
     wb = Workbench(ws, home=home).ensure()
 
+    # amend_path:人在运行途中说的话追加到确认书里。
+    # 不落盘的话它活不过步骤边界 —— 下一步是新 session,只读冻结件。
     ch = HumanChannel(log_path=wb.notes / log_name,
+                      amend_path=wb.notes / brief_name,
                       max_asks=max_asks, timeout_s=timeout_s)
 
     brief_step = clarify_step(ch, brief_path=wb.notes / brief_name, prompt=ask,
@@ -108,10 +111,12 @@ def starter_flow(
     if goal:
         steps.append(goal_step(ch, goal_path=goal_path, brief_key=brief_step.name))
 
+    # channel 给协调者 = 它能查收件箱(人主动说的话),也能中途提问。
+    # 不给的话,人在干活那几小时里说什么它都收不到 —— 见 issue #3。
     coord = coordinator("协调者", "", {
         "coder": worker("写代码与测试。要动手实现的活派给它。",
                         worker_prompt, isolate=isolate),
-    })
+    }, channel=ch)
     work = Step("干活", spec=coord,
                 prompt=lambda ctx: _work_prompt(ctx, brief_step.name))
     if goal:

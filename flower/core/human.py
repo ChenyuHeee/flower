@@ -47,6 +47,14 @@ SERVER = "human"
 TOOL = "ask"
 TOOL_NAME = f"mcp__{SERVER}__{TOOL}"
 
+INBOX = "inbox"
+INBOX_NAME = f"mcp__{SERVER}__{INBOX}"
+# 无参数。SDK 的 _build_input_schema 只有在 dict 同时含 type(str) 和 properties 时
+# 才原样上线,所以空参数也得写成完整的 JSON Schema。
+_INBOX_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
+
+NO_MAIL = "收件箱是空的。继续干活,不用理会。"
+
 # 完整 JSON Schema —— SDK 认出 type+properties 后原样上线(不走 name->type 那条简化路径),
 # 所以 options 这种数组参数只能这么写。
 _SCHEMA: dict[str, Any] = {
@@ -76,6 +84,17 @@ TIMEOUT = (
 DECLINED = (
     "对方跳过了这个问题。按你自己的判断继续,并把假设写进「未知与假设」。"
 )
+
+
+@dataclass
+class Mail:
+    """人主动说的一句话。和 :class:`Ask` 相反 —— 那是 agent 问人,这是人找 agent。"""
+
+    id: str
+    text: str
+    sent_at: float = field(default_factory=time.time)
+    taken: bool = False
+    """有没有被 agent 取走过。没取走的还在收件箱里等。"""
 
 
 @dataclass
@@ -131,6 +150,7 @@ class HumanChannel:
         max_asks: int | None = None,
         timeout_s: float | None = 1800.0,
         log_path: str | Path | None = None,
+        amend_path: str | Path | None = None,
         over_budget_text: str = OVER_BUDGET,
         timeout_text: str = TIMEOUT,
         declined_text: str = DECLINED,
@@ -142,12 +162,22 @@ class HumanChannel:
         self.timeout_s = timeout_s
         """等多久。``None`` = 永远等;``0`` = 不等(全自动模式,所有提问立刻落空)。"""
         self.log_path = Path(log_path).resolve() if log_path else None
+        self.amend_path = Path(amend_path).resolve() if amend_path else None
+        """人在运行途中主动说的话,追加到这个文件(通常是需求确认书)。
+
+        **为什么必须落盘**:每一步是新 session、只读冻结件。中途说的话只进了
+        当前那个 agent 的上下文 —— 下一步(比如判定)是全新 session,读的是
+        `需求.md` 和 `目标.md`,**看不见你说过那句话**,于是仍按旧边界判,
+        把改好的东西判成越界。追加而不是覆盖,和 ``Goal.amend`` 同一个道理:
+        原来的需求是历史,看得见改了什么比看不见好。"""
         self.over_budget_text = over_budget_text
         self.timeout_text = timeout_text
         self.declined_text = declined_text
 
         self.asks: list[Ask] = []
         """全部提问记录,含被回绝和超时的。"""
+        self.mail: list[Mail] = []
+        """人主动说过的全部话。``taken`` 标记它有没有被 agent 取走过。"""
         self.ui_errors: list[str] = []
         """UI 回调抛出的异常。**不让它中断运行** —— 前端崩了不该带走三小时的活。"""
 
@@ -156,6 +186,12 @@ class HumanChannel:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._lock = threading.Lock()
         self._ids = itertools.count(1)
+        self._inbox_tool = tool(
+            INBOX,
+            "看看人有没有主动说什么(加需求、纠方向)。**不阻塞** —— "
+            "没有新消息就立刻返回一句说明。每完成一个阶段性动作就查一次。",
+            _INBOX_SCHEMA,
+        )(self._handle_inbox)
         self._tool = tool(
             TOOL,
             "向人类提问并等待回答。一次问一个。答案作为工具结果返回。"
@@ -168,13 +204,17 @@ class HumanChannel:
     def tool_name(self) -> str:
         return TOOL_NAME
 
+    @property
+    def inbox_name(self) -> str:
+        return INBOX_NAME
+
     def mcp_servers(self) -> dict[str, Any]:
         """交给 ``AgentSpec.mcp_servers``。
 
         键名必须和 :func:`create_sdk_mcp_server` 的名字一致,否则工具名对不上 ——
         所以这里一起给出,不留给调用方拼。
         """
-        return {SERVER: create_sdk_mcp_server(SERVER, tools=[self._tool])}
+        return {SERVER: create_sdk_mcp_server(SERVER, tools=[self._tool, self._inbox_tool])}
 
     # ---- 提问(模型侧和框架侧共用同一条路)-----------------------------
     async def ask(self, question: str, options: list[str] | None = None) -> Ask:
@@ -221,6 +261,80 @@ class HumanChannel:
                 self._waiting.pop(a.id, None)
             raise
         return self._settle_ask(a, answer, a.state or "answered")
+
+    # ---- 收件箱(人主动说话)-------------------------------------------
+    def send(self, text: str) -> Mail | None:
+        """人主动说一句话。**任何线程都能调**(UI 通常在别的线程)。
+
+        它和 :meth:`ask` 是反方向的:``ask`` 是 agent 停下来等人,
+        ``send`` 是人把话放进队列,agent 下次查收件箱时才拿到 —— **不打断它**。
+        要立刻生效得用打断(见 issue #3 的第三件),那会杀掉在飞的 subagent。
+        """
+        text = (text or "").strip()
+        if not text:
+            return None
+        m = Mail(id=f"m{next(self._ids)}", text=text)
+        with self._lock:
+            self.mail.append(m)
+        self._emit_mail(m, "queued")
+        self._amend(m)
+        return m
+
+    def _amend(self, m: Mail) -> None:
+        """追加到确认书。见 :attr:`amend_path` 的说明 —— 不落盘就活不过步骤边界。"""
+        if self.amend_path is None:
+            return
+        try:
+            self.amend_path.parent.mkdir(parents=True, exist_ok=True)
+            head = "" if self.amend_path.exists() else "# 运行中的补充\n"
+            with self.amend_path.open("a", encoding="utf-8") as f:
+                f.write(f"{head}\n## 运行中补充({time.strftime('%H:%M:%S')})\n{m.text}\n")
+        except OSError:
+            pass                       # 落盘失败不该带走这次运行
+
+    def pending_mail(self) -> list[Mail]:
+        with self._lock:
+            return [m for m in self.mail if not m.taken]
+
+    def _emit_mail(self, m: Mail, state: str) -> None:
+        if self.on_event is None:
+            return
+        try:
+            self.on_event(Event("ask", text=m.text, payload={
+                "kind": "mail", "state": state, "id": m.id,
+                "amended": str(self.amend_path) if self.amend_path else "",
+            }))
+        except Exception as exc:       # noqa: BLE001 —— UI 崩了不该带走三小时的活
+            self.ui_errors.append(f"{type(exc).__name__}: {exc}")
+
+    async def _handle_inbox(self, args: dict[str, Any]) -> dict[str, Any]:
+        """收件箱工具:取走积压的话。**不阻塞** —— 空了就立刻返回一句说明。"""
+        with self._lock:
+            fresh = [m for m in self.mail if not m.taken]
+            for m in fresh:
+                m.taken = True
+        for m in fresh:
+            self._emit_mail(m, "delivered")
+            self._log_mail(m)
+        if not fresh:
+            return {"content": [{"type": "text", "text": NO_MAIL}]}
+        lines = ["人在运行途中说了这些(按时间先后):", ""]
+        lines += [f"{i}. {m.text}" for i, m in enumerate(fresh, 1)]
+        lines += ["", ("这些话**已经追加进需求确认书**了,后面的步骤读得到。"
+                       if self.amend_path else
+                       "**注意:这些话没有落盘。** 如果它改变了需求或边界,"
+                       "你得想办法让它活过这一步 —— 否则下一步是全新 session,看不到它。")]
+        return {"content": [{"type": "text", "text": "\n".join(lines)}]}
+
+    def _log_mail(self, m: Mail) -> None:
+        if self.log_path is None:
+            return
+        try:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.log_path.open("a", encoding="utf-8") as f:
+                f.write(f"\n- **人主动说**({m.id}) {m.text}\n")
+        except OSError:
+            pass
 
     async def _handle(self, args: dict[str, Any]) -> dict[str, Any]:
         """MCP 工具处理器。**它会挂住等人**,这是有意的。
