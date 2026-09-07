@@ -125,6 +125,20 @@ def main() -> int:
     co = set(coordinator("协调者", "", {}).allowed_tools or [])
     check(not (set(WEB_TOOLS) & co), "协调者**不给** —— 它只协调,查资料派人去")
 
+    print("\n[9] subagent 的只读工具必须进**会话级**免审批清单,否则每次都要人批")
+    # 实测栽过(novel):给 worker 加了 WebFetch/WebSearch 却只加进 AgentDefinition.tools,
+    # 而 allowed_tools 是**会话级**的 —— 于是 subagent 每次调用都走审批,
+    # 没人批就是 "requested permissions to use WebSearch, but you haven't granted it"
+    # (toolDenialKind=user-rejected),模型反复重试,二十多次,一个字没写出来。
+    co = coordinator("协调者", "", {"coder": worker("干活", "")}, channel=ch)
+    allowed = set(co.allowed_tools or [])
+    check(set(WEB_TOOLS) <= allowed,
+          f"worker 的 Web 工具并进了会话免审批清单:{sorted(set(WEB_TOOLS) & allowed)}")
+    check(not ({"Write", "Edit"} & allowed),
+          "**Write/Edit 不并进来** —— 主线程免审批的话,delegate_guard 那道墙就没意义了")
+    check(set(WEB_TOOLS).isdisjoint(coordinator("c", "", {}, channel=ch).allowed_tools or []),
+          "没有 worker 时不凭空多出工具")
+
     print(f"\n{'✓ 工具墙全部通过' if ok else '✗ 有失败'}")
     return 0 if ok else 1
 

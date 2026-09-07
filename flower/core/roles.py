@@ -509,6 +509,22 @@ def coordinator(
     if channel is not None:
         tools = tools + [channel.inbox_name, channel.tool_name]
         mcp = channel.mcp_servers()
+
+    # **subagent 的工具也得进这份清单** —— allowed_tools 和 disallowed_tools 一样
+    # 是**会话级**的:不在里面的工具,subagent 调用时会走权限审批。没人批就变成
+    # "Claude requested permissions to use X, but you haven't granted it yet"
+    # (toolDenialKind=user-rejected),而且模型会反复重试同一个调用。
+    # 实测栽过:给 worker 加了 WebFetch/WebSearch 却只加进 AgentDefinition.tools,
+    # novel 那次二十多次 user-rejected,一个字都没写出来。
+    #
+    # 只并"只读、无副作用"的那些。Write/Edit/Bash **不并进来** ——
+    # 主线程一旦免审批,delegate_guard 那道"协调者不动手"的墙就没意义了;
+    # 而 subagent 的 Bash/Write 本来就走得通(实测 462 次放行)。
+    for a in (workers or {}).values():
+        for t in (getattr(a, "tools", None) or []):
+            if t in WEB_TOOLS and t not in tools:
+                tools = tools + [t]
+
     return AgentSpec(
         name=name,
         instructions=f"{COORDINATOR_RULES}\n{instructions}".strip(),

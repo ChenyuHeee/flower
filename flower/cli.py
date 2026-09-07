@@ -317,6 +317,103 @@ def _say(text: str = "") -> None:
             pass                        # 终端已经没了(SIGHUP 之后)—— 别因此抛
 
 
+class LineEditor:
+    """行编辑状态机 —— **纯逻辑,不碰终端**,所以能直接单测。
+
+    自己管缓冲的唯一理由:重绘时要能把"打了一半的字"画回来(见 :data:`_PROMPT`)。
+    顺带就得自己处理退格和方向键 —— 而这恰恰修掉了两个老毛病:
+
+      * **退格删半个中文**:行模式下终端按字节删,一个汉字要按三下还删出乱码。
+        这里 ``buf`` 是 str,删的就是一个字符。
+      * **方向键失灵**:转义序列整段吃掉并真的移光标,不是把 "[A" 插进输入
+        (第一版就是那样坏的)。
+
+    抽成类而不是留在闭包里,是因为**闭包只能靠 pty 端到端测**,而 pty 时序在
+    机器忙时不稳,测试会时好时坏 —— 会哭狼的测试比没有测试更糟。
+    """
+
+    NO_HISTORY = ("A", "B")      # ↑↓:没有历史记录,动了反而让人以为丢了东西
+
+    def __init__(self) -> None:
+        self.buf = ""
+        self.pos = 0
+        self._dec = codecs.getincrementaldecoder("utf-8")(errors="ignore")
+        self._esc: str | None = None      # 不为 None 表示正在收转义序列
+
+    def reset(self) -> None:
+        self.buf, self.pos = "", 0
+        self._dec.reset()
+        self._esc = None
+
+    def _put(self, text: str) -> None:
+        self.buf = self.buf[:self.pos] + text + self.buf[self.pos:]
+        self.pos += len(text)
+
+    def _move(self, d: int) -> None:
+        self.pos = max(0, min(len(self.buf), self.pos + d))
+
+    def _esc_done(self, seq: str) -> bool:
+        """处理一个转义序列;返回 True = 这段收完了。"""
+        if len(seq) == 1 and seq not in "[O":
+            return True                               # Alt+x 之类,整段丢掉
+        if (seq and seq[-1].isalpha()) or seq.endswith("~"):
+            key = seq[-1]
+            if key == "D":
+                self._move(-1)                        # ←
+            elif key == "C":
+                self._move(1)                         # →
+            elif key == "H" or seq == "[1~":
+                self.pos = 0                          # Home
+            elif key == "F" or seq == "[4~":
+                self.pos = len(self.buf)              # End
+            elif seq == "[3~":                        # Delete:向后删
+                self.buf = self.buf[:self.pos] + self.buf[self.pos + 1:]
+            return True
+        return len(seq) > 8                           # 兜底:太长就当收完,别卡死
+
+    def feed(self, data: bytes) -> str | None:
+        """喂一批字节。收满一行就返回那一行(不含换行),否则返回 ``None``。
+
+        ``b""`` (EOF) 返回 ``""``。
+        """
+        if not data:
+            return ""
+        for byte in data:
+            ch = bytes([byte])
+            if self._esc is not None:
+                self._esc += ch.decode("latin-1")
+                if self._esc_done(self._esc):
+                    self._esc = None
+                continue
+            if ch == b"\x1b":
+                self._esc = ""
+                continue
+            if ch in (b"\r", b"\n"):
+                out, self.buf, self.pos = self.buf, "", 0
+                self._dec.reset()
+                return out
+            if ch in (b"\x7f", b"\x08"):             # 退格:删光标前一个**字符**
+                if self.pos > 0:
+                    self.buf = self.buf[:self.pos - 1] + self.buf[self.pos:]
+                    self.pos -= 1
+            elif ch == b"\x15":                       # Ctrl+U:清空
+                self.buf, self.pos = "", 0
+            elif ch == b"\x01":                       # Ctrl+A:行首
+                self.pos = 0
+            elif ch == b"\x05":                       # Ctrl+E:行尾
+                self.pos = len(self.buf)
+            elif ch == b"\x04" and not self.buf:      # Ctrl+D 且空 → EOF
+                return ""
+            elif byte < 0x20:
+                continue                              # 别的控制字符:忽略
+            else:
+                # **增量解码**:os.read 可能把一个中文字从中间切开,
+                # 逐字节 decode 会解出乱码。解码器攒着,凑齐了才吐字符。
+                if got := self._dec.decode(ch):
+                    self._put(got)
+        return None
+
+
 def _tokens(text: str):
     """切成可断行的块。CJK 一字一块,西文一词一块(含尾随空白)。"""
     buf = ""
@@ -709,99 +806,23 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
         except Exception:                                        # noqa: BLE001
             return None
 
-    _dec = codecs.getincrementaldecoder("utf-8")(errors="ignore")
-    _esc = {"on": False, "seq": ""}      # 正在收一个转义序列(方向键那些)
-
-    def _put(text: str) -> None:
-        """把字符插到光标处。"""
-        b, i = _PROMPT["buf"], _PROMPT["pos"]
-        _PROMPT["buf"] = b[:i] + text + b[i:]
-        _PROMPT["pos"] = i + len(text)
-
-    def _move(delta: int) -> None:
-        _PROMPT["pos"] = max(0, min(len(_PROMPT["buf"]), _PROMPT["pos"] + delta))
-
-    def _handle_esc(seq: str) -> bool:
-        """处理转义序列。返回 True = 收完了。
-
-        **必须整段吃掉** —— 只忽略 `\x1b` 而放行后面的字节,方向键就会把
-        "[A" 当普通字符插进你的输入里(我第一版就是这样)。
-        """
-        if len(seq) == 1 and seq not in "[O":
-            return True                              # Alt+x 之类,整个丢掉
-        if seq and seq[-1].isalpha() or seq.endswith("~"):
-            key = seq[-1]
-            if key == "D":
-                _move(-1)                            # ←
-            elif key == "C":
-                _move(1)                             # →
-            elif key in ("H",) or seq == "[1~":
-                _PROMPT["pos"] = 0                   # Home
-            elif key in ("F",) or seq == "[4~":
-                _PROMPT["pos"] = len(_PROMPT["buf"])  # End
-            elif seq == "[3~":                       # Delete(向后删)
-                b, i = _PROMPT["buf"], _PROMPT["pos"]
-                _PROMPT["buf"] = b[:i] + b[i + 1:]
-            # ↑↓(A/B)故意不处理:没有历史记录,动了反而让人以为丢了东西
-            return True
-        return len(seq) > 8                          # 兜底:太长就当收完,别卡死
+    _ed = LineEditor()
 
     def read_char_line() -> str | None:
-        """逐字符收一行。返回整行(不含换行);还没收满就返回 ``None``。
-
-        自己管缓冲的**唯一理由**:重绘时要能把"打了一半的字"画回来。
-        顺带就得自己处理退格/方向键 —— 而这恰恰修掉了两个老毛病:
-
-          * **退格删半个中文** —— 行模式下终端按字节删,一个汉字要按三下还删出乱码。
-            这里 ``buf`` 是 str,``[:-1]`` 删的就是一个字符。
-          * **方向键失灵** —— 转义序列整段吃掉并真的移动光标,而不是把 "[A" 插进去。
-        """
+        """从 stdin 收一行。真正的编辑逻辑在 :class:`LineEditor` 里。"""
         try:
             data = os.read(sys.stdin.fileno(), 1024)
         except OSError:
             return None
-        if not data:
-            return ""                                # EOF
-
-        for b in data:
-            ch = bytes([b])
-            if _esc["on"]:
-                _esc["seq"] += ch.decode("latin-1")
-                if _handle_esc(_esc["seq"]):
-                    _esc["on"], _esc["seq"] = False, ""
-                continue
-            if ch == b"\x1b":
-                _esc["on"], _esc["seq"] = True, ""
-                continue
-            if ch in (b"\r", b"\n"):
-                out = _PROMPT["buf"]
-                _PROMPT["buf"], _PROMPT["pos"] = "", 0
-                _dec.reset()
-                with _OUT, _TTY:
-                    sys.stdout.write("\n")           # 你说过的话留在屏幕上
-                    sys.stdout.flush()
-                return out
-            if ch in (b"\x7f", b"\x08"):            # 退格:删光标前**一个字符**
-                i = _PROMPT["pos"]
-                if i > 0:
-                    bb = _PROMPT["buf"]
-                    _PROMPT["buf"] = bb[:i - 1] + bb[i:]
-                    _PROMPT["pos"] = i - 1
-            elif ch == b"\x15":                      # Ctrl+U:清空
-                _PROMPT["buf"], _PROMPT["pos"] = "", 0
-            elif ch == b"\x01":                      # Ctrl+A:行首
-                _PROMPT["pos"] = 0
-            elif ch == b"\x05":                      # Ctrl+E:行尾
-                _PROMPT["pos"] = len(_PROMPT["buf"])
-            elif ch == b"\x04" and not _PROMPT["buf"]:   # Ctrl+D 且空 → EOF
-                return ""
-            elif b < 0x20:
-                continue                             # 别的控制字符:忽略
-            else:
-                # **增量解码**:os.read 可能把一个中文字从中间切开,
-                # 逐字节 decode 会解出乱码。解码器攒着,凑齐了才吐字符。
-                if got := _dec.decode(ch):
-                    _put(got)
+        out = _ed.feed(data)
+        _PROMPT["buf"], _PROMPT["pos"] = _ed.buf, _ed.pos
+        if out is not None and out != "":
+            with _OUT, _TTY:
+                sys.stdout.write("\n")       # 你说过的话留在屏幕上
+                sys.stdout.flush()
+            return out
+        if out == "":
+            return ""
         _redraw_input()
         return None
 
@@ -827,8 +848,7 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
         except Exception:      # select 对某些流不适用(比如 Windows 的 stdin)
             return True        # 退化成阻塞读 —— 功能对,只是退出时要等一行
 
-    def loop() -> None:
-        raw = raw_mode()                   # 拿不到就退化成按行读(见 raw_mode)
+    def loop(raw) -> None:
         try:
             _loop_body(bool(raw))
         finally:
@@ -905,7 +925,12 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
                     _say(f"{C['grn']}{G['yes']} 收到{C['off']} {C['dim']}"
                          f"(它下次查收件箱时会看到;{extra}){C['off']}")
 
-    threading.Thread(target=loop, daemon=True, name="flower-stdin").start()
+    # **raw 模式必须在起线程之前设好,不能放进线程里**。放进去有个真实的竞态:
+    # answer_from_stdin 起完线程就返回,调用方(和用户)立刻可以打字,而线程
+    # 未必已经抢到 CPU 把 cbreak 设上 —— 那一瞬间打的字会被行模式吃掉,
+    # 走另一条路,表现为"输入丢了"。实测:三次里稳定复现一次。
+    _raw = raw_mode()
+    threading.Thread(target=loop, args=(_raw,), daemon=True, name="flower-stdin").start()
     return stop
 
 

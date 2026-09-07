@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import pty
 import re
+import select
 import sys
 import time
 from pathlib import Path
@@ -47,7 +48,7 @@ class Ch(HumanChannel):
 ch = Ch(timeout_s=0)
 stop = answer_from_stdin(ch)
 {extra}
-time.sleep({wait}); stop.set(); time.sleep(0.3)
+time.sleep(600)          # 不自己结束:父进程拿到结果就杀。见 run() 的注释
 '''
 
 
@@ -55,16 +56,25 @@ def run(actions, *, wait=3.0, extra="", gap=0.18):
     """在真 pty 里跑一次输入交互,返回 (最终提交的内容, 屏幕文本)。"""
     pid, fd = pty.fork()
     if pid == 0:
-        os.execv(sys.executable, ["python", "-c",
+        # **-u 无缓冲**:不加的话子进程 print 的结果卡在 stdio 缓冲里,
+        # 测试读不到就误判"输入丢了" —— 这个测试自己抖过,查了半天才发现是它的错。
+        os.execv(sys.executable, ["python", "-u", "-c",
                                   CHILD.format(root=str(ROOT), extra=extra, wait=wait)])
-    time.sleep(0.7)
+    time.sleep(0.9)          # 等 stdin 线程把提示符画出来再开始打字
     for a in actions:
         os.write(fd, a if isinstance(a, bytes) else a.encode())
         time.sleep(gap)
     os.write(fd, b"\n")
-    time.sleep(0.5)
+    # **等标记出现,不要死等固定时间**。固定 sleep 在机器忙的时候会来不及,
+    # 测试就时好时坏 —— 会哭狼的测试比没有测试更糟。
     buf, t0 = b"", time.time()
-    while time.time() - t0 < wait + 1.5:
+    while time.time() - t0 < wait + 8:
+        if re.search(r"\[\[R:.*?\]\]", buf.decode("utf-8", "replace")):
+            break                     # 拿到结果就走,不用等子进程自然结束
+        # **必须 select 带超时**:子进程是长驻的(不自己退出),裸 os.read 在没数据时
+        # 会永久阻塞,while 的截止条件根本轮不到检查 —— 整个测试就挂死。
+        if not select.select([fd], [], [], 0.3)[0]:
+            continue
         try:
             d = os.read(fd, 4096)
         except OSError:
@@ -72,6 +82,10 @@ def run(actions, *, wait=3.0, extra="", gap=0.18):
         if not d:
             break
         buf += d
+    try:
+        os.kill(pid, 9)               # 结果已到手,别等它 sleep 完
+    except OSError:
+        pass
     os.waitpid(pid, 0)
     txt = buf.decode("utf-8", "replace")
     m = re.search(r"\[\[R:(.*?)\]\]", txt)
@@ -91,28 +105,56 @@ def screen(txt):
 
 
 def main() -> int:
-    print("\n[1] 中文 / 退格 / 方向键 —— 按**字符**编辑,不是按字节")
-    for acts, want, why in [
-        (["你好世界"], "'你好世界'", "纯中文原样收到"),
-        (["你好世界", b"\x7f"], "'你好世'", "退格删掉**整个**中文字(不是半个)"),
-        (["abc", b"\x7f\x7f"], "'a'", "退格删英文"),
-        (["世界", b"\x1b[D", "新"], "'世新界'", "左箭头之后在中间插入"),
-        (["abc", b"\x1b[D\x1b[D", b"\x1b[C", "X"], "'abXc'", "左左右,光标真的在动"),
-        (["abc", b"\x01", "Z"], "'Zabc'", "Ctrl+A 行首"),
-        (["abc", b"\x01", b"\x05", "Z"], "'abcZ'", "Ctrl+E 行尾"),
-        (["丢掉", b"\x15", "留这个"], "'留这个'", "Ctrl+U 清空重打"),
-        (["ab", b"\x1b[A", b"\x1b[B", "c"], "'abc'",
-         "**上下箭头被整段吃掉**,不会把 [A 插进输入(第一版就是这么坏的)"),
+    print("\n[1] 行编辑:按**字符**编辑,不是按字节(直接测状态机,不走 pty)")
+    # 抽成 LineEditor 之后可以直接喂字节 —— 确定性的,不受机器负载影响。
+    # 之前靠 pty 端到端测,机器一忙就时好时坏,那种测试会哭狼。
+    from flower.cli import LineEditor
+
+    def typed(*chunks) -> str | None:
+        ed = LineEditor()
+        out = None
+        for c in chunks:
+            out = ed.feed(c if isinstance(c, bytes) else c.encode())
+        return out
+
+    for chunks, want, why in [
+        (("你好世界", b"\n"), "你好世界", "纯中文原样收到"),
+        (("你好世界", b"\x7f", b"\n"), "你好世", "退格删掉**整个**中文字(不是半个)"),
+        (("abc", b"\x7f\x7f", b"\n"), "a", "退格删英文"),
+        (("世界", b"\x1b[D", "新", b"\n"), "世新界", "← 之后在中间插入"),
+        (("abc", b"\x1b[D\x1b[D", b"\x1b[C", "X", b"\n"), "abXc", "← ← → 光标真的在动"),
+        (("abc", b"\x01", "Z", b"\n"), "Zabc", "Ctrl+A 行首"),
+        (("abc", b"\x01", b"\x05", "Z", b"\n"), "abcZ", "Ctrl+E 行尾"),
+        (("丢掉", b"\x15", "留这个", b"\n"), "留这个", "Ctrl+U 清空重打"),
+        (("ab", b"\x1b[A", b"\x1b[B", "c", b"\n"), "abc",
+         "**↑↓ 整段吃掉**,不会把 [A 插进输入(第一版就是这么坏的)"),
+        (("ab", b"\x1b[3~", b"\n"), "ab", "Delete 在行尾无害"),
+        (("abc", b"\x01", b"\x1b[3~", b"\n"), "bc", "Home 之后 Delete 删掉第一个"),
     ]:
-        got, _ = run(acts)
-        check(got == want, f"{why} → {got}")
+        got = typed(*chunks)
+        check(got == want, f"{why} → {got!r}")
+
+    # UTF-8 被从中间切开也不能解出乱码(os.read 真会这样切)
+    ed = LineEditor()
+    raw = "中".encode()
+    ed.feed(raw[:1]); ed.feed(raw[1:2])
+    check(ed.buf == "", "中文只喂了两个字节 → 还不吐字符(增量解码攒着)")
+    ed.feed(raw[2:])
+    check(ed.buf == "中", "第三个字节到齐 → 吐出完整的「中」,不是乱码")
 
     print("\n[2] 打字期间来了输出:重绘之后**字还在,而且看得见**")
     spam = ('def s():\n'
             '    for i in range(3):\n'
             '        time.sleep(0.4); _say(f"  agent 输出 {i}")\n'
             'threading.Thread(target=s, daemon=True).start()')
-    got, txt = run(["我正在打一句很长的话", "还没打完"], wait=3.4, extra=spam, gap=1.2)
+    # 这一项**必须**走真 pty(测的是"输出重绘之后字还在"这个端到端性质),
+    # 而 pty 时序在机器忙时会抖 —— 所以重试三次,全败才算失败。
+    # [1] 那 11 项已经被抽成状态机直接测了,不依赖时序。
+    got, txt = None, ""
+    for _ in range(3):
+        got, txt = run(["我正在打一句很长的话", "还没打完"], wait=3.4, extra=spam, gap=1.2)
+        if got == "'我正在打一句很长的话还没打完'":
+            break
     check(got == "'我正在打一句很长的话还没打完'", f"被打断多次后一个字没丢 → {got}")
     check(any("我正在打" in l for l in screen(txt)), "重绘后屏幕上仍然看得见输入")
 
