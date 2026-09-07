@@ -7,7 +7,7 @@
 > **文档在 [`docs/`](docs/)**:[快速上手](docs/README.md) ·
 > [设计 workflow](docs/workflow.md) · [前置确认](docs/clarify.md) ·
 > [目标看守](docs/goal.md) · [换交互层](docs/interaction.md) · [容器](docker/README.md) ·
-> **[真实运行案例](docs/case-ht001.md)**。
+> **真实运行案例:[HT001](docs/case-ht001.md) · [HT002](docs/case-ht002.md)**。
 > 本页讲的是**为什么是这些设计** —— 实测数据、对照实验和踩过的坑。
 
 ---

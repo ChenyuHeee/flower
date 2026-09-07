@@ -1,0 +1,58 @@
+=== selfcheck contents ===
+total 48
+drwxr-xr-x@ 8 hechenyu  staff  256 Sep  7 15:47 .
+drwxr-xr-x@ 4 hechenyu  staff  128 Aug 13 15:30 ..
+-rw-------  1 hechenyu  staff  102 Aug 19 18:34 226816abf0dab20a49ac5c229b4a7fb5bbeeebf412608ededd9a3e33
+-rw-------  1 hechenyu  staff  102 Aug 19 18:49 2bad9545ef65e7d1a81136f84bce5b298667d83ff9d067c2e1207e47
+-rw-r--r--  1 hechenyu  staff  174 Sep  7 15:47 7c3d17d7957fe324e5f14071171f03ddd1b4f5e9422274c62b19d81e
+-rw-------@ 1 hechenyu  staff  124 Sep  4 10:11 7dd0f67b4f36c3c07d00574fe3c5796f5ae8ad86a476d1eb7804d263
+-rw-------@ 1 hechenyu  staff  118 Sep  6 09:38 a88da265f981f60e3dc56aa474435d6e3a21dbb343d1800bfead2d31
+-rw-------  1 hechenyu  staff  123 Aug 19 17:29 c56319f66de656ec80d9af71805c97ae683dd2788284313a8de55c98
+
+=== http-v2 recent (newest 20 files) ===
+/Users/hechenyu/Library/Caches/pip/http-v2/9/f/9/3/3/9f93306d7b672475999e1ccb003ed535876b07060341d71f2c054af0.body
+/Users/hechenyu/Library/Caches/pip/http-v2/9/f/9/3/3/9f93306d7b672475999e1ccb003ed535876b07060341d71f2c054af0
+/Users/hechenyu/Library/Caches/pip/http-v2/a/1/9/5/3/a19537d3cf37c122db841d6fe4cd322bc10d1a558bb00d146b85cb9a
+/Users/hechenyu/Library/Caches/pip/http-v2/6/c/9/5/4/6c95407d545905643787918ec519e28ebec2701fd643453e7e96ec19.body
+/Users/hechenyu/Library/Caches/pip/http-v2/6/c/9/5/4/6c95407d545905643787918ec519e28ebec2701fd643453e7e96ec19
+/Users/hechenyu/Library/Caches/pip/http-v2/6/9/3/6/4/69364e1f22ce1d516283f4365d3d5498c61512aa95360fc91ddc930e.body
+/Users/hechenyu/Library/Caches/pip/http-v2/6/9/3/6/4/69364e1f22ce1d516283f4365d3d5498c61512aa95360fc91ddc930e
+/Users/hechenyu/Library/Caches/pip/http-v2/6/1/5/b/0/615b08aebbaa5d20f400dfea7f60d0f6c45747743e659221f4baf8da
+/Users/hechenyu/Library/Caches/pip/http-v2/6/1/5/b/0/615b08aebbaa5d20f400dfea7f60d0f6c45747743e659221f4baf8da.body
+/Users/hechenyu/Library/Caches/pip/http-v2/c/5/0/5/7/c5057fa7536329745804a39cd35d4ecac496ee06b7019919261aaa59.body
+/Users/hechenyu/Library/Caches/pip/http-v2/c/5/0/5/7/c5057fa7536329745804a39cd35d4ecac496ee06b7019919261aaa59
+/Users/hechenyu/Library/Caches/pip/http-v2/a/3/e/2/8/a3e287aa6aa278fe0055342c6cc99b47ea71d1e066f4e6dbd0cbed6e
+/Users/hechenyu/Library/Caches/pip/http-v2/a/3/e/2/8/a3e287aa6aa278fe0055342c6cc99b47ea71d1e066f4e6dbd0cbed6e.body
+(none above = no downloads today)
+
+=== any pip cache file newer than session start 15:31:38 ===
+/Users/hechenyu/Library/Caches/pip/selfcheck
+/Users/hechenyu/Library/Caches/pip/http-v2/9
+/Users/hechenyu/Library/Caches/pip/http-v2/6
+/Users/hechenyu/Library/Caches/pip/http-v2/a
+/Users/hechenyu/Library/Caches/pip/http-v2/c
+/Users/hechenyu/Library/Caches/pip/selfcheck/7c3d17d7957fe324e5f14071171f03ddd1b4f5e9422274c62b19d81e
+/Users/hechenyu/Library/Caches/pip/http-v2/9/f
+/Users/hechenyu/Library/Caches/pip/http-v2/a/3
+/Users/hechenyu/Library/Caches/pip/http-v2/c/5
+/Users/hechenyu/Library/Caches/pip/http-v2/6/9
+/Users/hechenyu/Library/Caches/pip/http-v2/6/1
+/Users/hechenyu/Library/Caches/pip/http-v2/6/c
+/Users/hechenyu/Library/Caches/pip/http-v2/9/f/9
+/Users/hechenyu/Library/Caches/pip/http-v2/6/9/3
+/Users/hechenyu/Library/Caches/pip/http-v2/6/1/5
+/Users/hechenyu/Library/Caches/pip/http-v2/6/c/9
+/Users/hechenyu/Library/Caches/pip/http-v2/9/f/9/3
+/Users/hechenyu/Library/Caches/pip/http-v2/a/3/e
+/Users/hechenyu/Library/Caches/pip/http-v2/c/5/0
+/Users/hechenyu/Library/Caches/pip/http-v2/9/f/9/3/3
+/Users/hechenyu/Library/Caches/pip/http-v2/6/9/3/6
+/Users/hechenyu/Library/Caches/pip/http-v2/6/1/5/b
+/Users/hechenyu/Library/Caches/pip/http-v2/6/c/9/5
+/Users/hechenyu/Library/Caches/pip/http-v2/a/3/e/2
+/Users/hechenyu/Library/Caches/pip/http-v2/c/5/0/5
+/Users/hechenyu/Library/Caches/pip/http-v2/9/f/9/3/3/9f93306d7b672475999e1ccb003ed535876b07060341d71f2c054af0.body
+/Users/hechenyu/Library/Caches/pip/http-v2/9/f/9/3/3/9f93306d7b672475999e1ccb003ed535876b07060341d71f2c054af0
+/Users/hechenyu/Library/Caches/pip/http-v2/6/9/3/6/4
+/Users/hechenyu/Library/Caches/pip/http-v2/6/1/5/b/0
+/Users/hechenyu/Library/Caches/pip/http-v2/6/c/9/5/4

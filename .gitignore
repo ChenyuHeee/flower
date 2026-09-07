@@ -1,12 +1,16 @@
-runs/
+# 锚定到仓库根:否则 human-test/HTxxx/runs 和 .flower 也会被吃掉,
+# 而 git 规则是"父目录被排除后,里面的文件无法用 ! 重新纳入"。
+/runs/
 .venv/
 __pycache__/
 *.pyc
 .env
 tests/_*
-# 工作台是运行时产物(索引自动生成,产出是那次跑出来的东西)
-.flower/
+# 工作台是运行时产物(索引自动生成,产出是那次跑出来的东西)。同样锚定到根 ——
+# human-test/ 下的那几份是**留档的运行记录**,要进版本库。
+/.flower/
 # 人工试用的目录。默认全忽略,但 HT001 是 submodule(指向记录仓库 ChenyuHeee/cppide),
 # 要能被跟踪,所以单独放行。以后新的 HTxxx 若也要留档,同样加一行 ! 例外。
 human-test/*
 !human-test/HT001
+!human-test/HT002

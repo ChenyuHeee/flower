@@ -1,0 +1,119 @@
+# 05 — 最终:补丁落地 / 构建 / 启动 / 取证
+
+- 日期:2026-09-07
+- 平台:macOS Darwin 25.2.0 (arm64)
+- 仓库:`/Users/hechenyu/explore/test-ide/cppide`
+- 前置报告:`03-flag-only-feasibility.md`(X-2 方案)、已验证副本 `/tmp/cppide-flagtest`
+
+---
+
+## A. 补丁应用(只改 `Makefile`)
+
+按 X-2 方案改动 4 处,全部落在 Darwin 分支或受 `$(MACSHIM)` 空展开保护的位置。
+落地后 `diff cppide/Makefile /tmp/cppide-flagtest/Makefile` → **完全一致**(IDENTICAL_TO_VERIFIED_COPY)。
+
+### `git diff Makefile` 完整 diff(+14 / −2)
+
+```diff
+diff --git a/Makefile b/Makefile
+index 2633c72..85062dc 100644
+--- a/Makefile
++++ b/Makefile
+@@ -31,7 +31,10 @@ ifeq ($(UNAME_S),Darwin)
+   LDLIBS += -lncurses -lcurl -lpthread
+   # 若 macOS 自带的 ncurses 头不肯给出宽字符原型(get_wch / add_wch / cchar_t 未声明),
+   # 打开下面这行;Debian 的 ncursesw 头默认已 NCURSES_WIDECHAR=1,不需要它。
+-  # CPPFLAGS += -D_XOPEN_SOURCE_EXTENDED
++  CPPFLAGS += -D_XOPEN_SOURCE_EXTENDED
++  # macOS 兼容垫片(由本 Makefile 生成到 build/,不入库):规则见下方。
++  MACSHIM   := build/macos-compat.h
++  CPPFLAGS += -include $(MACSHIM) -include unistd.h
+ else
+   # Linux:宽字符符号(add_wch/get_wch)只在 ncursesw 里,必须链 -lncursesw
+   LDLIBS += -lncursesw -lcurl -lpthread
+@@ -58,10 +61,18 @@ SYNFLAGS := $(filter-out -MMD -MP,$(CXXFLAGS))
+
+ all: $(BIN)
+
++# Apple SDK 的 /usr/include/signal.h 在函数原型之后又把 sigemptyset 等定义成函数式宏
++# (仅被 #ifndef _ANSI_SOURCE 守卫),于是 `::sigemptyset(&s)` 展开成 `::(*(&s)=0,0)`。
++# 这里生成一个只做 #undef 的垫片头,用 -include 强制前置。
++$(MACSHIM):
++	@mkdir -p $(dir $@)
++	@printf '#include <signal.h>\n#undef sigemptyset\n#undef sigfillset\n#undef sigaddset\n#undef sigdelset\n#undef sigismember\n' > $@
++
++
+ $(BIN): $(OBJ)
+ 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+-%.o: %.cpp
++%.o: %.cpp $(MACSHIM)
+ 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
+
+ # Wave 1 的验收门:每个头文件必须自给自足。
+@@ -92,6 +103,7 @@ install: $(BIN)
+ 	install -m 0755 $(BIN) $(DESTDIR)$(PREFIX)/bin/$(BIN)
+
+ clean:
++	rm -rf build
+ 	rm -f $(OBJ) $(DEP) $(BIN) $(DBGOBJ) $(DBGDEP) $(DBGBIN)
+
+ -include $(DEP)
+```
+
+### 4 处改动逐条说明
+
+| # | 改动 | 为什么 |
+|---|------|--------|
+| 1 | 取消注释 `CPPFLAGS += -D_XOPEN_SOURCE_EXTENDED` | macOS 自带 `curses.h` 默认 `NCURSES_WIDECHAR=0`,不给 `get_wch/add_wch/cchar_t` 原型 |
+| 2 | Darwin 分支加 `MACSHIM := build/macos-compat.h` + `CPPFLAGS += -include $(MACSHIM) -include unistd.h` | 垫片修 `src/proc.cpp` 的 `::sigemptyset` 宏冲突;`-include unistd.h` 修 `src/ui.cpp:69` 的 `::_exit` 缺声明 |
+| 3 | 新增 `$(MACSHIM):` 规则(mkdir + printf 生成垫片头) | Apple SDK `/usr/include/signal.h` 在同一 `#ifndef _ANSI_SOURCE` 块里同时给出真实原型和同名函数式宏,纯 `-D`/`-U` 无解(6 组实测全失败),只能靠 `-include` 前置 `#undef` |
+| 4 | `%.o: %.cpp` → `%.o: %.cpp $(MACSHIM)` 且 `clean` 加 `rm -rf build` | 让垫片在任何 `.o` 之前自动生成;`clean` 负责回收生成的 `build/` |
+
+### Linux 路径未被污染(实测)
+
+`MACSHIM` 只在 `ifeq ($(UNAME_S),Darwin)` 分支里定义,Linux 下为空:
+- `%.o: %.cpp $(MACSHIM)` 空展开回 `%.o: %.cpp`
+- `$(MACSHIM):` 空目标规则被 GNU make 静默忽略,不报 missing separator
+
+实测 `make -n UNAME_S=Linux src/util.o`:
+
+```
+c++ -Isrc -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/util.o src/util.cpp
+```
+
+无 `-include`、无 `-D_XOPEN_SOURCE_EXTENDED`、无 `-I/opt/homebrew/...`。**Linux 行为完全不变。**
+
+**除 `Makefile` 外未改动仓库任何文件。**
+
+---
+
+## B. 构建
+
+### B1. `make clean && make`
+
+```
+===== make clean =====
+rm -rf build
+rm -f src/ai.o src/aihttp.o src/app.o src/build.o src/config.o src/editor.o src/highlight.o
+       src/json.o src/keys.o src/main.o src/panel.o src/proc.o src/textbuf.o src/ui.o src/util.o
+       src/ai.d ... src/util.d cppide
+       src/ai.dbg.o ... src/util.dbg.o src/ai.dbg.d ... src/util.dbg.d cppide-debug
+CLEAN_EXIT=0
+
+===== make =====
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED \
+    -include build/macos-compat.h -include unistd.h \
+    -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/ai.o src/ai.cpp
+    (同样的 15 条:ai aihttp app build config editor highlight json keys main panel proc textbuf ui util)
+
+src/ui.cpp:1192:30: warning: ISO C++11 does not allow conversion from string literal to 'char *' [-Wwritable-strings]
+ 1192 |     const int c = ::tigetnum("colors");
+      |                              ^
+1 warning generated.
+
+c++ -L/opt/homebrew/opt/ncurses/lib -o cppide src/ai.o ... src/util.o -lncurses -lcurl -lpthread
+ld: warning: search path '/opt/homebrew/opt/ncurses/lib' not found
+
+MAKE_EXIT=0
+```

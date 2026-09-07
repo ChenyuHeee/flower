@@ -1,0 +1,27 @@
+===== make clean =====
+rm -rf build
+rm -f src/ai.o src/aihttp.o src/app.o src/build.o src/config.o src/editor.o src/highlight.o src/json.o src/keys.o src/main.o src/panel.o src/proc.o src/textbuf.o src/ui.o src/util.o src/ai.d src/aihttp.d src/app.d src/build.d src/config.d src/editor.d src/highlight.d src/json.d src/keys.d src/main.d src/panel.d src/proc.d src/textbuf.d src/ui.d src/util.d cppide src/ai.dbg.o src/aihttp.dbg.o src/app.dbg.o src/build.dbg.o src/config.dbg.o src/editor.dbg.o src/highlight.dbg.o src/json.dbg.o src/keys.dbg.o src/main.dbg.o src/panel.dbg.o src/proc.dbg.o src/textbuf.dbg.o src/ui.dbg.o src/util.dbg.o src/ai.dbg.d src/aihttp.dbg.d src/app.dbg.d src/build.dbg.d src/config.dbg.d src/editor.dbg.d src/highlight.dbg.d src/json.dbg.d src/keys.dbg.d src/main.dbg.d src/panel.dbg.d src/proc.dbg.d src/textbuf.dbg.d src/ui.dbg.d src/util.dbg.d cppide-debug
+CLEAN_EXIT=0
+===== make =====
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/ai.o src/ai.cpp
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/aihttp.o src/aihttp.cpp
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/app.o src/app.cpp
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/build.o src/build.cpp
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/config.o src/config.cpp
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/editor.o src/editor.cpp
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/highlight.o src/highlight.cpp
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/json.o src/json.cpp
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/keys.o src/keys.cpp
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/main.o src/main.cpp
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/panel.o src/panel.cpp
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/proc.o src/proc.cpp
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/textbuf.o src/textbuf.cpp
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/ui.o src/ui.cpp
+src/ui.cpp:1192:30: warning: ISO C++11 does not allow conversion from string literal to 'char *' [-Wwritable-strings]
+ 1192 |     const int c = ::tigetnum("colors");
+      |                              ^
+1 warning generated.
+c++ -Isrc -I/opt/homebrew/opt/ncurses/include -D_XOPEN_SOURCE_EXTENDED -include build/macos-compat.h -include unistd.h -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP -c -o src/util.o src/util.cpp
+c++ -L/opt/homebrew/opt/ncurses/lib -o cppide src/ai.o src/aihttp.o src/app.o src/build.o src/config.o src/editor.o src/highlight.o src/json.o src/keys.o src/main.o src/panel.o src/proc.o src/textbuf.o src/ui.o src/util.o -lncurses -lcurl -lpthread
+ld: warning: search path '/opt/homebrew/opt/ncurses/lib' not found
+MAKE_EXIT=0

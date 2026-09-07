@@ -1,0 +1,554 @@
+=== git status --porcelain ===
+ M Makefile
+ M cppide
+ D cppide-debug
+ M src/ai.d
+ D src/ai.dbg.d
+ D src/ai.dbg.o
+ M src/ai.o
+ M src/aihttp.d
+ D src/aihttp.dbg.d
+ D src/aihttp.dbg.o
+ M src/aihttp.o
+ M src/app.d
+ D src/app.dbg.d
+ D src/app.dbg.o
+ M src/app.o
+ M src/build.d
+ D src/build.dbg.d
+ D src/build.dbg.o
+ M src/build.o
+ M src/config.d
+ D src/config.dbg.d
+ D src/config.dbg.o
+ M src/config.o
+ M src/editor.d
+ D src/editor.dbg.d
+ D src/editor.dbg.o
+ M src/editor.o
+ M src/highlight.d
+ D src/highlight.dbg.d
+ D src/highlight.dbg.o
+ M src/highlight.o
+ M src/json.d
+ D src/json.dbg.d
+ D src/json.dbg.o
+ M src/json.o
+ M src/keys.d
+ D src/keys.dbg.d
+ D src/keys.dbg.o
+ M src/keys.o
+ M src/main.d
+ D src/main.dbg.d
+ D src/main.dbg.o
+ M src/main.o
+ M src/panel.d
+ D src/panel.dbg.d
+ D src/panel.dbg.o
+ M src/panel.o
+ M src/proc.d
+ D src/proc.dbg.d
+ D src/proc.dbg.o
+ M src/proc.o
+ M src/textbuf.d
+ D src/textbuf.dbg.d
+ D src/textbuf.dbg.o
+ M src/textbuf.o
+ M src/ui.d
+ D src/ui.dbg.d
+ D src/ui.dbg.o
+ M src/ui.o
+ M src/util.d
+ D src/util.dbg.d
+ D src/util.dbg.o
+ M src/util.o
+?? build/
+=== END ===
+=== diff src/ main.cpp README.md ===
+diff --git a/src/ai.d b/src/ai.d
+index fdc6c83..a07f384 100644
+--- a/src/ai.d
++++ b/src/ai.d
+@@ -1,5 +1,6 @@
+-src/ai.o: src/ai.cpp src/ai.h src/config.h src/mailbox.h src/textbuf.h \
+- src/aihttp.h src/util.h
++src/ai.o: src/ai.cpp build/macos-compat.h src/ai.h src/config.h \
++  src/mailbox.h src/textbuf.h src/aihttp.h src/util.h
++build/macos-compat.h:
+ src/ai.h:
+ src/config.h:
+ src/mailbox.h:
+diff --git a/src/ai.dbg.d b/src/ai.dbg.d
+deleted file mode 100644
+index 31ebeab..0000000
+--- a/src/ai.dbg.d
++++ /dev/null
+@@ -1,8 +0,0 @@
+-src/ai.dbg.o: src/ai.cpp src/ai.h src/config.h src/mailbox.h \
+- src/textbuf.h src/aihttp.h src/util.h
+-src/ai.h:
+-src/config.h:
+-src/mailbox.h:
+-src/textbuf.h:
+-src/aihttp.h:
+-src/util.h:
+diff --git a/src/ai.dbg.o b/src/ai.dbg.o
+deleted file mode 100644
+index 69b1b2b..0000000
+Binary files a/src/ai.dbg.o and /dev/null differ
+diff --git a/src/ai.o b/src/ai.o
+index 6fa52b9..31883f6 100644
+Binary files a/src/ai.o and b/src/ai.o differ
+diff --git a/src/aihttp.d b/src/aihttp.d
+index ac6cf64..72a68c0 100644
+--- a/src/aihttp.d
++++ b/src/aihttp.d
+@@ -1,4 +1,6 @@
+-src/aihttp.o: src/aihttp.cpp src/aihttp.h src/json.h src/util.h
++src/aihttp.o: src/aihttp.cpp build/macos-compat.h src/aihttp.h src/json.h \
++  src/util.h
++build/macos-compat.h:
+ src/aihttp.h:
+ src/json.h:
+ src/util.h:
+diff --git a/src/aihttp.dbg.d b/src/aihttp.dbg.d
+deleted file mode 100644
+index b70a663..0000000
+--- a/src/aihttp.dbg.d
++++ /dev/null
+@@ -1,4 +0,0 @@
+-src/aihttp.dbg.o: src/aihttp.cpp src/aihttp.h src/json.h src/util.h
+-src/aihttp.h:
+-src/json.h:
+-src/util.h:
+diff --git a/src/aihttp.dbg.o b/src/aihttp.dbg.o
+deleted file mode 100644
+index a9f7c73..0000000
+Binary files a/src/aihttp.dbg.o and /dev/null differ
+diff --git a/src/aihttp.o b/src/aihttp.o
+index c85318a..3a70307 100644
+Binary files a/src/aihttp.o and b/src/aihttp.o differ
+diff --git a/src/app.d b/src/app.d
+index 600044f..ee8c894 100644
+--- a/src/app.d
++++ b/src/app.d
+@@ -1,6 +1,8 @@
+-src/app.o: src/app.cpp src/app.h src/ai.h src/config.h src/mailbox.h \
+- src/textbuf.h src/aihttp.h src/build.h src/proc.h src/editor.h \
+- src/highlight.h src/keys.h src/panel.h src/ui.h src/util.h
++src/app.o: src/app.cpp build/macos-compat.h src/app.h src/ai.h \
++  src/config.h src/mailbox.h src/textbuf.h src/aihttp.h src/build.h \
++  src/proc.h src/editor.h src/highlight.h src/keys.h src/panel.h \
++  src/ui.h src/util.h
++build/macos-compat.h:
+ src/app.h:
+ src/ai.h:
+ src/config.h:
+diff --git a/src/app.dbg.d b/src/app.dbg.d
+deleted file mode 100644
+index 1eb804b..0000000
+--- a/src/app.dbg.d
++++ /dev/null
+@@ -1,17 +0,0 @@
+-src/app.dbg.o: src/app.cpp src/app.h src/ai.h src/config.h src/mailbox.h \
+- src/textbuf.h src/aihttp.h src/build.h src/proc.h src/editor.h \
+- src/highlight.h src/keys.h src/panel.h src/ui.h src/util.h
+-src/app.h:
+-src/ai.h:
+-src/config.h:
+-src/mailbox.h:
+-src/textbuf.h:
+-src/aihttp.h:
+-src/build.h:
+-src/proc.h:
+-src/editor.h:
+-src/highlight.h:
+-src/keys.h:
+-src/panel.h:
+-src/ui.h:
+-src/util.h:
+diff --git a/src/app.dbg.o b/src/app.dbg.o
+deleted file mode 100644
+index d86269f..0000000
+Binary files a/src/app.dbg.o and /dev/null differ
+diff --git a/src/app.o b/src/app.o
+index 3a8ed44..f6db5d8 100644
+Binary files a/src/app.o and b/src/app.o differ
+diff --git a/src/build.d b/src/build.d
+index 4d38f1a..2dc5aab 100644
+--- a/src/build.d
++++ b/src/build.d
+@@ -1,5 +1,6 @@
+-src/build.o: src/build.cpp src/build.h src/config.h src/proc.h \
+- src/mailbox.h src/textbuf.h src/util.h
++src/build.o: src/build.cpp build/macos-compat.h src/build.h src/config.h \
++  src/proc.h src/mailbox.h src/textbuf.h src/util.h
++build/macos-compat.h:
+ src/build.h:
+ src/config.h:
+ src/proc.h:
+diff --git a/src/build.dbg.d b/src/build.dbg.d
+deleted file mode 100644
+index f3f0305..0000000
+--- a/src/build.dbg.d
++++ /dev/null
+@@ -1,8 +0,0 @@
+-src/build.dbg.o: src/build.cpp src/build.h src/config.h src/proc.h \
+- src/mailbox.h src/textbuf.h src/util.h
+-src/build.h:
+-src/config.h:
+-src/proc.h:
+-src/mailbox.h:
+-src/textbuf.h:
+-src/util.h:
+diff --git a/src/build.dbg.o b/src/build.dbg.o
+deleted file mode 100644
+index 9374af7..0000000
+Binary files a/src/build.dbg.o and /dev/null differ
+diff --git a/src/build.o b/src/build.o
+index ea0d23f..646c5df 100644
+Binary files a/src/build.o and b/src/build.o differ
+diff --git a/src/config.d b/src/config.d
+index 3277e3d..ceb007f 100644
+--- a/src/config.d
++++ b/src/config.d
+@@ -1,4 +1,6 @@
+-src/config.o: src/config.cpp src/config.h src/json.h src/util.h
++src/config.o: src/config.cpp build/macos-compat.h src/config.h src/json.h \
++  src/util.h
++build/macos-compat.h:
+ src/config.h:
+ src/json.h:
+ src/util.h:
+diff --git a/src/config.dbg.d b/src/config.dbg.d
+deleted file mode 100644
+index a587fbd..0000000
+--- a/src/config.dbg.d
++++ /dev/null
+@@ -1,4 +0,0 @@
+-src/config.dbg.o: src/config.cpp src/config.h src/json.h src/util.h
+-src/config.h:
+-src/json.h:
+-src/util.h:
+diff --git a/src/config.dbg.o b/src/config.dbg.o
+deleted file mode 100644
+index 1d27ff5..0000000
+Binary files a/src/config.dbg.o and /dev/null differ
+diff --git a/src/config.o b/src/config.o
+index f64aef3..0b934cc 100644
+Binary files a/src/config.o and b/src/config.o differ
+diff --git a/src/editor.d b/src/editor.d
+index 109cd4c..07fc56e 100644
+--- a/src/editor.d
++++ b/src/editor.d
+@@ -1,5 +1,6 @@
+-src/editor.o: src/editor.cpp src/editor.h src/ai.h src/config.h \
+- src/mailbox.h src/textbuf.h src/highlight.h src/util.h
++src/editor.o: src/editor.cpp build/macos-compat.h src/editor.h src/ai.h \
++  src/config.h src/mailbox.h src/textbuf.h src/highlight.h src/util.h
++build/macos-compat.h:
+ src/editor.h:
+ src/ai.h:
+ src/config.h:
+diff --git a/src/editor.dbg.d b/src/editor.dbg.d
+deleted file mode 100644
+index c36a068..0000000
+--- a/src/editor.dbg.d
++++ /dev/null
+@@ -1,9 +0,0 @@
+-src/editor.dbg.o: src/editor.cpp src/editor.h src/ai.h src/config.h \
+- src/mailbox.h src/textbuf.h src/highlight.h src/util.h
+-src/editor.h:
+-src/ai.h:
+-src/config.h:
+-src/mailbox.h:
+-src/textbuf.h:
+-src/highlight.h:
+-src/util.h:
+diff --git a/src/editor.dbg.o b/src/editor.dbg.o
+deleted file mode 100644
+index fb9c762..0000000
+Binary files a/src/editor.dbg.o and /dev/null differ
+diff --git a/src/editor.o b/src/editor.o
+index f9383a5..550ad85 100644
+Binary files a/src/editor.o and b/src/editor.o differ
+diff --git a/src/highlight.d b/src/highlight.d
+index 5b0d5f3..1e4a5c9 100644
+--- a/src/highlight.d
++++ b/src/highlight.d
+@@ -1,3 +1,5 @@
+-src/highlight.o: src/highlight.cpp src/highlight.h src/textbuf.h
++src/highlight.o: src/highlight.cpp build/macos-compat.h src/highlight.h \
++  src/textbuf.h
++build/macos-compat.h:
+ src/highlight.h:
+ src/textbuf.h:
+diff --git a/src/highlight.dbg.d b/src/highlight.dbg.d
+deleted file mode 100644
+index c137d76..0000000
+--- a/src/highlight.dbg.d
++++ /dev/null
+@@ -1,3 +0,0 @@
+-src/highlight.dbg.o: src/highlight.cpp src/highlight.h src/textbuf.h
+-src/highlight.h:
+-src/textbuf.h:
+diff --git a/src/highlight.dbg.o b/src/highlight.dbg.o
+deleted file mode 100644
+index 2182d5c..0000000
+Binary files a/src/highlight.dbg.o and /dev/null differ
+diff --git a/src/highlight.o b/src/highlight.o
+index 2014e0e..a3222c8 100644
+Binary files a/src/highlight.o and b/src/highlight.o differ
+diff --git a/src/json.d b/src/json.d
+index cb4e7f0..75963d8 100644
+--- a/src/json.d
++++ b/src/json.d
+@@ -1,2 +1,3 @@
+-src/json.o: src/json.cpp src/json.h
++src/json.o: src/json.cpp build/macos-compat.h src/json.h
++build/macos-compat.h:
+ src/json.h:
+diff --git a/src/json.dbg.d b/src/json.dbg.d
+deleted file mode 100644
+index 047203b..0000000
+--- a/src/json.dbg.d
++++ /dev/null
+@@ -1,2 +0,0 @@
+-src/json.dbg.o: src/json.cpp src/json.h
+-src/json.h:
+diff --git a/src/json.dbg.o b/src/json.dbg.o
+deleted file mode 100644
+index 33795b1..0000000
+Binary files a/src/json.dbg.o and /dev/null differ
+diff --git a/src/json.o b/src/json.o
+index a78b142..0e58a20 100644
+Binary files a/src/json.o and b/src/json.o differ
+diff --git a/src/keys.d b/src/keys.d
+index 6d38686..38cff59 100644
+--- a/src/keys.d
++++ b/src/keys.d
+@@ -1,3 +1,4 @@
+-src/keys.o: src/keys.cpp src/keys.h src/util.h
++src/keys.o: src/keys.cpp build/macos-compat.h src/keys.h src/util.h
++build/macos-compat.h:
+ src/keys.h:
+ src/util.h:
+diff --git a/src/keys.dbg.d b/src/keys.dbg.d
+deleted file mode 100644
+index 728b7a6..0000000
+--- a/src/keys.dbg.d
++++ /dev/null
+@@ -1,3 +0,0 @@
+-src/keys.dbg.o: src/keys.cpp src/keys.h src/util.h
+-src/keys.h:
+-src/util.h:
+diff --git a/src/keys.dbg.o b/src/keys.dbg.o
+deleted file mode 100644
+index c5216e4..0000000
+Binary files a/src/keys.dbg.o and /dev/null differ
+diff --git a/src/keys.o b/src/keys.o
+index 12d6fc0..f8f1412 100644
+Binary files a/src/keys.o and b/src/keys.o differ
+diff --git a/src/main.d b/src/main.d
+index 71a73c4..f221d37 100644
+--- a/src/main.d
++++ b/src/main.d
+@@ -1,6 +1,8 @@
+-src/main.o: src/main.cpp src/aihttp.h src/app.h src/ai.h src/config.h \
+- src/mailbox.h src/textbuf.h src/build.h src/proc.h src/editor.h \
+- src/highlight.h src/keys.h src/panel.h src/ui.h src/util.h
++src/main.o: src/main.cpp build/macos-compat.h src/aihttp.h src/app.h \
++  src/ai.h src/config.h src/mailbox.h src/textbuf.h src/build.h \
++  src/proc.h src/editor.h src/highlight.h src/keys.h src/panel.h \
++  src/ui.h src/util.h
++build/macos-compat.h:
+ src/aihttp.h:
+ src/app.h:
+ src/ai.h:
+diff --git a/src/main.dbg.d b/src/main.dbg.d
+deleted file mode 100644
+index 152438d..0000000
+--- a/src/main.dbg.d
++++ /dev/null
+@@ -1,17 +0,0 @@
+-src/main.dbg.o: src/main.cpp src/aihttp.h src/app.h src/ai.h src/config.h \
+- src/mailbox.h src/textbuf.h src/build.h src/proc.h src/editor.h \
+- src/highlight.h src/keys.h src/panel.h src/ui.h src/util.h
+-src/aihttp.h:
+-src/app.h:
+-src/ai.h:
+-src/config.h:
+-src/mailbox.h:
+-src/textbuf.h:
+-src/build.h:
+-src/proc.h:
+-src/editor.h:
+-src/highlight.h:
+-src/keys.h:
+-src/panel.h:
+-src/ui.h:
+-src/util.h:
+diff --git a/src/main.dbg.o b/src/main.dbg.o
+deleted file mode 100644
+index 08449f0..0000000
+Binary files a/src/main.dbg.o and /dev/null differ
+diff --git a/src/main.o b/src/main.o
+index 8229023..653ef13 100644
+Binary files a/src/main.o and b/src/main.o differ
+diff --git a/src/panel.d b/src/panel.d
+index 8f42ebd..dac37d8 100644
+--- a/src/panel.d
++++ b/src/panel.d
+@@ -1,4 +1,6 @@
+-src/panel.o: src/panel.cpp src/panel.h src/textbuf.h src/util.h
++src/panel.o: src/panel.cpp build/macos-compat.h src/panel.h src/textbuf.h \
++  src/util.h
++build/macos-compat.h:
+ src/panel.h:
+ src/textbuf.h:
+ src/util.h:
+diff --git a/src/panel.dbg.d b/src/panel.dbg.d
+deleted file mode 100644
+index d17efad..0000000
+--- a/src/panel.dbg.d
++++ /dev/null
+@@ -1,4 +0,0 @@
+-src/panel.dbg.o: src/panel.cpp src/panel.h src/textbuf.h src/util.h
+-src/panel.h:
+-src/textbuf.h:
+-src/util.h:
+diff --git a/src/panel.dbg.o b/src/panel.dbg.o
+deleted file mode 100644
+index 2538777..0000000
+Binary files a/src/panel.dbg.o and /dev/null differ
+diff --git a/src/panel.o b/src/panel.o
+index 834b3fa..1478865 100644
+Binary files a/src/panel.o and b/src/panel.o differ
+diff --git a/src/proc.d b/src/proc.d
+index 5e155dd..5e66a7d 100644
+--- a/src/proc.d
++++ b/src/proc.d
+@@ -1,5 +1,6 @@
+-src/proc.o: src/proc.cpp src/proc.h src/mailbox.h src/ai.h src/config.h \
+- src/textbuf.h
++src/proc.o: src/proc.cpp build/macos-compat.h src/proc.h src/mailbox.h \
++  src/ai.h src/config.h src/textbuf.h
++build/macos-compat.h:
+ src/proc.h:
+ src/mailbox.h:
+ src/ai.h:
+diff --git a/src/proc.dbg.d b/src/proc.dbg.d
+deleted file mode 100644
+index 74ef118..0000000
+--- a/src/proc.dbg.d
++++ /dev/null
+@@ -1,7 +0,0 @@
+-src/proc.dbg.o: src/proc.cpp src/proc.h src/mailbox.h src/ai.h \
+- src/config.h src/textbuf.h
+-src/proc.h:
+-src/mailbox.h:
+-src/ai.h:
+-src/config.h:
+-src/textbuf.h:
+diff --git a/src/proc.dbg.o b/src/proc.dbg.o
+deleted file mode 100644
+index 826167b..0000000
+Binary files a/src/proc.dbg.o and /dev/null differ
+diff --git a/src/proc.o b/src/proc.o
+index d024f84..7d660fd 100644
+Binary files a/src/proc.o and b/src/proc.o differ
+diff --git a/src/textbuf.d b/src/textbuf.d
+index 04dadc6..dd21782 100644
+--- a/src/textbuf.d
++++ b/src/textbuf.d
+@@ -1,2 +1,3 @@
+-src/textbuf.o: src/textbuf.cpp src/textbuf.h
++src/textbuf.o: src/textbuf.cpp build/macos-compat.h src/textbuf.h
++build/macos-compat.h:
+ src/textbuf.h:
+diff --git a/src/textbuf.dbg.d b/src/textbuf.dbg.d
+deleted file mode 100644
+index 3d51aed..0000000
+--- a/src/textbuf.dbg.d
++++ /dev/null
+@@ -1,2 +0,0 @@
+-src/textbuf.dbg.o: src/textbuf.cpp src/textbuf.h
+-src/textbuf.h:
+diff --git a/src/textbuf.dbg.o b/src/textbuf.dbg.o
+deleted file mode 100644
+index 00dbb2f..0000000
+Binary files a/src/textbuf.dbg.o and /dev/null differ
+diff --git a/src/textbuf.o b/src/textbuf.o
+index 364157c..dd0fe8f 100644
+Binary files a/src/textbuf.o and b/src/textbuf.o differ
+diff --git a/src/ui.d b/src/ui.d
+index 8e3802f..49a9b72 100644
+--- a/src/ui.d
++++ b/src/ui.d
+@@ -1,6 +1,8 @@
+-src/ui.o: src/ui.cpp src/ai.h src/config.h src/mailbox.h src/textbuf.h \
+- src/app.h src/aihttp.h src/build.h src/proc.h src/editor.h \
+- src/highlight.h src/keys.h src/panel.h src/ui.h src/util.h
++src/ui.o: src/ui.cpp build/macos-compat.h src/ai.h src/config.h \
++  src/mailbox.h src/textbuf.h src/app.h src/aihttp.h src/build.h \
++  src/proc.h src/editor.h src/highlight.h src/keys.h src/panel.h \
++  src/ui.h src/util.h
++build/macos-compat.h:
+ src/ai.h:
+ src/config.h:
+ src/mailbox.h:
+diff --git a/src/ui.dbg.d b/src/ui.dbg.d
+deleted file mode 100644
+index befac0d..0000000
+--- a/src/ui.dbg.d
++++ /dev/null
+@@ -1,17 +0,0 @@
+-src/ui.dbg.o: src/ui.cpp src/ai.h src/config.h src/mailbox.h \
+- src/textbuf.h src/app.h src/aihttp.h src/build.h src/proc.h src/editor.h \
+- src/highlight.h src/keys.h src/panel.h src/ui.h src/util.h
+-src/ai.h:
+-src/config.h:
+-src/mailbox.h:
+-src/textbuf.h:
+-src/app.h:
+-src/aihttp.h:
+-src/build.h:
+-src/proc.h:
+-src/editor.h:
+-src/highlight.h:
+-src/keys.h:
+-src/panel.h:
+-src/ui.h:
+-src/util.h:
+diff --git a/src/ui.dbg.o b/src/ui.dbg.o
+deleted file mode 100644
+index 95763ee..0000000
+Binary files a/src/ui.dbg.o and /dev/null differ
+diff --git a/src/ui.o b/src/ui.o
+index bb5a017..b601f47 100644
+Binary files a/src/ui.o and b/src/ui.o differ
+diff --git a/src/util.d b/src/util.d
+index 09b6bae..c13a19f 100644
+--- a/src/util.d
++++ b/src/util.d
+@@ -1,2 +1,3 @@
+-src/util.o: src/util.cpp src/util.h
++src/util.o: src/util.cpp build/macos-compat.h src/util.h
++build/macos-compat.h:
+ src/util.h:
+diff --git a/src/util.dbg.d b/src/util.dbg.d
+deleted file mode 100644
+index ced88a6..0000000
+--- a/src/util.dbg.d
++++ /dev/null
+@@ -1,2 +0,0 @@
+-src/util.dbg.o: src/util.cpp src/util.h
+-src/util.h:
+diff --git a/src/util.dbg.o b/src/util.dbg.o
+deleted file mode 100644
+index bbd6783..0000000
+Binary files a/src/util.dbg.o and /dev/null differ
+diff --git a/src/util.o b/src/util.o
+index 31799a4..79219d2 100644
+Binary files a/src/util.o and b/src/util.o differ
+(above line empty => no source diff)

@@ -1,0 +1,151 @@
+cppide  94272  cwd  DIR  1,17     416  119502879  /Users/hechenyu/explore/test-ide/cppide
+cppide  94272  txt  REG  1,17  486472  119551597  /Users/hechenyu/explore/test-ide/cppide/cppide
+
+$ stat -f 'dev=%d inode=%i size=%z'
+repo cppide : dev=16777233 inode=119551597 size=486472   <-- 运行中的就是这个
+/tmp 副本   : dev=16777233 inode=119545500 size=486472
+```
+
+inode 不同,**运行的是仓库二进制**。
+
+### C3. 截图:失败(两种方式都失败)
+
+```
+$ screencapture -x /Users/hechenyu/explore/test-ide/.flower/artifacts/cppide-ui.png
+could not create image from display
+EXIT=1
+
+$ screencapture -x -o -l 227030 /Users/hechenyu/explore/test-ide/.flower/artifacts/cppide-ui.png
+could not create image from window
+EXIT=1
+
+$ ls .flower/artifacts/*.png
+(eval):1: no matches found     # 文件未生成
+```
+
+**没有生成任何 PNG。** 与上一轮同因:**屏幕录制(Screen Recording)TCC 未授权**,整屏与指定窗口两种捕获都被系统拒绝。
+**未编造看图结果。**
+
+### C4. 备用通道取证 —— AppleScript 读回窗口文本
+
+`osascript -e 'tell application "Terminal" to get contents of tab 1 of window id 227030'`(OSA_WINID_EXIT=0)
+还原出的界面**原样**如下:
+
+```
+   1 // main.cpp —— 进程入口
+   2 //
+   3 // 启动顺序(architecture.md §10,顺序不能错):
+   4 //   setlocale(LC_ALL,"")            必须早于 initscr(否则中文宽度全按 1 算
+   5 //   signal(SIGPIPE, SIG_IGN)        libcurl 与 runProcess 都需要
+   6 //   装 endwin 安全网                 atexit + std::set_terminate + 致命信
+   7 //   解析 argv
+   8 //   ConfigLoader::load
+   9 //   HttpChat::globalInit()          必须在任何线程启动之前
+  10 //   构造 App(内部 Ui::init,再按需启动 AiService 线程)
+  11 //   run()
+  12 //   App 析构 -> AiService/Runner 析构(close + join,绝不 detach)-> Ui 析构
+─[编译]─[运行]─[AI*]─[输入]─────────────────────────────────────────────────────
+cppide 就绪 · 练习模式 · Ctrl-T 切模式 · Ctrl-B 编译 · Ctrl-R 运行 · F1 帮助
+配置:未找到配置文件 /Users/hechenyu/.config/cppide/config.json:已使用默认设置,AI
+功能已关闭。
+配置:可执行 `cppide --print-config > /Users/hechenyu/.config/cppide/config.json`
+生成示例配置,再把 api_key 填进去。
+配置:AI 未配置:请在 /Users/hechenyu/.config/cppide/config.json 里填写
+api_key,或设置环境变量 CPPIDE_API_KEY。编辑、编译、运行功能均不受影响。
+配置:未配置 model,请按 DeepSeek 官方文档填写模型名。在此之前 AI
+功能显示为"未配置"且不会发出任何请求;编辑、语法高亮、编译、运行均不受影响。
+
+ 练习模式  │ main.cpp │ 1:1 │ C++ │ AI 未配置                             F1帮助
+```
+
+这是一份**完整渲染**的 TUI:左侧行号栏 + `src/main.cpp` 正文、中部 `─[编译]─[运行]─[AI*]─[输入]─` 面板标签栏、消息区、底部状态栏(模式 / 文件名 / 光标 1:1 / 语言 C++ / AI 状态 / F1帮助)。
+中文与全角字符正常显示(证明 `_XOPEN_SOURCE_EXTENDED` 宽字符路径生效)。
+
+### C5. 进程存活
+
+| 检查点 | 实际时刻 | 距启动 | PID | `ps` ELAPSED |
+|--------|----------|--------|-----|--------------|
+| 第 1 次 | 16:09:05 | +41s | **94272** | 00:40 |
+| 第 2 次 | 16:09:35 | +71s | **94272** | 01:10 |
+
+```
+PID_COMPARE: T5=[94272] T35=[94272]
+```
+
+**两次 PID 一致(94272),进程持续存活。**
+
+> 偏差如实说明:取证脚本在启动后 36 秒才开始跑(中间在跑 `git diff` 等命令),所以"第 1 次"实际落在 T+41s 而非 T+5s,"第 2 次"落在 T+71s 而非 T+35s。两次都**晚于**要求的时刻,存活性要求满足且更严格,但**没有 T+5s 这个精确时刻的数据点**。
+
+第 2 次读回的窗口文本与第 1 次**逐字相同**,界面稳定未崩溃、未回落到 shell 提示符。
+
+### C6. 监听端口
+
+```
+$ lsof -nP -iTCP -sTCP:LISTEN | grep -i cppide
+LSOF_GREP_EXIT=1
+```
+
+**无输出**(grep 退出码 1 = 无匹配),符合预期:cppide 是纯终端 TUI,不监听任何端口。
+
+---
+
+## D. 重启验证
+
+### D1. 杀进程
+
+```
+$ pgrep -fl cppide
+94272 ./cppide src/main.cpp
+
+$ pkill -f 'cppide src/main.cpp'
+PKILL_EXIT=0
+
+$ pgrep -fl cppide
+PGREP_EXIT=1        # 无输出,确认已全部退出
+CONFIRMED: no cppide process remains
+```
+
+### D2. 全新 shell 里重启(16:10:11)
+
+```
+$ osascript -e 'tell application "Terminal" to do script "cd /Users/hechenyu/explore/test-ide/cppide && ./cppide src/main.cpp"'
+tab 1 of window id 227032
+OSASCRIPT_EXIT=0
+```
+
+`do script` 每次都开一个**全新 Terminal 窗口 + 全新 shell**(新 window id 227032,与首次的 227030 不同)。
+
+结果:
+
+```
+NEW_PID=[96040]  (old PID was 94272)
+  PID  PPID ELAPSED COMMAND
+96040 95738   00:14 ./cppide src/main.cpp
+
+cppide  96040  cwd  DIR  1,17     416  119502879  /Users/hechenyu/explore/test-ide/cppide
+cppide  96040  txt  REG  1,17  486472  119551597  /Users/hechenyu/explore/test-ide/cppide/cppide
+```
+
+新 PID **96040**(旧 94272),仍是**仓库二进制**(inode 119551597)。
+
+窗口文本读回(window id 227032)与首次启动**逐字一致** —— 行号栏 + main.cpp 正文 + `─[编译]─[运行]─[AI*]─[输入]─` 面板栏 + 4 条配置提示 + 底部 ` 练习模式 │ main.cpp │ 1:1 │ C++ │ AI 未配置    F1帮助`。**界面重新渲染成功。**
+
+重启后 `lsof -nP -iTCP -sTCP:LISTEN | grep -i cppide` 仍为空(exit 1)。
+
+### D3. 重启命令的精确文本
+
+```
+cd /Users/hechenyu/explore/test-ide/cppide && ./cppide src/main.cpp
+```
+
+(在真实 Terminal 窗口里执行;本次通过
+`osascript -e 'tell application "Terminal" to do script "cd /Users/hechenyu/explore/test-ide/cppide && ./cppide src/main.cpp"'` 送进新窗口)
+
+---
+
+## E. 收尾核对
+
+### E1. `git status --porcelain` 完整输出(64 条)
+
+```
+ M Makefile

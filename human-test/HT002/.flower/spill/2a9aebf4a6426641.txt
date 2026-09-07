@@ -1,0 +1,66 @@
+=== http-v2 files newer than session start, with sizes ===
+-rw-r--r--  1 hechenyu  staff  10719 Sep  7 15:47 /Users/hechenyu/Library/Caches/pip/http-v2/9/f/9/3/3/9f93306d7b672475999e1ccb003ed535876b07060341d71f2c054af0.body
+-rw-r--r--  1 hechenyu  staff  1898 Sep  7 15:47 /Users/hechenyu/Library/Caches/pip/http-v2/9/f/9/3/3/9f93306d7b672475999e1ccb003ed535876b07060341d71f2c054af0
+-rw-r--r--  1 hechenyu  staff  1230 Sep  7 15:47 /Users/hechenyu/Library/Caches/pip/http-v2/6/1/5/b/0/615b08aebbaa5d20f400dfea7f60d0f6c45747743e659221f4baf8da
+-rw-r--r--  1 hechenyu  staff  331669 Sep  7 15:47 /Users/hechenyu/Library/Caches/pip/http-v2/6/1/5/b/0/615b08aebbaa5d20f400dfea7f60d0f6c45747743e659221f4baf8da.body
+-rw-r--r--  1 hechenyu  staff  3593 Sep  7 15:47 /Users/hechenyu/Library/Caches/pip/http-v2/6/9/3/6/4/69364e1f22ce1d516283f4365d3d5498c61512aa95360fc91ddc930e.body
+-rw-r--r--  1 hechenyu  staff  1897 Sep  7 15:47 /Users/hechenyu/Library/Caches/pip/http-v2/6/9/3/6/4/69364e1f22ce1d516283f4365d3d5498c61512aa95360fc91ddc930e
+-rw-r--r--  1 hechenyu  staff  3010 Sep  7 15:47 /Users/hechenyu/Library/Caches/pip/http-v2/6/c/9/5/4/6c95407d545905643787918ec519e28ebec2701fd643453e7e96ec19.body
+-rw-r--r--  1 hechenyu  staff  1243 Sep  7 15:47 /Users/hechenyu/Library/Caches/pip/http-v2/6/c/9/5/4/6c95407d545905643787918ec519e28ebec2701fd643453e7e96ec19
+-rw-r--r--  1 hechenyu  staff  31627 Sep  7 15:47 /Users/hechenyu/Library/Caches/pip/http-v2/c/5/0/5/7/c5057fa7536329745804a39cd35d4ecac496ee06b7019919261aaa59.body
+-rw-r--r--  1 hechenyu  staff  1199 Sep  7 15:47 /Users/hechenyu/Library/Caches/pip/http-v2/c/5/0/5/7/c5057fa7536329745804a39cd35d4ecac496ee06b7019919261aaa59
+-rw-r--r--  1 hechenyu  staff  1293 Sep  7 15:47 /Users/hechenyu/Library/Caches/pip/http-v2/a/3/e/2/8/a3e287aa6aa278fe0055342c6cc99b47ea71d1e066f4e6dbd0cbed6e
+-rw-r--r--  1 hechenyu  staff  43299 Sep  7 15:47 /Users/hechenyu/Library/Caches/pip/http-v2/a/3/e/2/8/a3e287aa6aa278fe0055342c6cc99b47ea71d1e066f4e6dbd0cbed6e.body
+-rw-r--r--  1 hechenyu  staff  1798 Sep  7 15:47 /Users/hechenyu/Library/Caches/pip/http-v2/a/1/9/5/3/a19537d3cf37c122db841d6fe4cd322bc10d1a558bb00d146b85cb9a
+
+=== try to extract URLs/names from those cache entries ===
+--- /Users/hechenyu/Library/Caches/pip/http-v2/c/5/0/5/7/c5057fa7536329745804a39cd35d4ecac496ee06b7019919261aaa59.body
+--- /Users/hechenyu/Library/Caches/pip/http-v2/c/5/0/5/7/c5057fa7536329745804a39cd35d4ecac496ee06b7019919261aaa59
+x-pypi-file-python-version
+x-pypi-file-version
+x-pypi-file-package-type
+x-pypi-file-project
+--- /Users/hechenyu/Library/Caches/pip/http-v2/9/f/9/3/3/9f93306d7b672475999e1ccb003ed535876b07060341d71f2c054af0.body
+--- /Users/hechenyu/Library/Caches/pip/http-v2/9/f/9/3/3/9f93306d7b672475999e1ccb003ed535876b07060341d71f2c054af0
+x-pypi-last-serial
+X-PyPI-Last-Serial
+#application/vnd.pypi.simple.v1+json
+bapplication/vnd.pypi.simple.v1+json, application/vnd.pypi.simple.v1+html; q=0.1, text/html; q=0.01
+--- /Users/hechenyu/Library/Caches/pip/http-v2/a/1/9/5/3/a19537d3cf37c122db841d6fe4cd322bc10d1a558bb00d146b85cb9a
+x-pypi-last-serial
+X-PyPI-Last-Serial
+#application/vnd.pypi.simple.v1+json
+bapplication/vnd.pypi.simple.v1+json, application/vnd.pypi.simple.v1+html; q=0.1, text/html; q=0.01
+--- /Users/hechenyu/Library/Caches/pip/http-v2/a/3/e/2/8/a3e287aa6aa278fe0055342c6cc99b47ea71d1e066f4e6dbd0cbed6e
+x-pypi-file-python-version
+x-pypi-file-version
+x-pypi-file-package-type
+x-pypi-file-project
+--- /Users/hechenyu/Library/Caches/pip/http-v2/a/3/e/2/8/a3e287aa6aa278fe0055342c6cc99b47ea71d1e066f4e6dbd0cbed6e.body
+Name: wcwidth
+|pypi_downloads| |codecov| |license|
+The stable version of this package is maintained on pypi, install or upgrade, using pip::
+Corrections may be automatically applied depending on the detected or given terminal software name
+    SoftwareVersion(name='VTE', version='7600')
+    >>> wcwidth.width('\u2630', term_program=sw_ver.name)
+recognized names:
+- `ainame/swift-displaywidth`_: Swift
+--- /Users/hechenyu/Library/Caches/pip/http-v2/6/c/9/5/4/6c95407d545905643787918ec519e28ebec2701fd643453e7e96ec19.body
+Name: pyte
+--- /Users/hechenyu/Library/Caches/pip/http-v2/6/c/9/5/4/6c95407d545905643787918ec519e28ebec2701fd643453e7e96ec19
+x-pypi-file-python-version
+x-pypi-file-version
+x-pypi-file-package-type
+x-pypi-file-project
+--- /Users/hechenyu/Library/Caches/pip/http-v2/6/1/5/b/0/615b08aebbaa5d20f400dfea7f60d0f6c45747743e659221f4baf8da
+x-pypi-file-python-version
+x-pypi-file-version
+x-pypi-file-package-type
+x-pypi-file-project
+--- /Users/hechenyu/Library/Caches/pip/http-v2/6/1/5/b/0/615b08aebbaa5d20f400dfea7f60d0f6c45747743e659221f4baf8da.body
+--- /Users/hechenyu/Library/Caches/pip/http-v2/6/9/3/6/4/69364e1f22ce1d516283f4365d3d5498c61512aa95360fc91ddc930e.body
+--- /Users/hechenyu/Library/Caches/pip/http-v2/6/9/3/6/4/69364e1f22ce1d516283f4365d3d5498c61512aa95360fc91ddc930e
+x-pypi-last-serial
+X-PyPI-Last-Serial
+#application/vnd.pypi.simple.v1+json
+bapplication/vnd.pypi.simple.v1+json, application/vnd.pypi.simple.v1+html; q=0.1, text/html; q=0.01

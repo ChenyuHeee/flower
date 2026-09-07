@@ -1,0 +1,45 @@
+diff --git a/Makefile b/Makefile
+index 2633c72..85062dc 100644
+--- a/Makefile
++++ b/Makefile
+@@ -31,7 +31,10 @@ ifeq ($(UNAME_S),Darwin)
+   LDLIBS += -lncurses -lcurl -lpthread
+   # 若 macOS 自带的 ncurses 头不肯给出宽字符原型(get_wch / add_wch / cchar_t 未声明),
+   # 打开下面这行;Debian 的 ncursesw 头默认已 NCURSES_WIDECHAR=1,不需要它。
+-  # CPPFLAGS += -D_XOPEN_SOURCE_EXTENDED
++  CPPFLAGS += -D_XOPEN_SOURCE_EXTENDED
++  # macOS 兼容垫片(由本 Makefile 生成到 build/,不入库):规则见下方。
++  MACSHIM   := build/macos-compat.h
++  CPPFLAGS += -include $(MACSHIM) -include unistd.h
+ else
+   # Linux:宽字符符号(add_wch/get_wch)只在 ncursesw 里,必须链 -lncursesw
+   LDLIBS += -lncursesw -lcurl -lpthread
+@@ -58,10 +61,18 @@ SYNFLAGS := $(filter-out -MMD -MP,$(CXXFLAGS))
+ 
+ all: $(BIN)
+ 
++# Apple SDK 的 /usr/include/signal.h 在函数原型之后又把 sigemptyset 等定义成函数式宏
++# (仅被 #ifndef _ANSI_SOURCE 守卫),于是 `::sigemptyset(&s)` 展开成 `::(*(&s)=0,0)`。
++# 这里生成一个只做 #undef 的垫片头,用 -include 强制前置。
++$(MACSHIM):
++	@mkdir -p $(dir $@)
++	@printf '#include <signal.h>\n#undef sigemptyset\n#undef sigfillset\n#undef sigaddset\n#undef sigdelset\n#undef sigismember\n' > $@
++
++
+ $(BIN): $(OBJ)
+ 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+ 
+-%.o: %.cpp
++%.o: %.cpp $(MACSHIM)
+ 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
+ 
+ # Wave 1 的验收门:每个头文件必须自给自足。
+@@ -92,6 +103,7 @@ install: $(BIN)
+ 	install -m 0755 $(BIN) $(DESTDIR)$(PREFIX)/bin/$(BIN)
+ 
+ clean:
++	rm -rf build
+ 	rm -f $(OBJ) $(DEP) $(BIN) $(DBGOBJ) $(DBGDEP) $(DBGBIN)
+ 
+ -include $(DEP)
+base commit: d23d6367c02b4153c9f7d661f333dbd83153e8fe

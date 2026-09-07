@@ -1,0 +1,209 @@
+# cppide
+
+一个从零实现的、跑在终端里的 **C/C++ 单文件代码编辑器**:自带语法高亮、一键编译运行、
+以及基于 DeepSeek API 的 AI 辅助(「练习模式」只给中文思路,「写代码模式」给灰色 ghost 补全)。
+为 ICPC / 算法竞赛训练场景做的,不依赖 vim / neovim / VSCode。
+
+## 边界(先看这一段,省得白试)
+
+- **只服务 C / C++**。**只接受 C/C++ 扩展名**,其它类型在启动时就被拒绝。
+  `.c` = C;`.C` `.cpp` `.cc` `.cxx` `.c++` `.h` `.hpp` `.hh` `.hxx` `.h++` `.hp` = C++。
+  除 `.c`(C)与 `.C`(C++)这一对之外,扩展名**大小写不敏感**(`.CPP` / `.Hpp` 都认)。
+  不做其他语言。
+- **只面向 macOS 终端**(Terminal.app / iTerm2)。不做 GUI、不做网页版、不做 Windows 适配。
+  Linux 上能编能跑(开发就是在 Linux 容器里做的),但不是交付目标。
+- **只编译当前打开的那一个文件**。没有工程、没有 CMake / Makefile 驱动、没有多文件链接。
+- 没有 LSP、没有跨文件索引、没有重构、没有调试器集成、没有 Git 集成。
+- 不做 OJ 对接、不做自动提交、不做题库。
+- 不代买 / 不代配 API key。key 要你自己去 DeepSeek 官方控制台申请。
+
+---
+
+## 1. 编译本编辑器
+
+### 1.1 macOS(交付目标平台)
+
+依赖全部是系统自带的:Command Line Tools 里的 `clang++`、系统 `ncurses`(自带的就是宽字符版)、
+系统 `libcurl`。
+
+```sh
+xcode-select --install        # 如果还没装过 Command Line Tools
+cd /path/to/cppide
+make                          # 产物:./cppide
+./cppide --doctor             # 先自查一遍环境
+./cppide main.cpp             # 开始用
+```
+
+`make` 会走 Makefile 里的 `Darwin` 分支:链 `-lncurses -lcurl -lpthread`,
+并且如果 `brew --prefix ncurses` 存在就优先用 Homebrew 的头和库。
+
+> **诚实声明**:本项目的全部自动化验证(`make`、`make tests`、`make check-headers`、
+> `--doctor`、pty 冒烟)都是在 **Debian aarch64 容器**里跑完的。**macOS 上未经真机验证。**
+> 首次在 mac 上 `make` 若报错,请直接跳到 [§9 故障排查](#9-故障排查) 的
+> 「macOS 首次编译报错」一节 —— 已知的两个候选原因(宽字符原型、`KEY_S*` 键码)都在那里,
+> 各有一行现成的修法。
+
+### 1.2 Linux(开发 / 验证环境)
+
+```sh
+sudo apt-get install build-essential libncursesw5-dev libcurl4-openssl-dev
+# Debian trixie 上包名亦可写作 libncurses-dev + libcurl4-gnutls-dev
+make
+```
+
+Linux 分支链的是 **`-lncursesw`**(不是 `-lncurses`)—— 宽字符符号 `get_wch` / `add_wch`
+只在 `ncursesw` 里,链错了中文会乱码或直接链接失败。
+
+### 1.3 其它 make 目标
+
+| 命令 | 作用 |
+|---|---|
+| `make` | 编译出 `./cppide`(15 个 `.cpp` → 15 个 `.o` → 链接) |
+| `make tests` | 编译并逐个运行 `tests/test_*.cpp`,任一失败即停 |
+| `make check-headers` | 验收门:对每个 `src/*.h` 生成一个只 `#include` 它的 TU 做 `-fsyntax-only`,证明每个头自给自足(15 个头) |
+| `make debug` | 用 `-O0 -g -fsanitize=address,undefined` 编出**独立**的 `./cppide-debug`(目标文件是 `src/*.dbg.o`)。不依赖 `clean`、不动 release 的 `./cppide`,所以 `make debug -j4` 安全,也不会打挂正在跑的验收 |
+| `make clean` | 删掉 `.o` / `.d` / `cppide` 与 debug 的 `*.dbg.o` / `cppide-debug` |
+| `make install` | `install -m 0755 cppide $(PREFIX)/bin/`,`PREFIX` 默认 `/usr/local` |
+
+---
+
+## 2. 配置文件
+
+### 2.1 放在哪(路径优先级,从高到低)
+
+1. 命令行 `--config <PATH>`
+2. 环境变量 `CPPIDE_CONFIG`
+3. `$XDG_CONFIG_HOME/cppide/config.json`
+4. `~/.config/cppide/config.json` ← **推荐**
+
+`./cppide --doctor` 会把「查找路径 / 文件存在 / 实际加载自」三行打出来,不用猜。
+
+### 2.2 怎么创建
+
+```sh
+mkdir -p ~/.config/cppide
+./cppide --print-config > ~/.config/cppide/config.json
+$EDITOR ~/.config/cppide/config.json      # 把 api_key 填进去
+```
+
+仓库里的 `config.sample.json` 就是 `--print-config` 的原样输出,可以直接抄。
+以 `_` 开头的键(`_comment`、`_comment_env`、…)是**注释**,加载时会被忽略,可以随手删掉。
+所有字段都可以省略,省略即用内置默认值。
+
+> `api_key` 一填,这个文件就变成机密文件了。**不要提交进版本库。**
+
+### 2.3 字段全表
+
+字段名与默认值以 `src/config.h` 为准。「范围」列是 `src/config.cpp` 里的 clamp 区间:
+超范围不会报错,会被夹到边界并留一条 warning。
+
+#### AI
+
+| 字段 | 类型 | 默认值 | 范围 | 说明 |
+|---|---|---|---|---|
+| `api_key` | string | `""` | — | DeepSeek API key。**留空 = 关闭 AI**,编辑 / 高亮 / 编译 / 运行完全不受影响。需自行到 DeepSeek 官方控制台申请 |
+| `base_url` | string | `"https://api.deepseek.com"` | 非空 | API 根地址。填空串会回落默认值并留 warning |
+| `chat_path` | string | `"/v1/chat/completions"` | 非空 | chat completions 的路径。与 `base_url` 拼成完整 URL(重复/缺失斜杠会被处理) |
+| `model` | string | `""`(**空**) | — | **模型名只从配置文件读,代码里没有任何内置模型名。** 请按 DeepSeek 官方文档上的模型名填写。**留空 = AI 未完整配置**:状态栏显示 `AI 未配置`,一次请求都不会发出,AI 面板给出中文提示;编辑 / 高亮 / 编译 / 运行完全不受影响。本项目不对任何模型名的有效性或能力做断言;填错时你会看到 HTTP 400/404 的中文错误提示 |
+| `stream` | bool | `true` | — | `true` 走 SSE 流式(边生成边显示);`false` 走一次性响应 |
+| `ghost_delay_ms` | int | `500` | 0–60000 | 写代码模式:光标停顿多久后自动请求补全 |
+| `ghost_min_interval_ms` | int | `1200` | 0–600000 | 两次**自动**请求的最小间隔(省钱)。手动 `Ctrl-A` 无视此限制。另外**同一次停顿只会自动请求一次** —— 手离开键盘不动不会持续计费,要再来一次就再打字/移动光标,或按 `Ctrl-A` |
+| `ghost_max_lines` | int | `8` | 1–200 | ghost text 最多显示几行 |
+| `ai_connect_timeout_ms` | int | `5000` | 100–300000 | 建连超时 |
+| `ai_timeout_ms` | int | `20000` | 100–600000 | 单次请求总超时 |
+| `ai_max_context_lines` | int | `400` | 1–100000 | 发给模型的上下文**行数**上限;超了就截取光标附近若干行,中间填 `/* ...省略... */` |
+| `max_tokens_code` | int | `256` | 1–32768 | 写代码模式的 `max_tokens` |
+| `max_tokens_practice` | int | `512` | 1–32768 | 练习模式的 `max_tokens` |
+| `temperature_code` | double | `0.2` | 0.0–2.0 | 写代码模式的 temperature |
+| `temperature_practice` | double | `0.7` | 0.0–2.0 | 练习模式的 temperature |
+| `prompt_code` | string | `""` | — | 写代码模式的 system prompt。**空 = 用内置默认** |
+| `prompt_practice` | string | `""` | — | 练习模式的 system prompt。空 = 用内置默认。注意:「不要输出可运行代码」这条后缀由程序**强制追加**,覆盖不掉 |
+
+#### 编译
+
+| 字段 | 类型 | 默认值 | 范围 | 说明 |
+|---|---|---|---|---|
+| `cc` | string | `"cc"` | 非空 | 编 `.c` 用的编译器 |
+| `cxx` | string | `"c++"` | 非空 | 编 `.cpp` / `.cc` / `.cxx` / `.c++` / `.C` 用的编译器;`.h` / `.hpp` / `.hh` / `.hxx` / `.h++` / `.hp` 的语法检查也用它 |
+| `cflags` | string[] | `["-O2","-std=c11","-Wall"]` | — | `.c` 的编译参数。写 `[]` 表示不加任何参数 |
+| `cxxflags` | string[] | `["-O2","-std=c++17","-Wall"]` | — | `.cpp` 系列 + 头文件语法检查的编译参数 |
+| `compile_timeout_ms` | int | `30000` | 1000–600000 | 编译超时。超时后子进程连同它的整个进程组被杀 |
+
+#### 运行
+
+| 字段 | 类型 | 默认值 | 范围 | 说明 |
+|---|---|---|---|---|
+| `run_timeout_ms` | int | `5000` | 100–600000 | 运行超时(死循环兜底) |
+| `run_output_limit` | size | `1048576`(1 MiB) | 1024–268435456 | 单次运行捕获的 stdout / stderr 字节上限(各自)。超了截断并在末行标注 |
+| `stdin_file` | string | `""` | — | 非空则从这个文件喂 stdin(每次运行时重读),【输入】面板只作展示;**空 = 用【输入】面板里编辑的内容** |
+
+#### 编辑器
+
+| 字段 | 类型 | 默认值 | 范围 | 说明 |
+|---|---|---|---|---|
+| `tab_width` | int | `4` | 1–16 | Tab 的显示宽度 / 缩进宽度 |
+| `expand_tab` | bool | `true` | — | `true` 时 Tab 插入空格 |
+| `auto_indent` | bool | `true` | — | Enter 时沿用上一行缩进 |
+| `show_line_numbers` | bool | `true` | — | 是否显示行号槽(练习模式下这个槽会被染色当模式指示器,关掉就少一重提示) |
+| `panel_height` | int | `10` | 3–100 | 底部面板区高度(行)。运行时可用 `Alt-=` / `Alt--` 临时调 |
+| `tick_ms` | int | `60` | 10–1000 | 主循环空转周期(毫秒),影响 ghost 触发与状态刷新的精度 |
+
+一共 **31 个可配字段**。`config.h` 里另有 `source_path` 和 `warnings` 两个成员,
+那是程序内部的元信息(实际加载自哪 / 解析告警),不是配置项,写进 JSON 会被当成未知键。
+
+### 2.4 环境变量覆盖
+
+取值优先级:**内置默认 < 配置文件 < 环境变量**。
+
+| 环境变量 | 覆盖谁 |
+|---|---|
+| `CPPIDE_API_KEY` | `api_key` |
+| `DEEPSEEK_API_KEY` | `api_key`(`CPPIDE_API_KEY` 优先) |
+| `CPPIDE_MODEL` | `model` |
+| `CPPIDE_BASE_URL` | `base_url` |
+| `CPPIDE_CONFIG` | 配置文件路径(被 `--config` 压过) |
+
+临时换一把 key / 换个模型试一下,不用改文件:
+
+```sh
+CPPIDE_MODEL=某个官方模型名 DEEPSEEK_API_KEY=... ./cppide main.cpp
+```
+
+### 2.5 配错了会怎样(降级契约)
+
+**`cppide` 不会因为配置有问题而崩溃或拒绝启动**,一条都不会:
+
+| 情况 | 行为 |
+|---|---|
+| 配置文件不存在 | 全部用默认值 + 一条中文 warning,AI 关闭,编辑/编译/运行照常 |
+| JSON 语法错误 | 全部用默认值 + **带行号列号**的 warning,不中断启动 |
+| 单个字段类型不对(如 `"tab_width": "four"`) | 该字段用默认值 + 一条 warning,**其余字段照常生效** |
+| 字段值越界(如 `"panel_height": 999`) | 夹到边界 + 一条 warning |
+| 未知的顶层键 | 一条 warning(以 `_` 开头的键视为注释,不告警) |
+| `api_key` 为空 | AI 关闭:worker 线程**根本不创建** |
+
+所有 warning 会在启动时进【AI】面板(`Alt-3` 看),`--doctor` 里也会全部列出。
+
+---
+
+## 3. 不配 key(或不配 model)也完全能用
+
+这是硬性设计,不是「凑合能用」:
+
+- **照常可用**:打开 / 编辑 / 保存文件、C/C++ 语法高亮、撤销重做、查找、跳行、
+  `Ctrl-B` 编译、`Ctrl-N`/`Ctrl-P` 跳编译错误、`Ctrl-R` 运行、喂 stdin、看 stdout / 退出码。
+- **唯一的差别**:状态栏 AI 状态格显示「未配置」;按 `Ctrl-A` 或切模式时,
+  【AI】面板里出现一条中文提示,告诉你去哪个文件填 `api_key` 或 `model`。不弹窗、不阻塞、不崩。
+- **`model` 留空与不填 key 等价**:`model` 没有内置默认值(代码里不写死任何模型名),
+  空着就按「未完整配置」处理 —— 同样不起 worker、不发请求、只给提示。
+- 技术上:`api_key` 或 `model` 为空时 `AiService::enabled()` 返回 false,worker 线程
+  **不会被创建**,所以不存在「没配好却在后台发请求」这种事。
+
+---
+
+## 4. 快捷键全表
+
+以 `src/keys.cpp` 的绑定表为准(下表已逐条核对)。程序内按 **`F1`** 可以看同一份表的浮层版本,
+`./cppide --help` 也会把它整份打出来。
+
+### 4.1 移动
