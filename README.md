@@ -12,17 +12,24 @@ curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
 
 然后进任意项目目录 `flower` 就能用。第一次会问你要 API key / 网关，配一次
 存到 `~/.config/flower/.env` 处处生效；本机装了 Claude Code 的话直接借它的 token。
-从源码跑见 [快速上手](docs/start.md)。**文档站：https://chenyuheee.github.io/flower/**
+从源码跑见 [快速上手](docs/zh/getting-started/quickstart.md)。
 
 > 快速迭代期,pip 装的 flower 会**自动更新到最新版**(后台查、下次跑生效、不阻塞、失败静默)。
 > 从源码(git)跑的不受影响。要关:`export FLOWER_NO_UPDATE=1`。
 
-> **文档在 [`docs/`](docs/)**：[快速上手](docs/start.md) ·
-> [设计 workflow](docs/workflow.md) · [前置确认](docs/clarify.md) ·
-> [目标看守](docs/goal.md) · [接续](docs/continuity.md) · [换代](docs/handoff.md) ·
-> [换交互层](docs/interaction.md) · [容器](docker/README.md) ·
-> **真实运行案例：[HT001](docs/case-ht001.md) · [HT002](docs/case-ht002.md)**。
-> 本页讲的是**为什么是这些设计** ���— 实测数据、对照实验和踩过的坑。
+> **完整文档站：https://chenyuheee.github.io/flower/** —— 安装、指南、参考、案例都在那儿，共九种语言。
+> 源文件在 [`docs/`](docs/)：[安装](docs/zh/getting-started/install.md) ·
+> [快速上手](docs/zh/getting-started/quickstart.md) ·
+> [核心概念](docs/zh/getting-started/concepts.md) ·
+> [设计 workflow](docs/zh/guide/workflow.md) · [上下文经济学](docs/zh/guide/context.md) ·
+> [前置确认](docs/zh/guide/clarify.md) · [目标看守](docs/zh/guide/goal.md) ·
+> [接续](docs/zh/guide/continuity.md) · [换代](docs/zh/guide/handoff.md) ·
+> [换交互层](docs/zh/guide/interaction.md) · [容器](docker/README.md)。
+> 参考：[命令行](docs/zh/reference/cli.md) · [Python API](docs/zh/reference/api.md) ·
+> [配置](docs/zh/reference/config.md) · [部署与扩展](docs/zh/reference/deploy.md) ·
+> [常见问题](docs/zh/reference/faq.md) · [术语表](docs/zh/reference/glossary.md)。
+> **真实运行案例：[HT001](docs/zh/cases/ht001.md) · [HT002](docs/zh/cases/ht002.md)**。
+> 本页讲的是**为什么是这些设计** —— 实测数据、对照实验和踩过的坑。
 
 ---
 
@@ -37,7 +44,7 @@ curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
 | 断网不丢活 | DNS+TCP 探针挂着等，恢复后 resume 续跑；错误消息不进上下文 | `core/resilience.py`、`stores/prune.py` |
 | 脱离 claude CLI | Python wheel 内置原生二进制 `claude_agent_sdk/_bundled/claude`，依赖只有 anyio/jsonschema/mcp/sniffio。无 Node、无需装 Claude Code | `pyproject.toml` |
 | 可移植 | `setting_sources=[]` 隔离宿主 `~/.claude/` 与项目 `.claude/`；领域能力走 `plugins=[local]` 随仓库走；凭证走 `.env` 自带 | `core/agent.py`、`core/env.py` |
-| 定制交互 | SDK 消息流被压平成稳定的 `Event`，UI ��不 import 任何 SDK 类型 | `core/events.py` |
+| 定制交互 | SDK 消息流被压平成稳定的 `Event`，UI 层不 import 任何 SDK 类型 | `core/events.py` |
 | 长程 workflow | 可插拔 `SessionStore`（SQLite 落盘，`flush="eager"`）+ resume / fork / resume_at + `max_budget_usd` | `stores/sqlite.py`、`core/runtime.py` |
 
 ### 关键一条：叠加，不替换
@@ -82,7 +89,7 @@ rt = Runtime(workspace="repo", workbench=True)
 
 subagent 默认 `model="inherit"` —— 干活的那个不该降级。省的是上下文，不是模型档次。
 
-**第二层：工作台（治“每次重写”）。** `.flower/` 下三个目录随工作区走��
+**第二层：工作台（治“每次重写”）。** 命令行下工作台落在 `.flower/`，三个目录随工作区走。
 
 | 目录 | 放什么 | 解决什么 |
 |---|---|---|
@@ -90,13 +97,16 @@ subagent 默认 `model="inherit"` —— 干活的那个不该降级。省的是
 | `artifacts/` | 日志、数据、报告、diff | 对话里只出现路径和结论 |
 | `notes/` | 决策与理由 | 被压缩、被重启、换机器，结论都还在 |
 
+`.flower/` 是**命令行那条路**的位置。Python 里 `Runtime(workbench=True)` 落在
+`<run_dir>/workbench`（`runtime.py:151`）—— 仓库外，为的是隔离，理由见后面那一节。
+
 `INDEX.md` 自动生成，并且**注入进主 agent 的 system prompt** —— 它开局就知道有哪些
 现成脚本，不用先花一次工具调用去发现。脚本首行写 `# desc: 一句话` 就会出现在索引里。
 
 压缩清得掉上下文，清不掉磁盘，也清不掉 system prompt 里的索引。这一层就是靠这个差别工作的。
 
 **第三层：当场剪枝。** PostToolUse hook 在工具结果**进模型之前**看一眼：超过 4000 字符的，
-落盘到 `.flower/spill/`，上下文里换成一行路径 + 开头 400 字符。内容没丢，只是不常驻。
+落盘到工作台下的 `spill/`（命令行下即 `.flower/spill/`），上下文里换成一行路径 + 开头 400 字符。内容没丢，只是不常驻。
 
 读落盘件本身**不再落盘** —— 否则那行提示里的“需要全文用 Read 读它”是句空话：
 读回来又超阈值、又被落盘、又给它一行指针，无限循环。实测撞到过
@@ -208,7 +218,7 @@ system prompt，它才知道需求文件在哪、才能在派活时把路径转�
 session 级的那一段（实测 $0.2461，`tests/prelude_live.py`）——
 所以工作台位置必须由协调者在任务书里说，这是唯一通道。自己另拼一个路径的话，
 确认书写进一处、注入的索引扫的是另一处，那条承诺会**静默失效**。
-见 [docs/start.md](docs/start.md#工作台要挂在-workflow-上不能只拼路径)。
+见 [设计 workflow](docs/zh/guide/workflow.md#工作台要挂在-workflow-上)。
 
 澄清的问答是**现场，不是决策** —— 和 subagent 的试错同一性质。所以它跑在**独立 session**
 里，唯一交付物是磁盘上一份**冻结的四段确认书**：
@@ -229,14 +239,14 @@ session 级的那一段（实测 $0.2461，`tests/prelude_live.py`）——
 ② 框架只解析那四段 —— 贴了也进不了下游。
 
 ①**必须是 hook，不能只靠 `allowed_tools`** —— 后者是免审批清单不是排他白名单，
-实测模型能调用不在里面的工具（见 [docs/case-ht002.md](docs/case-ht002.md) 第三节）。提问额度同理：`max_asks` 在通道里数，
+实测模型能调用不在里面的工具（见 [HT002](docs/zh/cases/ht002.md) 第四节）。提问额度同理：`max_asks` 在通道里数，
 超了工具直接回绝，不写在提示词里。
 
 没人看着的时候也得能跑下去：`timeout_s` 到了返回的是**一句说明，不是报错**
 （"无人应答，自己判断，把假设写进「未知与假设」"）；`timeout_s=0` 就是全自动模式，
 所有提问立刻落空，不假装等。
 
-细节、API 与试用方法见 **[docs/clarify.md](docs/clarify.md)**。
+细节、API 与试用方法见 **[前置确认](docs/zh/guide/clarify.md)**。
 
 ### 再问一次：做完了没有
 
@@ -262,7 +272,7 @@ session 级的那一段（实测 $0.2461，`tests/prelude_live.py`）——
 已经干完的活还在。`runs/manifest.json` 里看得出区别：`干活#round2` 是打回续跑，
 `干活#retry1` 是重头重试。
 
-细节见 **[docs/goal.md](docs/goal.md)**。
+细节见 **[目标看守](docs/zh/guide/goal.md)**。
 
 ---
 
@@ -384,7 +394,7 @@ flower/
   workflow/clarify.py clarify_step               ← 前置确认的一行接线
   workflow/goal.py    goal_step + with_goal      ← 目标看守：判定 + 打回接着做
   workflow/starter.py starter_flow               ← `flower` 的三步默认流程
-  cli.py              参考 UI，~200 行，可整体替换
+  cli.py              参考 UI，1264 行；换 UI 只换 `class Render`（197 行）
   docs/               给读者的文档（开源入口）
   examples/trial.py   模板 —— 照它写自己的 flows.py（直接试用不需要它）
   plugin/             领域能力包（skills/agents/hooks/mcp），随仓库走
@@ -437,7 +447,7 @@ flower run flows.py:main -w /path/to/repo -v
 每一步的 `session_id` 都写进 `runs/manifest.json`，所以**事后任意一步都能续跑或分叉**。
 
 完整字段参考（`when` / `gate` / `reduce` / `retries` / `on_fail`、`ctx` 的形状、
-两层重试的分工）见 **[docs/workflow.md](docs/workflow.md)**。
+两层重试的分工）见 **[设计 workflow](docs/zh/guide/workflow.md)**。
 
 ### 查库
 
@@ -457,7 +467,13 @@ await rt.store.list_subkeys({"project_key": ..., "session_id": sid})   # 子 age
 
 ## 换掉交互层
 
-`cli.py` 的 `render(ev)` 是唯一的出口。要做 Web/TUI/HTTP，把它换成你的写法：
+整份 `cli.py` 是 1264 行 —— 但**要换的不是整份**。真正的替换点是里面的
+`class Render`（`cli.py:382-578`，197 行），它的 docstring 自己写着“Event → 终端。
+换 UI 就是换这一个类。”其余一千多行是打断、旁路顾问、收件箱回执、信号抢救这些
+**终端特有**的配套，换成 Web / HTTP 时本来就不需要照搬。
+
+所以“约 200 行、可整体替换”这个说法成立 —— 前提是它指 `Render`，不是指 `cli.py`。
+要做 Web/TUI/HTTP，把出口换成你的写法：
 
 ```python
 async for ... :   # Runtime.run 的 on_event 回调
@@ -465,21 +481,34 @@ async for ... :   # Runtime.run 的 on_event 回调
 ```
 
 框架层不知道 UI 存在。`Event` 的全部 kind、跨线程回答提问、Web/全自动的写法，
-见 **[docs/interaction.md](docs/interaction.md)**。
+见 **[换交互层](docs/zh/guide/interaction.md)**。
 
 ---
 
 ## 凭证：可移植的代价
 
-`setting_sources=[]` 意味着 flower **不读** `~/.claude/settings.json` —— 连里面的 `env` 块也不读。
-你的 `ANTHROPIC_BASE_URL` 和 token 就在那里，所以必须由 flower 自己带：
+`setting_sources=[]` 意味着 flower **不接管**宿主机的 Claude Code 配置 —— 项目 `.claude/`、
+`~/.claude/` 里的 agent、hook、MCP 一律不读。所以领域能力得随仓库走（见 plugin），
+凭证也得自己带：
 
 ```bash
 cp .env.example .env   # 填 token；.env 已被 gitignore
 ```
 
-优先级：进程环境 > 仓库根 `.env`。`flower -v` 启动时会打印生效端点（token 打码），
-避免连错网关还不自知。
+**但“不接管配置”不等于“不借凭证”。** 找 token 的顺序是（完整六级见
+**[配置参考](docs/zh/reference/config.md#凭证查找优先级)**）：
+
+    进程环境 > $FLOWER_ENV > $PWD/.env > ~/.config/flower/.env > 仓库根 .env
+    > ~/.claude/settings.json 的 env 块（最后回退，只取 9 个凭证键）
+
+最后那一条就是“本机装了 Claude Code 就不用再配一遍”的由来。借的是“去哪找 token”，
+不是接管那份配置，两件事不冲突。
+
+> **注意**：`env.py:192` 那句报错文案写着“flower 不读 ~/.claude/settings.json”，与代码相反
+> （[issue #13](https://github.com/ChenyuHeee/flower/issues/13)）。它只在回退也没找到 token
+> 时才出现，不影响能用的场景，但别被它误导。
+
+`flower -v` 启动时会打印生效端点（token 打码），避免连错网关还不自知。
 
 > 顺带：`~/.claude/settings.json` 里 token 是明文。那个文件若同步或提交过，建议换掉这个 token。
 
@@ -517,7 +546,7 @@ cp .env.example .env   # 填 token；.env 已被 gitignore
 | 被拒调用清理 | ✓ 活体：2 次被拒 → 摘 1 留 1，链未断，resume 正常且模型仍知道发生了什么 |
 | 摘除不破坏结构 | ✓ tool_use/tool_result 配对、同消息内不误伤、`toolUseResult` 副本清掉、链重接 |
 | 确认者必须被机制约束 | ✓ 反面实测（$0.8908 / 230s）：不受约束的确认者问两个问题就开写，被拦后把整份代码贴进回话 —— 拦写工具的 hook、只解析四段 |
-| **`allowed_tools` 不是排他白名单** | ✓ 实测三处：确认者用了不在白名单里的 WebFetch；设目标的 judge 跑了 11 次 Bash 而无 `can_run` 路径；$0.1 探针确认 `allowed_tools` 不是排他白名单 |
+| **`allowed_tools` 不是排他白名单** | ✓ 实测两处：设目标的 judge 跑了 11 次 Bash，而 `judge()` 默认 `can_run=False`、白名单里没有 Bash；$0.1 探针里 `allowed_tools=["Read"]` 的 agent 照样调得动 Write/Bash，被挡下的是 permission 层不是白名单 |
 | **上下文经济学（真实规模）** | ✓ 一次 10.4 小时的运行：subagent 承担 **97.7%** 轮次、**94.8%** 正文字符；1,893 次动手工具调用 vs 主线程 32 次（**59:1**）。早期压缩不再是主线 |
 | **长程的真实上限** | ✓ 主线程 70 轮从 28.7K 涨到 185.9K，斜率 2.2K/轮，全程未压缩，用掉 1M 窗口 18.6%。**外推约 440 轮撞墙** —— 这个数字以前只能猜 |
 | **缓存是长程经济性的支点** | ✓ 输入 299.4M token，**96.1% 命中缓存**。$171 能成立全靠它；任何重排上下文的优化都要先算缓存账 |
@@ -528,14 +557,14 @@ cp .env.example .env   # 填 token；.env 已被 gitignore
 仍未验证：
 
 - **前置确认 flow 的真实 API 端到端**。离线 52 项全绿（`tests/clarify.py`）、CLI 路径
-  离线跑通，但没跑过真实请求 —— 这一步有意留给使用者自己试，见 [docs/clarify.md](docs/clarify.md)。
+  离线跑通，但没跑过真实请求 —— 这一步有意留给使用者自己试，见 [前置确认](docs/zh/guide/clarify.md)。
 - **断网重试的端到端实测**。分类、探针、清理都单独验过，但“真断网 → 自动恢复 → 续跑完成”
   这一整条没跑通过 —— 掐网需要改 `/etc/hosts`（要 sudo）。`tests/resilience_live.py` 写好了，
   有 sudo 时可以直接跑。
 - **微压缩在 `DISABLE_AUTO_COMPACT=1` 下是否仍然工作**。这是**读二进制反汇编推断的，不是实测**。
   真要验证得填满 167k 上下文，很贵。
 - 压缩相关 beta 参数经该网关的透传、`PreCompact` hook、几十轮以上的超长会话。
-- **worktree 的收尾**：合并回 main、清理 worktree、从分支开 PR，目���都留给你的 workflow 自己做。
+- **worktree 的收尾**：合并回 main、清理 worktree、从分支开 PR，目前都留给你的 workflow 自己做。
   harness 只保证“改动落在各自的 worktree 里，agent 无改动时自动清理”。
 - **非 git 仓库**下的隔离：harness 支持配 `WorktreeCreate`/`WorktreeRemove` hook 走其它 VCS，
   flower 没有封装，也没测过。
