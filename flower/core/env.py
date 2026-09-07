@@ -112,6 +112,75 @@ def load_dotenv(path: str | Path | None = None, *, override: bool = False) -> di
     return loaded
 
 
+# 探针结论。**只有 "auth"/"config" 才该去重配** —— 网络不通时让人重配一个
+# 本来好好的 token 是帮倒忙,判不准时也一律放行(探针不该成为新的故障点)。
+PROBE_OK, PROBE_AUTH, PROBE_CONFIG, PROBE_NET = "ok", "auth", "config", "net"
+
+
+PROBE_MAX_TOKENS = 16
+"""探针的 max_tokens。**别设成 1** —— 实测那样反而更慢:强制思维链的模型
+连思考都放不下,服务端一路挣扎到 30 秒才返回;设 16 只要 3.6 秒。
+"越省越慢",这里省的那点钱不值得拿超时去换。"""
+
+
+def probe_credentials(timeout: float = 20.0) -> tuple[str, str]:
+    """真的打一次 API,确认这套凭证能用。返回 ``(结论, 说明)``。
+
+    为什么要探:``check_credentials`` 只看环境变量**存在没有**,
+    过期/写错/网关地址不对的 token 照样过关,然后跑到几分钟后才炸。
+    开跑前花一秒钟问一句,比让人白等强。
+
+    用 ``max_tokens=16`` 的最小请求(见 :data:`PROBE_MAX_TOKENS`),几乎不花钱。
+    走 stdlib,不引依赖。
+
+    **失败要分类**:
+      * ``auth``   —— 401/403/密钥无效 → 该重配
+      * ``config`` —— 404/模型不存在 → 网关地址或模型名不对,也该重配
+      * ``net``    —— 连不上/超时/5xx → **网络问题,不是凭证问题**,别让人瞎重配
+      * ``ok``     —— 通了;判不准的一律当 ok 放行(宁可跑起来再说)
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    tok = os.environ.get("ANTHROPIC_AUTH_TOKEN")
+    if not (key or tok):
+        return PROBE_AUTH, "没有凭证"
+
+    base = (os.environ.get("ANTHROPIC_BASE_URL") or "https://api.anthropic.com").rstrip("/")
+    model = (os.environ.get("ANTHROPIC_DEFAULT_HAIKU_MODEL")
+             or os.environ.get("ANTHROPIC_MODEL") or "claude-3-5-haiku-20241022")
+    body = _json.dumps({"model": model, "max_tokens": PROBE_MAX_TOKENS,
+                        "messages": [{"role": "user", "content": "hi"}]}).encode()
+    headers = {"content-type": "application/json", "anthropic-version": "2023-06-01"}
+    if key:
+        headers["x-api-key"] = key
+    else:
+        headers["authorization"] = f"Bearer {tok}"
+
+    req = urllib.request.Request(f"{base}/v1/messages", data=body,
+                                 headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return (PROBE_OK, "") if r.status < 400 else (PROBE_NET, f"HTTP {r.status}")
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8", "replace")[:200]
+        except Exception:                       # noqa: BLE001
+            pass
+        if e.code in (401, 403):
+            return PROBE_AUTH, f"HTTP {e.code} 认证被拒 {detail}"
+        if e.code == 404 or (e.code == 400 and "model" in detail.lower()):
+            return PROBE_CONFIG, f"HTTP {e.code} 网关地址或模型名不对 {detail}"
+        if e.code >= 500:
+            return PROBE_NET, f"HTTP {e.code} 服务端错误(不是你的凭证)"
+        return PROBE_OK, f"HTTP {e.code}(判不准,放行){detail[:80]}"
+    except Exception as e:                      # noqa: BLE001 —— 连不上/超时/DNS/TLS
+        return PROBE_NET, f"{type(e).__name__}: {e}"
+
+
 def check_credentials() -> str | None:
     """返回错误说明,或 None 表示可用。"""
     if not any(os.environ.get(k) for k in REQUIRED_ANY):

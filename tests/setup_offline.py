@@ -116,6 +116,49 @@ def main() -> int:
     finally:
         sys.stdin.isatty = real_tty
 
+    print("\n[4b] 探针:开跑前验凭证能不能用,但**失败要分类**")
+    import urllib.error, io as _io2
+
+    def fake_probe(exc=None, code=None, detail=b""):
+        """造一个假的 urlopen,验 probe_credentials 的分类。"""
+        def _open(req, timeout=None):
+            if exc is not None:
+                raise exc
+            raise urllib.error.HTTPError(req.full_url, code, "x", {}, _io2.BytesIO(detail))
+        return _open
+
+    import urllib.request as _ur
+    real_open = _ur.urlopen
+    os.environ["ANTHROPIC_AUTH_TOKEN"] = "tok"
+    try:
+        for code, detail, want, why in (
+            (401, b"", env.PROBE_AUTH, "401 → 凭证被拒,该重配"),
+            (403, b"", env.PROBE_AUTH, "403 → 同上"),
+            (404, b"", env.PROBE_CONFIG, "404 → 网关地址不对,该重配"),
+            (400, b'{"error":"model not found"}', env.PROBE_CONFIG, "400+model → 模型名不对"),
+            (500, b"", env.PROBE_NET, "5xx → **服务端问题,不是凭证**,别让人瞎重配"),
+            (429, b"", env.PROBE_OK, "429 限流等判不准的 → 放行(探针不该成为新故障点)"),
+        ):
+            _ur.urlopen = fake_probe(code=code, detail=detail)
+            got, _ = env.probe_credentials(timeout=1)
+            check(got == want, f"{why}(得到 {got})")
+        _ur.urlopen = fake_probe(exc=TimeoutError("timed out"))
+        got, _ = env.probe_credentials(timeout=1)
+        check(got == env.PROBE_NET, "超时/连不上 → net(网络问题,照常开跑)")
+    finally:
+        _ur.urlopen = real_open
+
+    check(env.PROBE_MAX_TOKENS > 1,
+          f"探针 max_tokens={env.PROBE_MAX_TOKENS} 不能是 1 —— "
+          "实测强制思维链的模型在 max_tokens=1 下要 30 秒才返回,16 只要 3.6 秒")
+
+    src_cli = Path("flower/cli.py").read_text(encoding="utf-8")
+    block = src_cli.split("def ensure_credentials", 1)[1][:1400]
+    check("PROBE_AUTH" in block and "PROBE_CONFIG" in block,
+          "只有 auth/config 触发重配")
+    check("PROBE_NET" in block and "照常开跑" in block,
+          "**net 不触发重配** —— 断网时不能让人重配一个好好的 token")
+
     print("\n[5] setup 是子命令;跑活入口会先 ensure_credentials")
     ap = cli.build_parser()
     check(ap.parse_args(["setup"]).fn.__name__ == "_run_setup_cmd", "flower setup 存在")

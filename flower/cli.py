@@ -25,7 +25,8 @@ import unicodedata
 from pathlib import Path
 
 from .core.agent import AgentSpec, HandoffPolicy
-from .core.env import check_credentials, describe, load_dotenv, user_env_path
+from .core.env import (PROBE_AUTH, PROBE_CONFIG, PROBE_NET, check_credentials,
+                       describe, load_dotenv, probe_credentials, user_env_path)
 from .core.events import Event
 from .core.roles import oracle
 from .core.runtime import Runtime
@@ -1171,14 +1172,38 @@ def run_setup(*, reason: str = "") -> bool:
     return True
 
 
-def ensure_credentials() -> None:
-    """跑活之前保证有凭证。缺了就当场问(交互),非交互就打印指引退出。"""
+def ensure_credentials(*, probe: bool = True) -> None:
+    """跑活之前保证凭证**存在且真的能用**。
+
+    两道:
+      1. 有没有 —— 缺了当场问(交互),非交互打印指引退出。
+      2. **能不能用** —— 真打一次 API。过期/写错/网关地址不对的 token
+         光看环境变量是查不出来的,不探的话要跑到几分钟后才炸。
+
+    探针失败**分类处理**,这是关键:只有认证被拒(auth)和配置不对(config)
+    才去重配;网络不通(net)属于环境问题,**不能让人重配一个本来好好的 token**,
+    照常往下跑,交给断网重试那一层。
+    """
     load_dotenv()
-    if check_credentials() is None:
+    if check_credentials() is not None:
+        if not run_setup(reason="第一次用?给一次凭证就行。"):
+            sys.exit(check_credentials())               # 非交互:打印指引
+    if not probe:
         return
-    if run_setup(reason="第一次用?给一次凭证就行。"):
+
+    for _ in range(2):                                  # 最多给一次重配机会
+        _say(f"{C['dim']}{G['status']} 验一下凭证…{C['off']}")
+        verdict, why = probe_credentials()
+        if verdict in (PROBE_AUTH, PROBE_CONFIG):
+            bad = "凭证被拒" if verdict == PROBE_AUTH else "网关地址或模型名不对"
+            _say(f"{C['ylw']}{G['warn']} {bad}:{why[:160]}{C['off']}")
+            if not run_setup(reason="重新配一下,配完立刻再验。"):
+                sys.exit(f"{bad},且无法交互配置。跑 `flower setup` 重配。")
+            continue                                    # 配完再验一遍
+        if verdict == PROBE_NET:
+            # **不是凭证的问题** —— 别让人瞎重配。往下跑,断网重试那层会处理。
+            _say(f"{C['dim']}  (探针没打通:{why[:80]} —— 当作网络问题,照常开跑){C['off']}")
         return
-    sys.exit(check_credentials())                       # 非交互:打印指引
 
 
 async def _run_setup_cmd(args) -> None:                 # `flower setup`
