@@ -115,6 +115,50 @@ def main():
     else:
         print("  ✓ 断线残渣摘除后链仍连通(错误在中间也不丢历史)")
 
+    # ---- 孤儿 tool_use(打断留下的:有调用没结果)必须补上 ----
+    # 不补的话 resume 每次都 400,坏历史不会自己消失。实测:中断过的真实 session
+    # 里确有这种孤儿。补而不删 —— 删要重接父子链,容易连累同条里正常的块。
+    from flower.stores.prune import heal_orphans
+    orphan_ents = [
+        {"uuid": "o1", "parentUuid": None, "type": "assistant",
+         "message": {"role": "assistant", "content": [
+             {"type": "text", "text": "跑两个命令"},
+             {"type": "tool_use", "id": "K1", "name": "Bash", "input": {}},
+             {"type": "tool_use", "id": "K2", "name": "Bash", "input": {}}]}},
+        {"uuid": "o2", "parentUuid": "o1", "type": "user", "message": {"role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": "K1", "content": "ok"}]}},
+        {"uuid": "o3", "parentUuid": "o2", "type": "user", "message": {"role": "user",
+            "content": [{"type": "text", "text": "接着做"}]}},   # K2 成了孤儿
+    ]
+    healed = heal_orphans(orphan_ents, "[打断了]")
+    used, res = [], set()
+    for e in healed:
+        for b in e["message"]["content"]:
+            if b.get("type") == "tool_use": used.append(b["id"])
+            if b.get("type") == "tool_result": res.add(b.get("tool_use_id"))
+    if [u for u in used if u not in res]:
+        print("  ✗ 孤儿没补齐"); ok = False
+    else:
+        print("  ✓ 孤儿 tool_use 补齐(K1 本有 + K2 补上),resume 不再 400")
+    heals = [e for e in healed if str(e["uuid"]).startswith("heal-")]
+    if not (len(heals) == 1 and heals[0]["parentUuid"] == "o1"
+            and not heals[0]["message"]["content"][0]["is_error"]):
+        print("  ✗ 补的结果位置/标记不对"); ok = False
+    else:
+        print("  ✓ 补在孤儿所在 assistant 之后,is_error=False(不当失败,只说没结果)")
+    # 无孤儿的对照组:两个 tool_use 都有结果 —— 一条都不该加
+    clean = [
+        {"uuid": "c1", "parentUuid": None, "type": "assistant",
+         "message": {"role": "assistant", "content": [
+             {"type": "tool_use", "id": "M1", "name": "Bash", "input": {}}]}},
+        {"uuid": "c2", "parentUuid": "c1", "type": "user", "message": {"role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": "M1", "content": "ok"}]}},
+    ]
+    if len(heal_orphans(clean, "x")) != 2:
+        print("  ✗ 无孤儿时误加"); ok = False
+    else:
+        print("  ✓ 没有孤儿时一条都不加")
+
     print("\n" + ("✓ 被拒调用清理通过" if ok else "✗ 未通过"))
     return 0 if ok else 1
 

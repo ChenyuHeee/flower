@@ -153,8 +153,8 @@ def main() -> int:
           "实测强制思维链的模型在 max_tokens=1 下要 30 秒才返回,16 只要 3.6 秒")
 
     src_cli = Path("flower/cli.py").read_text(encoding="utf-8")
-    block = src_cli.split("def ensure_credentials", 1)[1][:1400]
-    check("PROBE_AUTH" in block and "PROBE_CONFIG" in block,
+    block = src_cli.split("def ensure_credentials", 1)[1].split("\n    async def", 1)[0]
+    check("PROBE_AUTH" in block and "PROBE_CONFIG" in block and "run_setup" in block,
           "只有 auth/config 触发重配")
     check("PROBE_NET" in block and "照常开跑" in block,
           "**net 不触发重配** —— 断网时不能让人重配一个好好的 token")

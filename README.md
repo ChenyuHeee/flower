@@ -14,6 +14,9 @@ curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
 存到 `~/.config/flower/.env` 处处生效；本机装了 Claude Code 的话直接借它的 token。
 从源码跑见 [快速上手](docs/zh/getting-started/quickstart.md)。
 
+> 快速迭代期,pip 装的 flower 会**自动更新到最新版**(后台查、下次跑生效、不阻塞、失败静默)。
+> 从源码(git)跑的不受影响。要关:`export FLOWER_NO_UPDATE=1`。
+
 > **完整文档站：https://chenyuheee.github.io/flower/** —— 安装、指南、参考、案例都在那儿，共九种语言。
 > 源文件在 [`docs/`](docs/)：[安装](docs/zh/getting-started/install.md) ·
 > [快速上手](docs/zh/getting-started/quickstart.md) ·

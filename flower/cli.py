@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import codecs
 import collections
 import importlib
 import os
@@ -30,6 +31,7 @@ from .core.env import (PROBE_AUTH, PROBE_CONFIG, PROBE_NET, check_credentials,
 from .core.events import Event
 from .core.roles import oracle
 from .core.runtime import Runtime
+from .core.update import maybe_update
 from .workflow.starter import starter_flow, wake_state
 
 # 配色的规则:**色相表示"谁在说话",不是装饰**。
@@ -178,20 +180,28 @@ _TTY = _TtyGuard()
 # 提示符原来只在文字变化时打一次,之后每条事件输出都把它冲到屏幕上方 ——
 # 于是最后一行永远是 agent 的输出,用户根本看不到哪里能打字,只好 Ctrl+C。
 # 现在 _say 输出前擦掉它、输出后重画,让最后一行永远是 "> "。
-_PROMPT = {"text": ""}          # 空 = 当前没有输入提示符(比如非交互)
+_PROMPT = {"text": "", "buf": "", "pos": 0}
+"""``text`` 是提示符,``buf`` 是**你打了一半还没回车的字**。
+
+``buf`` 是这一层存在的理由:只擦掉再画提示符的话,你正在打的字会被一起擦掉 ——
+内容其实没丢(还在终端行缓冲里,回车照样发出去,实测确认过),但**你看不见它**,
+于是不敢确定、重打一遍。所以我们自己接管输入:每个字符收进 ``buf``,
+重绘时连 ``buf`` 一起画回去。"""
 _ERASE = "\r\x1b[K"             # 回到行首 + 清到行尾。最基础的两个光标操作,
                                 # 每个进度条都在用,比 alternate screen 安全得多。
 
 
 def set_prompt(text: str) -> None:
-    """挂/摘最下面那行输入提示符。``""`` = 摘掉。"""
+    """挂/摘最下面那行输入提示符。``""`` = 摘掉(``buf`` 一并清空)。"""
     _PROMPT["text"] = text or ""
+    if not text:
+        _PROMPT["buf"], _PROMPT["pos"] = "", 0
 
 
 def _draw_prompt() -> None:
-    """把提示符画在最下面(不换行,光标停在它后面等你打字)。"""
+    """把提示符**连同你打了一半的字**画在最下面,光标停在末尾。"""
     if _PROMPT["text"]:
-        sys.stdout.write(_PROMPT["text"])
+        sys.stdout.write(_PROMPT["text"] + _PROMPT["buf"])
         sys.stdout.flush()
 
 # flower 自己的颜色码。消毒时**只放行它**,别的转义序列(清屏、移光标、OSC)
@@ -305,6 +315,103 @@ def _say(text: str = "") -> None:
             sys.stdout.flush()
         except (OSError, ValueError):
             pass                        # 终端已经没了(SIGHUP 之后)—— 别因此抛
+
+
+class LineEditor:
+    """行编辑状态机 —— **纯逻辑,不碰终端**,所以能直接单测。
+
+    自己管缓冲的唯一理由:重绘时要能把"打了一半的字"画回来(见 :data:`_PROMPT`)。
+    顺带就得自己处理退格和方向键 —— 而这恰恰修掉了两个老毛病:
+
+      * **退格删半个中文**:行模式下终端按字节删,一个汉字要按三下还删出乱码。
+        这里 ``buf`` 是 str,删的就是一个字符。
+      * **方向键失灵**:转义序列整段吃掉并真的移光标,不是把 "[A" 插进输入
+        (第一版就是那样坏的)。
+
+    抽成类而不是留在闭包里,是因为**闭包只能靠 pty 端到端测**,而 pty 时序在
+    机器忙时不稳,测试会时好时坏 —— 会哭狼的测试比没有测试更糟。
+    """
+
+    NO_HISTORY = ("A", "B")      # ↑↓:没有历史记录,动了反而让人以为丢了东西
+
+    def __init__(self) -> None:
+        self.buf = ""
+        self.pos = 0
+        self._dec = codecs.getincrementaldecoder("utf-8")(errors="ignore")
+        self._esc: str | None = None      # 不为 None 表示正在收转义序列
+
+    def reset(self) -> None:
+        self.buf, self.pos = "", 0
+        self._dec.reset()
+        self._esc = None
+
+    def _put(self, text: str) -> None:
+        self.buf = self.buf[:self.pos] + text + self.buf[self.pos:]
+        self.pos += len(text)
+
+    def _move(self, d: int) -> None:
+        self.pos = max(0, min(len(self.buf), self.pos + d))
+
+    def _esc_done(self, seq: str) -> bool:
+        """处理一个转义序列;返回 True = 这段收完了。"""
+        if len(seq) == 1 and seq not in "[O":
+            return True                               # Alt+x 之类,整段丢掉
+        if (seq and seq[-1].isalpha()) or seq.endswith("~"):
+            key = seq[-1]
+            if key == "D":
+                self._move(-1)                        # ←
+            elif key == "C":
+                self._move(1)                         # →
+            elif key == "H" or seq == "[1~":
+                self.pos = 0                          # Home
+            elif key == "F" or seq == "[4~":
+                self.pos = len(self.buf)              # End
+            elif seq == "[3~":                        # Delete:向后删
+                self.buf = self.buf[:self.pos] + self.buf[self.pos + 1:]
+            return True
+        return len(seq) > 8                           # 兜底:太长就当收完,别卡死
+
+    def feed(self, data: bytes) -> str | None:
+        """喂一批字节。收满一行就返回那一行(不含换行),否则返回 ``None``。
+
+        ``b""`` (EOF) 返回 ``""``。
+        """
+        if not data:
+            return ""
+        for byte in data:
+            ch = bytes([byte])
+            if self._esc is not None:
+                self._esc += ch.decode("latin-1")
+                if self._esc_done(self._esc):
+                    self._esc = None
+                continue
+            if ch == b"\x1b":
+                self._esc = ""
+                continue
+            if ch in (b"\r", b"\n"):
+                out, self.buf, self.pos = self.buf, "", 0
+                self._dec.reset()
+                return out
+            if ch in (b"\x7f", b"\x08"):             # 退格:删光标前一个**字符**
+                if self.pos > 0:
+                    self.buf = self.buf[:self.pos - 1] + self.buf[self.pos:]
+                    self.pos -= 1
+            elif ch == b"\x15":                       # Ctrl+U:清空
+                self.buf, self.pos = "", 0
+            elif ch == b"\x01":                       # Ctrl+A:行首
+                self.pos = 0
+            elif ch == b"\x05":                       # Ctrl+E:行尾
+                self.pos = len(self.buf)
+            elif ch == b"\x04" and not self.buf:      # Ctrl+D 且空 → EOF
+                return ""
+            elif byte < 0x20:
+                continue                              # 别的控制字符:忽略
+            else:
+                # **增量解码**:os.read 可能把一个中文字从中间切开,
+                # 逐字节 decode 会解出乱码。解码器攒着,凑齐了才吐字符。
+                if got := self._dec.decode(ch):
+                    self._put(got)
+        return None
 
 
 def _tokens(text: str):
@@ -550,6 +657,8 @@ class Render:
             _say(f"  {C['dim']}{G['skip']} 已跳过{C['off']}")
 
     def _on_task(self, ev: Event) -> None:
+        if not (ev.text or "").strip():
+            return                      # SDK 的内部进度消息,没有正文 —— 不打
         self._enter(False)
         _say(f"{C['mag']}{_wrap(ev.text, '  ' + G['handoff'] + ' ', hang='    ')}{C['off']}")
 
@@ -678,6 +787,55 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
     """
     stop = threading.Event()
 
+    # ---- 逐字符读:自己管缓冲,才能在重绘时把"打了一半的字"画回来 ------
+    # 退化路径保留:拿不到 raw 模式(不是终端 / 没有 termios / 平台不支持)就
+    # 回到按行读。**输入是唯一入口,写坏了整个工具就没法用** —— 所以宁可退化。
+    def raw_mode():
+        try:
+            import termios, tty                                  # noqa: PLC0415
+        except ImportError:
+            return None
+        if not sys.stdin.isatty():
+            return None
+        try:
+            fd = sys.stdin.fileno()
+            saved = termios.tcgetattr(fd)
+            tty.setcbreak(fd)      # cbreak 而不是 raw:Ctrl+C 仍然产生 SIGINT,
+                                   # 打断功能(和它的 signal handler)照常工作
+            return (termios, fd, saved)
+        except Exception:                                        # noqa: BLE001
+            return None
+
+    _ed = LineEditor()
+
+    def read_char_line() -> str | None:
+        """从 stdin 收一行。真正的编辑逻辑在 :class:`LineEditor` 里。"""
+        try:
+            data = os.read(sys.stdin.fileno(), 1024)
+        except OSError:
+            return None
+        out = _ed.feed(data)
+        _PROMPT["buf"], _PROMPT["pos"] = _ed.buf, _ed.pos
+        if out is not None and out != "":
+            with _OUT, _TTY:
+                sys.stdout.write("\n")       # 你说过的话留在屏幕上
+                sys.stdout.flush()
+            return out
+        if out == "":
+            return ""
+        _redraw_input()
+        return None
+
+    def _redraw_input() -> None:
+        """重画提示符 + 缓冲,并把光标放回它该在的位置。"""
+        with _OUT, _TTY:
+            sys.stdout.write(_ERASE)
+            _draw_prompt()
+            back = _cols(_PROMPT["buf"][_PROMPT["pos"]:])
+            if back:
+                sys.stdout.write(f"\x1b[{back}D")    # 光标左移 N 列
+            sys.stdout.flush()
+
     def readable(timeout: float) -> bool:
         """stdin 上有没有一行在等着读。
 
@@ -690,14 +848,19 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
         except Exception:      # select 对某些流不适用(比如 Windows 的 stdin)
             return True        # 退化成阻塞读 —— 功能对,只是退出时要等一行
 
-    def loop() -> None:
-        shown = None
+    def loop(raw) -> None:
         try:
-            _loop_body()
+            _loop_body(bool(raw))
         finally:
             set_prompt("")                 # 无论怎么退出,都别留下提示符
+            if raw:                        # **一定要还原终端**,否则退出后
+                termios_mod, fd, saved = raw   # shell 不回显、行为诡异
+                try:
+                    termios_mod.tcsetattr(fd, termios_mod.TCSADRAIN, saved)
+                except Exception:          # noqa: BLE001
+                    pass
 
-    def _loop_body() -> None:
+    def _loop_body(char_mode: bool) -> None:
         shown = None
         while not stop.is_set():
             pend = channel.pending()
@@ -717,21 +880,32 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
                 shown = hint
             if not readable(0.2):
                 continue
-            line = sys.stdin.readline()
-            if not line:                   # EOF
-                if ask:
-                    channel.decline(ask.id, "输入已关闭")
-                set_prompt("")             # 摘掉,别在收尾输出后留个孤零零的 >
-                return
-            raw = line.strip()
+            if char_mode:
+                got = read_char_line()     # 逐字符:打了一半的字在重绘时不会消失
+                if got is None:
+                    continue               # 还没收满一行
+                line = got if got else ""
+                if got == "":              # EOF / Ctrl+D
+                    if ask:
+                        channel.decline(ask.id, "输入已关闭")
+                    set_prompt("")
+                    return
+            else:
+                line = sys.stdin.readline()
+                if not line:               # EOF
+                    if ask:
+                        channel.decline(ask.id, "输入已关闭")
+                    set_prompt("")         # 摘掉,别在收尾输出后留个孤零零的 >
+                    return
+            raw_line = line.strip()
             shown = None                   # 处理完这一行,下一轮重画提示符
-            if not raw:
+            if not raw_line:
                 if ask:
                     channel.decline(ask.id)
                 continue
 
-            if raw.startswith("?") or raw.startswith("?"):
-                q = raw[1:].strip()
+            if raw_line.startswith("?") or raw_line.startswith("?"):
+                q = raw_line[1:].strip()
                 if q and on_aside:
                     on_aside(q)
                 elif q:
@@ -740,18 +914,23 @@ def answer_from_stdin(channel, *, on_aside=None) -> threading.Event:
 
             if ask is not None:
                 # 输了个序号就当选项处理
-                if ask.options and raw.isdigit() and 1 <= int(raw) <= len(ask.options):
-                    raw = ask.options[int(raw) - 1]
-                channel.answer(ask.id, raw)
+                if ask.options and raw_line.isdigit() and 1 <= int(raw_line) <= len(ask.options):
+                    raw_line = ask.options[int(raw_line) - 1]
+                channel.answer(ask.id, raw_line)
             else:
-                m = channel.send(raw)
+                m = channel.send(raw_line)
                 if m is not None:
                     extra = ("已追加进确认书" if getattr(channel, "amend_path", None)
                              else "没有确认书可落盘 —— 它可能活不过下一个步骤")
                     _say(f"{C['grn']}{G['yes']} 收到{C['off']} {C['dim']}"
                          f"(它下次查收件箱时会看到;{extra}){C['off']}")
 
-    threading.Thread(target=loop, daemon=True, name="flower-stdin").start()
+    # **raw 模式必须在起线程之前设好,不能放进线程里**。放进去有个真实的竞态:
+    # answer_from_stdin 起完线程就返回,调用方(和用户)立刻可以打字,而线程
+    # 未必已经抢到 CPU 把 cbreak 设上 —— 那一瞬间打的字会被行模式吃掉,
+    # 走另一条路,表现为"输入丢了"。实测:三次里稳定复现一次。
+    _raw = raw_mode()
+    threading.Thread(target=loop, args=(_raw,), daemon=True, name="flower-stdin").start()
     return stop
 
 
@@ -1226,7 +1405,12 @@ def ensure_credentials(*, probe: bool = True) -> None:
     if check_credentials() is not None:
         if not run_setup(reason="第一次用?给一次凭证就行。"):
             sys.exit(check_credentials())               # 非交互:打印指引
-    if not probe:
+    # **只在交互式下探**。理由有两条,都不是省事:
+    #   · 非交互(管道/CI/离线测试)下探不出问题也修不了 —— 唯一效果是"提前失败",
+    #     而提前失败在**误判**时比不探更糟(瞬时 400 就能掐掉整次运行,实测踩过)。
+    #   · 标榜"零请求"的离线测试不该被逼着打网络。
+    # 真有坏凭证,跑起来自然会炸,那条路由 _drive 的失败分支接住并提出重配。
+    if not probe or os.environ.get("FLOWER_NO_PROBE") or not sys.stdin.isatty():
         return
 
     for _ in range(2):                                  # 最多给一次重配机会
@@ -1254,6 +1438,10 @@ def main() -> None:
     ap = build_parser()
     args = ap.parse_args(_with_default_cmd(sys.argv[1:], ap))
     load_dotenv()
+    # 自动更新:后台查,**不阻塞**,装好也不换掉正在跑的自己(下次生效)。
+    # 快速迭代期默认开、不给选择 —— 装了三天前版本的人报回来的 bug 可能早修了。
+    # 逃生口 FLOWER_NO_UPDATE 留给 CI / 离线环境。
+    maybe_update(lambda m: _say(f"{C['dim']}{G['status']} {m}{C['off']}"))
     if args.verbose:
         for k, v in describe().items():
             print(f"{C['dim']}{k} = {v}{C['off']}")
