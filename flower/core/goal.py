@@ -61,6 +61,11 @@ ACHIEVED, NOT_YET, UNREACHABLE = "achieved", "not_yet", "unreachable"
 
 # 结论那一段里认什么算什么。**长的排前面**,否则"达成"会先吃掉"无法达成"。
 _STATE_WORDS: tuple[tuple[str, str], ...] = (
+    # "在这个环境里验不了"也归到 unreachable —— 再来一轮同样验不了,
+    # 而且它**绝不能**被判成通过。实测栽过:目标平台 macOS、运行在 Linux 容器里,
+    # 判定者看了源码里的 Darwin 分支就判了通过,而交付的二进制是 Linux ELF。
+    ("无法验证", UNREACHABLE), ("没法验证", UNREACHABLE), ("验证不了", UNREACHABLE),
+    ("无法判定", UNREACHABLE), ("unverifiable", UNREACHABLE),
     ("无法达成", UNREACHABLE), ("不可达成", UNREACHABLE), ("做不到", UNREACHABLE),
     ("unreachable", UNREACHABLE), ("impossible", UNREACHABLE),
     ("未达成", NOT_YET), ("没达成", NOT_YET), ("尚未达成", NOT_YET),

@@ -13,6 +13,7 @@ flower 是一个**可移植的长程 agent 框架**。它用 Claude Agent SDK wh
 | 设计自己的流程(`Step` / `Workflow` 参考) | [workflow.md](workflow.md) |
 | 让它先把需求问清楚再动手 | [clarify.md](clarify.md) |
 | 谁来判"做完了没有" | [goal.md](goal.md) |
+| **一次真实运行到底发生了什么(实测数据)** | [case-ht001.md](case-ht001.md) |
 | 换掉终端,接 Web / TUI / HTTP / 全自动 | [interaction.md](interaction.md) |
 | 为什么是这些设计(实测数据、踩过的坑) | [../README.md](../README.md) |
 

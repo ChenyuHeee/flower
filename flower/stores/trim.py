@@ -80,6 +80,14 @@ EPHEMERAL_CMD = re.compile(
       | (?:ps|top|htop|jobs|lsof|netstat|ss|pgrep|systemctl\s+status|
            docker\s+(?:ps|images|stats)|kubectl\s+get)\b
       | (?:cat|head|tail|wc|stat|file|find|tree|echo)\b
+      # 环境探测:装了什么、跑在什么机器上。**实测的缺口** —— HT001 那次运行里
+      # 协调者唯一一次被拒,就是因为 `which g++ clang++ make` 不在这张表里
+      # (那条命令整体只读:which + echo + ls),白白付了一次 subagent 启动成本。
+      # `command` / `type` 只放行查询形式:`command -v` 是查询,而光秃秃的
+      # `command rm -rf /` 是**执行** —— 少写那个 -v 就等于开了后门。
+      | command\s+-[vV]\b
+      | type\s+(?:-[aptP]\s+)?[\w./-]+\s*$
+      | (?:which|whereis|uname|arch|locale|nproc|getconf|sw_vers)\b
       # 过滤/整形:模型几乎总是把它们接在管道后面(`ps aux | grep py | head`)。
       # 只读 —— 会写文件的那几个形式(sed -i / sort -o / tee)在 _MUTATES 里拦掉。
       | (?:grep|egrep|fgrep|rg|sort|uniq|cut|tr|awk|sed|column|jq|nl|rev|comm|diff)\b

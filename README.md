@@ -6,7 +6,8 @@
 
 > **文档在 [`docs/`](docs/)**:[快速上手](docs/README.md) ·
 > [设计 workflow](docs/workflow.md) · [前置确认](docs/clarify.md) ·
-> [目标看守](docs/goal.md) · [换交互层](docs/interaction.md) · [容器](docker/README.md)。
+> [目标看守](docs/goal.md) · [换交互层](docs/interaction.md) · [容器](docker/README.md) ·
+> **[真实运行案例](docs/case-ht001.md)**。
 > 本页讲的是**为什么是这些设计** —— 实测数据、对照实验和踩过的坑。
 
 ---
@@ -489,6 +490,11 @@ cp .env.example .env   # 填 token;.env 已被 gitignore
 | 被拒调用清理 | ✓ 活体:2 次被拒 → 摘 1 留 1,链未断,resume 正常且模型仍知道发生了什么 |
 | 摘除不破坏结构 | ✓ tool_use/tool_result 配对、同消息内不误伤、`toolUseResult` 副本清掉、链重接 |
 | 确认者必须被机制约束 | ✓ 反面实测($0.8908 / 230s):不受约束的确认者问两个问题就开写,被拦后把整份代码贴进回话 —— 白名单不给写工具、只解析四段,都是这次的产物 |
+| **上下文经济学(真实规模)** | ✓ 一次 10.4 小时的运行:subagent 承担 **97.7%** 轮次、**94.8%** 正文字符;1,893 次动手工具调用 vs 主线程 32 次(**59:1**)。早先小规模测得 83%,规模越大收益越大 |
+| **长程的真实上限** | ✓ 主线程 70 轮从 28.7K 涨到 185.9K,斜率 2.2K/轮,全程未压缩,用掉 1M 窗口 18.6%。**外推约 440 轮撞墙** —— 这个数字以前只能猜 |
+| **缓存是长程经济性的支点** | ✓ 输入 299.4M token,**96.1% 命中缓存**。$171 能成立全靠它;任何重排上下文的优化都要先算缓存账 |
+| **工作台复用** | ✓ 61 个脚本被写 95 次、被执行 331 次;**92% 执行过不止一次,写了没跑的 0 个**。定性上 `audit-fake-ai-server.py` 被 7 个脚本复用,驱动器是扩展而非重写 |
+| **断网自动续跑(端到端)** | ✓ **真实故障验证**:跑到一半 DNS 挂了,探针挂着等 → `resumed=True` 续跑同一 session → 又跑 8 小时到完成。10 小时的活没有从头再来。合成错误消息被 prune 摘掉,模型没看见 |
 | **可移植性(换平台)** | ✓ **Linux/arm64 容器里跑通真实请求**($0.1741 / 1 轮,经 `cloud.infini-ai.com/maas`)。镜像里**没有 claude CLI、没有 node/npm/npx**,自带二进制是 `\177ELF`(207M)而非宿主那份 Mach-O arm64(191M)—— 同一个 `pyproject.toml`,换平台换一份原生二进制,框架代码一行未改。见 [docker/README.md](docker/README.md) |
 
 仍未验证:
@@ -543,5 +549,6 @@ cp .env.example .env   # 填 token;.env 已被 gitignore
 .venv/bin/python tests/denial.py          # 被拒调用清理 + 链完整性,不花钱
 .venv/bin/python tests/trial_offline.py   # 一键入口解析 + 模板接线 + 工作台一致性,不花钱
 .venv/bin/python tests/goal_offline.py    # 目标看守:三态判定 / 打回续跑 / 空转兜底,不花钱
+.venv/bin/python tools/analyze_run.py <run_dir>   # 从 sessions.db 量一次运行(上下文曲线/缓存/复用),不花钱
 sudo -v && .venv/bin/python tests/resilience_live.py   # 真掐网,需要 sudo
 ```

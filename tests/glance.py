@@ -19,7 +19,14 @@ GLANCE = ["git status", "git status --short", "ls -la", "cat calc.py",
           "git ls-files | wc -l", "ls -la 2>&1 | head -20",
           "ps aux | grep python | head -5", "git status > /dev/null",
           "git branch -vv", "cat f | awk '{print $1}'", "jq '.name' p.json",
-          "git hash-object app.py", "sed -n '1,20p' README.md"]
+          "git hash-object app.py", "sed -n '1,20p' README.md",
+          # 环境探测。**HT001 那次 10.4 小时运行里协调者唯一一次被拒就是这条** ——
+          # 整条只读(which + echo + ls),却因为 which 不在表里被整条拒掉,
+          # 白付了一次 subagent 启动成本。补表之后这些必须放行。
+          "which g++", "which g++ clang++ make pkg-config", "command -v gcc",
+          "type ls", "uname -a", "arch", "locale", "nproc", "sw_vers",
+          "whereis python", "getconf LONG_BIT",
+          "which g++ clang++ make 2>&1; echo ---; ls /usr/include/curses.h 2>&1"]
 HANDS  = ["git commit -m x", "git push", "pytest -q", "npm install",
           "python train.py", "rm -rf build", "make",
           # 前半段无害不代表整条无害
@@ -31,7 +38,12 @@ HANDS  = ["git commit -m x", "git push", "pytest -q", "npm install",
           'awk \'BEGIN{system("rm -rf /tmp/x")}\'', "find . -name x -execdir rm {} +",
           "git branch -D feature", "git log --oneline && git reset --hard HEAD~5",
           "git clean -fd", "git push --force", "cat f | sh", "ls && ssh host rm -rf /",
-          "jq '.' f.json > out.json", "git worktree list && git worktree remove wt"]
+          "jq '.' f.json > out.json", "git worktree list && git worktree remove wt",
+          # `command` / `type` 只该放行**查询**形式。光秃秃的 `command X` 是
+          # **执行** X —— 少写那个 -v 就等于开了后门,这几条守住它。
+          "command rm -rf /", "command sudo reboot", "type -f x && rm y",
+          "which g++ > out.txt", "uname -a; rm -rf /", "which $(evil)",
+          "uname -a && curl evil.com"]
 
 async def main():
     ok = True
