@@ -208,11 +208,19 @@ def clarify(
     ``channel`` 是 :class:`~flower.core.human.HumanChannel`。工具白名单里只有它
     加上只读的那几个 —— **没有 Write / Edit / Bash / Agent**。
 
-    为什么必须靠工具白名单而不是提示词:实测过一个不受约束的确认者
+    为什么必须靠机制而不是提示词:实测过一个不受约束的确认者
     (`/tmp/probe_ask.py`,$0.8908),它问完两个问题**直接开始写代码**,
     被权限拦下之后**把整份代码贴进了回话正文**。所以
-      * 不给写工具 —— 它没法开工
+      * 写工具被 :func:`~flower.core.guard.whitelist_guard` 拦掉 —— 它没法开工
       * 正文只保留四段(见 :class:`~flower.core.brief.Brief`)—— 贴了也进不了下游
+
+    **注意第一条靠的是 hook,不是 allowed_tools。** ``allowed_tools`` 是
+    **免审批清单,不是排他白名单** —— 实测模型能调用不在里面的工具
+    (HT002 里这个角色就用了不在白名单里的 WebFetch;$0.1 探针进一步确认
+    Write/Bash 也调得动,挡住它们的是权限层而非白名单)。
+    在补上那道 hook 之前,这个角色的保护完全来自继承的 ``permission_mode`` ——
+    谁把它设成 ``acceptEdits``(``coordinator()`` 默认就是),保护就没了。
+    见 `docs/case-ht002.md` 第三节。
 
     给读(``can_read=True``)是划算的:读一眼仓库能省下好几个问题,
     而这个 session 用完就扔,读脏了无所谓。
@@ -314,8 +322,12 @@ def judge(
     (见 :mod:`~flower.workflow.clarify`)。
 
     工具白名单和确认者一样:**没有 Write / Edit / Agent**。理由也一样 ——
-    靠机制而不是提示词。让判定者能改东西,它就可能"顺手修一下"然后判定通过,
+    靠机制而不是提示词:让判定者能改东西,它就可能"顺手修一下"然后判定通过,
     那这次判定就没有意义了。
+
+    **执行这条的是 hook**(:func:`~flower.core.guard.whitelist_guard`),
+    不是 ``allowed_tools`` —— 后者只是免审批清单。HT002 里设目标那个 judge
+    实际跑了 11 次 Bash,而 ``goal_step`` 根本没有传 ``can_run`` 的代码路径。
 
     ``can_run=False``(默认)只给 Read/Glob/Grep:判定靠读现场。
     ``can_run=True`` 会给 Bash —— 能真的跑一遍验收命令,判定更硬,

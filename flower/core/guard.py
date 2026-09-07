@@ -40,6 +40,50 @@ def _deny(reason: str) -> dict[str, Any]:
     }}
 
 
+def whitelist_guard(allowed: list[str] | None, *, role: str = "这个角色") -> HookMatcher | None:
+    """让 ``allowed_tools`` 对**动手的那四个工具**真正排他。
+
+    **为什么需要它**:``allowed_tools`` 不是排他白名单,是**免审批清单** ——
+    模型照样能调用不在里面的工具。实测两处(见 `docs/case-ht002.md` 第三节):
+
+      * 确认者用了 ``WebFetch``,而 ``clarify()`` 的白名单里没有它
+      * 设目标那个 ``judge()`` 跑了 11 次 ``Bash``,而 ``goal_step``
+        **根本没有传 can_run 的代码路径**
+      * $0.1 探针:``allowed_tools=["Read"]`` 的 agent 能调 Write 和 Bash,
+        挡住它们的是**权限层和路径安全**,不是白名单
+
+    后果:``clarify()`` / ``judge()`` 这类"不该动手"的角色,保护完全来自
+    继承来的 ``permission_mode="default"``,**不是 flower 的任何机制**。
+    一旦谁把它设成 ``acceptEdits``(``coordinator()`` 默认就是这个值),
+    确认者就能开始写代码 —— 而那正是 `$0.8908` 那次反面实测要防的事。
+
+    这道 hook 把差额补上:**白名单里没有的动手工具,一律拒绝**。
+    从 ``allowed_tools`` 派生,所以 ``judge(can_run=True)`` 自动保留 Bash、
+    仍然拦掉 Write/Edit —— 不需要额外的开关。
+
+    只管**本会话的主线程**:subagent 就是来干活的,它的工具由
+    ``AgentDefinition.tools`` 决定,不受这里约束。
+
+    没有需要拦的工具时返回 ``None``(比如 worker 那种全套工具的角色),
+    调用方据此决定装不装 —— 不需要拦的角色一个 hook 都不装。
+    """
+    have = set(allowed or [])
+    banned = [t for t in ("Bash", "Write", "Edit", "NotebookEdit") if t not in have]
+    if not banned:
+        return None
+
+    async def hook(data: dict[str, Any], tool_use_id: str | None, context: Any) -> dict[str, Any]:
+        if not _is_main_thread(data):
+            return {}
+        name = data.get("tool_name", "?")
+        return _deny(
+            f"{role}没有 {name}。**这是有意的,不是配置漏了。**"
+            "把结论写进你的回话正文里,框架会从那里取 —— 不要试别的写法绕过去。"
+        )
+
+    return HookMatcher(matcher="|".join(banned), hooks=[hook])
+
+
 def delegate_guard(*, tools: str = HANDS_ON, allow_glance: bool = False) -> HookMatcher:
     """主线程自己动手 → 拒绝,并指路。
 

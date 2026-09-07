@@ -205,8 +205,11 @@ session 级的那一段(实测 $0.2461,`tests/prelude_live.py`)——
 
 **两条必须是机制、不能是提示词的**,是实测出来的:跑过一个不受约束的确认者
 ($0.8908 / 230s),它问完两个问题**直接开始写代码**;被权限拦下之后,
-**把整份代码贴进了回话正文**。所以 ① 工具白名单里没有写工具 —— 它没法开工;
-② 框架只解析那四段 —— 贴了也进不了下游。提问额度同理:`max_asks` 在通道里数,
+**把整份代码贴进了回话正文**。所以 ① 一道 hook 拦掉它的写工具 —— 它没法开工;
+② 框架只解析那四段 —— 贴了也进不了下游。
+
+①**必须是 hook,不能只靠 `allowed_tools`** —— 后者是免审批清单不是排他白名单,
+实测模型能调用不在里面的工具(见 [docs/case-ht002.md](docs/case-ht002.md) 第三节)。提问额度同理:`max_asks` 在通道里数,
 超了工具直接回绝,不写在提示词里。
 
 没人看着的时候也得能跑下去:`timeout_s` 到了返回的是**一句说明,不是报错**
@@ -493,7 +496,8 @@ cp .env.example .env   # 填 token;.env 已被 gitignore
 | 时效性剪枝 | ✓ 活体 resume:`expired: 2`;真实 transcript 上 keep_recent=2 → 过期 5 条 |
 | 被拒调用清理 | ✓ 活体:2 次被拒 → 摘 1 留 1,链未断,resume 正常且模型仍知道发生了什么 |
 | 摘除不破坏结构 | ✓ tool_use/tool_result 配对、同消息内不误伤、`toolUseResult` 副本清掉、链重接 |
-| 确认者必须被机制约束 | ✓ 反面实测($0.8908 / 230s):不受约束的确认者问两个问题就开写,被拦后把整份代码贴进回话 —— 白名单不给写工具、只解析四段,都是这次的产物 |
+| 确认者必须被机制约束 | ✓ 反面实测($0.8908 / 230s):不受约束的确认者问两个问题就开写,被拦后把整份代码贴进回话 —— 拦写工具的 hook、只解析四段,都是这次的产物 |
+| **`allowed_tools` 不是排他白名单** | ✓ 实测三处:确认者用了不在白名单里的 WebFetch;设目标的 judge 跑了 11 次 Bash 而无 `can_run` 路径;$0.1 探针确认 `allowed_tools=["Read"]` 的 agent 能调 Write/Bash(挡住它们的是权限层)。已补 `whitelist_guard` 把差额补上 |
 | **上下文经济学(真实规模)** | ✓ 一次 10.4 小时的运行:subagent 承担 **97.7%** 轮次、**94.8%** 正文字符;1,893 次动手工具调用 vs 主线程 32 次(**59:1**)。早先小规模测得 83%,规模越大收益越大 |
 | **长程的真实上限** | ✓ 主线程 70 轮从 28.7K 涨到 185.9K,斜率 2.2K/轮,全程未压缩,用掉 1M 窗口 18.6%。**外推约 440 轮撞墙** —— 这个数字以前只能猜 |
 | **缓存是长程经济性的支点** | ✓ 输入 299.4M token,**96.1% 命中缓存**。$171 能成立全靠它;任何重排上下文的优化都要先算缓存账 |
@@ -553,6 +557,7 @@ cp .env.example .env   # 填 token;.env 已被 gitignore
 .venv/bin/python tests/denial.py          # 被拒调用清理 + 链完整性,不花钱
 .venv/bin/python tests/trial_offline.py   # 一键入口解析 + 模板接线 + 工作台一致性,不花钱
 .venv/bin/python tests/goal_offline.py    # 目标看守:三态判定 / 打回续跑 / 空转兜底,不花钱
+.venv/bin/python tests/toolwall.py        # 工具墙:allowed_tools 不是排他白名单,hook 补差额,不花钱
 .venv/bin/python tools/analyze_run.py <run_dir>   # 从 sessions.db 量一次运行(上下文曲线/缓存/复用),不花钱
 sudo -v && .venv/bin/python tests/resilience_live.py   # 真掐网,需要 sudo
 ```

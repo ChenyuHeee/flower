@@ -73,9 +73,14 @@ $0.8908 / 230 秒):它问完两个问题**直接开始写代码**;被权限拦�
 
 提示词里写"不要写代码"挡不住这个 —— 它当时的系统提示里就有类似的话。所以:
 
-**一、工具白名单里没有写工具。** `clarify()` 只给 `mcp__human__ask` 加只读的
-`Read`/`Glob`/`Grep`。**没有 Write / Edit / Bash / Agent**。它不是"被要求不开工",
-是**没法开工**。
+**一、一道 hook 拦掉它的写工具。** `clarify()` 只给 `mcp__human__ask` 加只读的
+`Read`/`Glob`/`Grep`,而 `whitelist_guard` 把**白名单之外的** Write / Edit / Bash /
+NotebookEdit 一律拒绝。它不是"被要求不开工",是**没法开工**。
+
+**执行者必须是 hook,不能只靠 `allowed_tools`。** 后者是**免审批清单,不是排他
+白名单** —— 实测模型能调用不在里面的工具(HT002 里这个角色就用了不在白名单里的
+WebFetch)。在补上这道 hook 之前,保护完全来自继承的 `permission_mode`,
+谁把它设成 `acceptEdits` 就没了。见 [case-ht002.md](case-ht002.md) 第三节。
 
 给读是划算的:读一眼仓库能省下好几个问题,而这个 session 用完就扔,读脏了无所谓
 (`can_read=False` 可以连读也不给)。

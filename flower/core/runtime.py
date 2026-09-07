@@ -22,7 +22,7 @@ from claude_agent_sdk import query
 from .agent import AgentSpec, build_options
 from .env import check_credentials, load_dotenv
 from .events import Event, normalize
-from .guard import merge_hooks, workbench_hooks
+from .guard import merge_hooks, whitelist_guard, workbench_hooks
 from .resilience import Resilience, classify
 from .workbench import Workbench
 from ..stores.sqlite import SqliteSessionStore
@@ -182,19 +182,30 @@ class Runtime:
     ) -> None:
         """跑一次。成功与否写进 result,不抛异常。"""
         prelude = ""
+        hooks = spec.hooks
         if self.workbench is not None:
             # 每一步开跑前重扫一次:上一步 subagent 写的脚本,这一步开局就该知道。
             self.workbench.refresh()
             # spec.workbench=False:hook 照挂(spill 对它的 Read 仍有用),
             # 只是不注入索引 —— 没有写工具的角色执行不了那些规矩。
             prelude = self.workbench.prompt_block() if spec.workbench else ""
-            hooks = merge_hooks(spec.hooks, workbench_hooks(
+            hooks = merge_hooks(hooks, workbench_hooks(
                 self.workbench,
                 delegate_only=spec.delegate_only,
                 spill_threshold=self.spill_threshold,
                 agents=spec.agents,
                 allow_glance=spec.glance,
             ))
+        if not spec.delegate_only:
+            # 让 allowed_tools 对动手工具真正排他。**不依赖工作台** ——
+            # 它是安全性质的,不能因为没开 -W 就消失(那是原来的一个洞:
+            # hook 整体只在有工作台时才装)。
+            #
+            # delegate_only 的角色(协调者)不装:delegate_guard 已经拦了同一批工具,
+            # 而且它的措辞更对路("去派人"),重复装只会让模型收到两条矛盾的指引。
+            if (wall := whitelist_guard(spec.allowed_tools, role=spec.name)) is not None:
+                hooks = merge_hooks(hooks, {"PreToolUse": [wall]})
+        if hooks is not spec.hooks:
             spec = replace(spec, hooks=hooks)
         # 工作台在工作区外时,得显式授权 —— 不然写不进去(实测踩过)。
         extra = ([str(self.workbench.root)]
