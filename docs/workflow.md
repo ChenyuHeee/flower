@@ -124,7 +124,7 @@ Step("确认需求", ..., reduce=lambda r, ctx: ctx["_brief"].prompt_block())
 ## 已经有一个起步流程
 
 在自己设计之前,`flower "帮我做一个 X"` 直接可跑 —— 背后是
-[`flower/workflow/starter.py`](../flower/workflow/starter.py) 里的 `starter_flow()`:
+[`flower/workflow/starter.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/workflow/starter.py) 里的 `starter_flow()`:
 确认需求 → 派人干活,两步,不含任何领域假设。它也可以当库用:
 
 ```python

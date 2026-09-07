@@ -14,3 +14,4 @@ tests/_*
 human-test/*
 !human-test/HT001
 !human-test/HT002
+/site/

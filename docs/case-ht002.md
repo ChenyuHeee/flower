@@ -5,7 +5,7 @@
 > 结果:**$38.24 / 4 步 / 约 1 小时**,程序确实在 macOS 上跑起来了(PID 96040,
 > arm64 Mach-O),判定结论是**无法达成**,人选择接受。
 >
-> 记录在 [`human-test/HT002/`](../human-test/HT002/)。数字由
+> 记录在 [`human-test/HT002/`](https://github.com/ChenyuHeee/flower/tree/main/human-test/HT002/)。数字由
 > `python tools/analyze_run.py human-test/HT002/runs` 算出。
 >
 > 这是**第一次带目标看守**的运行 —— 今天做的东西全部第一次上真实 API。

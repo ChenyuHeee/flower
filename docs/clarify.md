@@ -266,7 +266,7 @@ flower --clarify-only
 
 想让它多问几轮:`--asks 12`。没人守着的时候:`--timeout 0`(所有提问立刻落空,
 它自己判断并把假设写进「未知与假设」)。这条路径的流程实现在
-[`flower/workflow/starter.py`](../flower/workflow/starter.py)。
+[`flower/workflow/starter.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/workflow/starter.py)。
 
 > **要在真终端里跑。** 回答走标准输入,管道 / `nohup` / CI 里没人能答:
 > 第一个问题会被当成"输入已关闭"跳过,之后每个问题都要干等满 `--timeout`。

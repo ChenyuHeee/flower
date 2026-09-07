@@ -18,7 +18,7 @@ flower 是一个**可移植的长程 agent 框架**。它用 Claude Agent SDK wh
 | **一次真实运行到底发生了什么(实测数据)** | [case-ht001.md](case-ht001.md) |
 | **目标看守首次真实运行,以及它把简单问题复杂化了** | [case-ht002.md](case-ht002.md) |
 | 换掉终端,接 Web / TUI / HTTP / 全自动 | [interaction.md](interaction.md) |
-| 为什么是这些设计(实测数据、踩过的坑) | [../README.md](../README.md) |
+| 为什么是这些设计(实测数据、踩过的坑) | [../README.md](https://github.com/ChenyuHeee/flower/blob/main/README.md) |
 
 ---
 
@@ -130,7 +130,7 @@ echo "帮我做一个 X" | flower --timeout 0     # 全自动,不等人
 > 同名步骤的血缘互相覆盖。要并行就分目录 —— 那才是它设计的用法。
 
 开关写在诉求前面或后面都行,只给开关不给诉求也行(`flower --clarify-only` 会先问你要做什么)。这条路径的流程实现在
-[`flower/workflow/starter.py`](../flower/workflow/starter.py) —— 两步,通用到不含任何领域假设。
+[`flower/workflow/starter.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/workflow/starter.py) —— 两步,通用到不含任何领域假设。
 
 > **要在真终端里跑。** 回答提问走标准输入,管道/`nohup`/CI 里没人能答:
 > 第一个问题会被当成"输入已关闭"跳过,之后每个问题都要干等满 `--timeout`。
@@ -171,7 +171,7 @@ flower -T run flows.py:main
 第一步会**问你几个问题**(`❓` + 编号选项:输序号、打字回答,或直接回车让它自己判断),
 问完把需求冻结成 `.flower/notes/需求.md`;第二步才开始干活。重跑不会再盘问一遍。
 详见 [clarify.md](clarify.md)。上面这段的完整可抄版本是
-[`examples/trial.py`](../examples/trial.py)。
+[`examples/trial.py`](https://github.com/ChenyuHeee/flower/blob/main/examples/trial.py)。
 
 ### 工作台要挂在 workflow 上,不能只拼路径
 
@@ -222,7 +222,7 @@ agent 的私有副本,工作台是跨 agent 的共享层,共享的东西不能�
 一句话串起来:**`Workflow` 按顺序把 `Step` 交给 `Runtime` 跑,每跑一步产生一个 session
 和一串 `Event`;上下文的省法由角色分工和 store/hook 决定,和你的流程正交。**
 
-四条贯穿全局的取舍,理由在 [../README.md](../README.md) 里都有实测数据:
+四条贯穿全局的取舍,理由在 [../README.md](https://github.com/ChenyuHeee/flower/blob/main/README.md) 里都有实测数据:
 
 1. **叠加不替换** —— `system_prompt` 用 preset `claude_code` + `append`。别的专项 agent 弱,
    多半是因为把系统提示整个换掉了。

@@ -4,7 +4,17 @@
 
 不牺牲 Claude Code 的能力,把它变成一个能带走、能定制交互、能跑几天的专用 agent。
 
-> **文档在 [`docs/`](docs/)**:[快速上手](docs/README.md) ·
+## 装
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ChenyuHeee/flower/main/install.sh | sh
+```
+
+然后进任意项目目录 `flower` 就能用。第一次会问你要 API key / 网关,配一次
+存到 `~/.config/flower/.env` 处处生效;本机装了 Claude Code 的话直接借它的 token。
+从源码跑见 [快速上手](docs/start.md)。**文档站:https://chenyuheee.github.io/flower/**
+
+> **文档在 [`docs/`](docs/)**:[快速上手](docs/start.md) ·
 > [设计 workflow](docs/workflow.md) · [前置确认](docs/clarify.md) ·
 > [目标看守](docs/goal.md) · [接续](docs/continuity.md) · [换代](docs/handoff.md) ·
 > [换交互层](docs/interaction.md) · [容器](docker/README.md) ·
@@ -195,7 +205,7 @@ system prompt,它才知道需求文件在哪、才能在派活时把路径转述
 session 级的那一段(实测 $0.2461,`tests/prelude_live.py`)——
 所以工作台位置必须由协调者在任务书里说,这是唯一通道。自己另拼一个路径的话,
 确认书写进一处、注入的索引扫的是另一处,那条承诺会**静默失效**。
-见 [docs/README.md](docs/README.md#工作台要挂在-workflow-上不能只拼路径)。
+见 [docs/start.md](docs/start.md#工作台要挂在-workflow-上不能只拼路径)。
 
 澄清的问答是**现场,不是决策** —— 和 subagent 的试错同一性质。所以它跑在**独立 session**
 里,唯一交付物是磁盘上一份**冻结的四段确认书**:

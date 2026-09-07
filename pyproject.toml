@@ -5,6 +5,9 @@ description = "Portable long-horizon agent built on the Claude Agent SDK"
 requires-python = ">=3.10"
 dependencies = ["claude-agent-sdk>=0.2.152"]
 
+[project.optional-dependencies]
+docs = ["mkdocs-material>=9"]   # 只 CI 建文档站用,运行 flower 不需要
+
 [project.scripts]
 flower = "flower.cli:main"
 
