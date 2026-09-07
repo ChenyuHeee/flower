@@ -302,7 +302,7 @@ help 文本:`配置凭证(API key / 网关 / 模型),写到 ~/.config/flower/.en
 ```
 
 没有[需求确认书](glossary.md#需求确认书)可落盘时,后半句变成
-`没有确认书可落盘 —— 它可能活不过下一个步骤`。收件箱**不打断**正在干活的 agent,
+`没有确认书可落盘 —— 它可能活不过下一个步骤`。收件箱**不打断**正在干活的执行者,
 它下次主动查收件箱才会拿走。同一句话还会被追加进 `notes/需求.md`,不落盘就活不过步骤边界 ——
 下一步是新会话,只读冻结件。
 
@@ -485,7 +485,7 @@ traceback,不是干净退出。
 `manifest.json` 并标成 `killed-by-signal`,再恢复默认动作、真的走掉。
 
 起因是终端崩溃时内核发 SIGHUP,默认动作直接终止进程,`finally` 不跑、清单不写 ——
-一次运行的账目就丢了。非主线程或平台不支持时静默跳过。
+一次运行的账目就丢了。非操作系统主线程或平台不支持时静默跳过。
 
 ---
 
@@ -506,9 +506,11 @@ flower 不读 ~/.claude/settings.json —— 那是可移植性的代价。
 ```
 
 这段文案有两处和实现对不上:第二行的 `flower setup` 目前跑不到(见 [`setup`](#setup));
-第四行也不准确 —— flower 确实会把 `~/.claude/settings.json` 和 `settings.local.json` 的 `env`
-块当作**最后一级回退**,但只借其中 9 个凭证键,不接管别的任何设置。完整的查找优先级见
-[配置参考](config.md)。
+第四行**和代码相反** —— flower 确实会把 `~/.claude/settings.json` 和 `settings.local.json` 的
+`env` 块当作**最后一级回退**,只借其中 9 个凭证键,不接管别的任何设置。打这行字的地方是
+`env.py:192`(函数 `check_credentials()` 定义在 `env.py:184`),而真去读那两个文件的是
+`env.py:56-75` 与 `:109-111`;记在 [issue #13](https://github.com/ChenyuHeee/flower/issues/13)。
+**以代码为准:它读。** 完整的查找优先级和那 9 个键见[配置参考](config.md#借用)。
 
 ### 交互配置问什么 {#交互配置问什么}
 
@@ -673,7 +675,7 @@ attempts  errors[]  resumed  retired[]  context  duration_s  run
 | `.flower/artifacts/` | 超过 2000 字符的长产出:报告、数据、日志。对话里只出现路径 |
 | `.flower/notes/` | 跨步骤的决策记录 |
 | `.flower/spill/` | [落盘](glossary.md#落盘):超过 4000 字符的工具结果落这里,上下文里只留一行指针加开头 400 字符。文件名是内容 sha256 前 16 位加 `.txt` |
-| `.flower/INDEX.md` | 上面几个目录的索引,**注入主 agent 的系统提示词**(subagent 继承不到) |
+| `.flower/INDEX.md` | 上面几个目录的索引,**注入协调者的系统提示词**(subagent 继承不到) |
 
 `go` 路径固定在 `notes/` 下生成这些:
 
@@ -688,7 +690,3 @@ attempts  errors[]  resumed  retired[]  context  duration_s  run
 用 `--isolate` 时工作台会挪到仓库外面:`<workspace>.parent/.flower-<workspace 名>/`。
 worktree 是每个 agent 的私有副本,工作台是跨 agent 的共享层,共享的东西不能放进私有围栏里。
 此时给模型的工作台路径是绝对路径。
-
-<!-- TODO(核实): 凭证查找的 6 级优先级、$FLOWER_ENV、$XDG_CONFIG_HOME、~/.claude 借 token 的
-     9 个键,这一页只给了指向 config.md 的链接。config.md 写好后核对措辞是否一致,
-     特别是"flower 不读 ~/.claude/settings.json"这句错误文案的消解方式要两页统一。 -->

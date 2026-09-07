@@ -377,7 +377,7 @@ git log --oneline <上一个 tag>..HEAD   # 这一版的提交
 [`plugin/skills/example/SKILL.md`](https://github.com/ChenyuHeee/flower/blob/main/plugin/skills/example/SKILL.md)
 的写法:说清**什么时候用**、**步骤**、**输出成什么样**、**边界在哪**,比堆背景知识有用。
 
-**第三步:确认它被加载了。** 分两半查,先查确定的那一半 —— 目录到底在不在:
+**第三步:确认它被加载了。** 只查一件确定的事 —— 目录到底在不在:
 
 ```bash
 cd /path/to/flower
@@ -387,31 +387,29 @@ python3 -c "from flower.core.agent import PLUGIN_DIR; print(PLUGIN_DIR, PLUGIN_D
 打出 `/path/to/flower/plugin True` 才说明 `build_options()` 那个 `if` 会进去。
 打出 `False` 就是没加载,而且**运行时不会报错**,见下面的警告。
 
-再查模型那一半。仓库自带的 `example` skill 就是为这件事准备的 —— 它被调用时会输出一行
-`flower 插件链路正常`:
-
-```bash
-flower once "验证 flower 插件链路" -v
-```
-
-`-v` 显示思考与工具结果,能看到 skill 有没有被调起来。看到那行字就是通了。**没看到不等于没装上**
-—— skill 是概率性的,模型也可能只是没觉得需要。这时先回去看上面那条 `PLUGIN_DIR` 的 `True`/`False`,
-那个才是确定的信号。
+**别拿"跑一句看 `example` skill 有没有被调起来"当验证。** skill 是概率性的:模型没调用它,
+既可能是没装上,也可能只是没觉得当前任务需要 —— 这个信号区分不了这两件事。而且
+`build_options()` 从不设置 SDK 的会话级 `skills=` 选项,plugin 里的 skill 到底会不会出现在
+协调者的可选列表里,没有实测过。上面那条 `PLUGIN_DIR` 的 `True`/`False` 是确定的,用它。
 
 要给某个[执行者](glossary.md#执行者)点名开哪几个 skill,用 `worker(..., skills=[...])`
 ([`flower/core/roles.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/roles.py));
 名字用 `SKILL.md` 里的 `name`,SDK 也接受 `插件名:skill 名` 这种限定写法。
 
-!!! warning "pip / uv 装出来的 flower 里没有 `plugin/`"
+!!! warning "装出来的 flower 里没有 `plugin/` —— 三种装法都没有"
     `PLUGIN_DIR` 是从 `flower/core/agent.py` 往上三层再进 `plugin/`。从源码 checkout 跑时那是仓库根的
     `plugin/`;但 wheel 只打包 `flower` 一个目录(`pyproject.toml` 里
     `[tool.hatch.build.targets.wheel] packages = ["flower"]`),装进 site-packages 之后
     `site-packages/plugin` 不存在,`PLUGIN_DIR.is_dir()` 为假 —— **静默跳过,不报错、不告警**。
 
-    容器同理:`docker/Dockerfile` 只 `COPY` 了 `pyproject.toml`、`flower/`、`examples/`,
-    `plugin/` 没进镜像。
+    **这不是容器的问题,范围大得多。** `install.sh` 的每一条路径 —— `uv tool install`、
+    `pipx install`、自举 uv 之后再用 uv、以及 `pip install --user` 兜底 —— 装的都是 wheel。
+    也就是说**一句话装出来的 flower,领域能力包一律静默失效**。容器只是同一个问题的一个实例:
+    `docker/Dockerfile` 只 `COPY` 了 `pyproject.toml`、`flower/`、`examples/`,`plugin/` 没进镜像。
 
-    所以现在要用领域能力包,就从源码 checkout 跑。
+    记在 [issue #15](https://github.com/ChenyuHeee/flower/issues/15)。装完先跑上面那条
+    `PLUGIN_DIR` 命令自查:打出 `False` 就说明这次装的没有领域能力包。要用领域能力包,
+    现在只能从源码 checkout 跑。
 
 ### `setting_sources=[]` 为什么逼着领域能力走 plugin
 
@@ -430,7 +428,7 @@ SDK 的默认是 `None` = 三个来源全读:`~/.claude/settings.json`(用户)�
 | `~/.claude/`(宿主机) | 不读 | 换台机器行为一致,不会因为"我这台配过"而结果不同 |
 | 项目 `.claude/` | 不读 | 放在 `.claude/skills/`、`.claude/agents/` 里的东西在 flower 下**一条都不生效** |
 | `plugin/` | 读 | 路径写死在代码里,跟着仓库走 |
-| 凭证 | 不继承 | `~/.claude/settings.json` 里的 `env` 块也不读,必须自带 `.env`,见[配置](config.md) |
+| 凭证 | 不走这条 | 必须自带 `.env`;`~/.claude/settings.json` 和 `settings.local.json` 的 `env` 块只作最后兜底,**只取 9 个凭证键**,见[配置](config.md) |
 
 `.claude/` 不生效**不是配置漏了,是这条约束的定义**:只要还从宿主机读一个字节,"换台机器行为一致"
 就不成立。领域能力于是只有一条通道 —— 随仓库走的 `plugin/`。
@@ -494,11 +492,3 @@ curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
 `install.sh` 自己做的事:挑一个 Python 工具安装器(`uv` > `pipx` > 装 `uv` > `pip --user`),
 从 GitHub 装 flower,然后提示下一步。它**不碰凭证** —— 第一次跑 `flower` 会问,存到
 `~/.config/flower/.env`。
-
-<!-- TODO(核实): docker/Dockerfile 不 COPY plugin/,所以容器里领域能力包一定不生效。这是有意的
-     (容器只用来验"脱离 CLI"),还是漏了?如果是漏了,页面里"要用 plugin 就从源码 checkout 跑"
-     这句要改成给出容器侧的做法。 -->
-<!-- TODO(核实): build_options() 从不设置 SDK 的 session 级 `skills=` 选项。按 SDK 文档,
-     `skills=None` 意味着"不做 SDK 自动配置,CLI 自己的默认仍然生效",所以主 agent 那边
-     plugin 里的 skill 到底会不会出现在可选列表里,没有实测过。页面里"跑一句看 example skill
-     有没有被调起来"的验证步骤依赖这一点。 -->

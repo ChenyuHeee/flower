@@ -447,7 +447,7 @@ def clarify_step(
   齐全 → `b.write(brief_path)` 冻结,灌进 ctx,返回 `True`。
 - `reduce`:返回 `ctx[BRIEF_KEY].prompt_block()`,**不是模型原文** —— 原文里可能夹着它多写的东西。
 - `resume_from` **保持默认 `None`**:下一步是新会话,只拿到确认书,拿不到那段问答。
-  澄清对话**从来没进过**协调者的上下文,不是进去之后被剪掉的。
+  前置确认的问答**从来没进过**协调者的上下文,不是进去之后被剪掉的。
 
 灌进 ctx 的三处:`ctx[BRIEF_KEY] = b`、`ctx[name] = b.prompt_block()`、`ctx.pop(MISSING_KEY, None)`。
 
@@ -767,7 +767,7 @@ def worker(
 | `description` | `str` | 必填 | **协调者用来选人的依据** —— 写清楚"什么活派给它" |
 | `prompt` | `str` | 必填 | 它的 system prompt。`discipline=True` 时拼成 `f"{prompt}\n\n{WORKER_RULES}"` |
 | `tools` | `list[str] \| None` | `None` | `None` → `Read` `Write` `Edit` `Bash` `Glob` `Grep` `WebFetch` `WebSearch` |
-| `model` | `str` | **`"inherit"`** | 干活的不该被降级 |
+| `model` | `str` | **`"inherit"`** | 执行者不该被降级 |
 | `effort` | `str \| int \| None` | `None` | 思考强度 |
 | `max_turns` | `int \| None` | `None` | 落到 SDK 的 **`maxTurns`**(驼峰) |
 | `permission_mode` | `str \| None` | `None` | 落到 SDK 的 **`permissionMode`**(驼峰) |
@@ -944,7 +944,7 @@ class AgentSpec:
 | `hooks` | `dict[str, Any] \| None` | `None` | 额外 hook,`Runtime` 会用 `merge_hooks` 和自己那套合并 |
 | `compact` | `CompactPolicy \| None` | `None` | 给了就不会被 `Runtime` 强制改成 `no_summary` |
 | `env` | `dict[str, str]` | `{}` | 注入子进程的环境变量。`compact.env()` 会 update 上去 |
-| `glance` | `bool` | `False` | 允许主 agent 自己跑"只看一眼"的 `Bash`。放行哪些由 [`is_ephemeral`](#is-ephemeral) 决定,结果会被 `EphemeralPolicy` 标记过期 |
+| `glance` | `bool` | `False` | 允许协调者自己跑"只看一眼"的 `Bash`。放行哪些由 [`is_ephemeral`](#is-ephemeral) 决定,结果会被 `EphemeralPolicy` 标记过期 |
 | `workbench` | `bool` | `True` | 是否把工作台索引注入这个 agent 的 system prompt。**没有写工具的角色要关掉**(`clarify()` / `judge()` 默认就是 `False`) |
 | `delegate_only` | `bool` | `False` | 只协调不动手。`True` 时 `Runtime` 装 `delegate_guard`、**不装** `whitelist_guard` |
 
@@ -1242,7 +1242,7 @@ class Verdict:
 | `unreachable` | `@property -> bool` | `state == "unreachable"` |
 | `ok` | `@property -> bool` | 解析出结论没有。**`ok=False` 必须当"未达成"处理,不能当达成** |
 | `parse` | `@classmethod (text) -> Verdict` | 见下 |
-| `feedback` | `() -> str` | 打回给干活者的话:只给"差在哪",不给方案 |
+| `feedback` | `() -> str` | 打回给执行者的话:只给"差在哪",不给方案 |
 
 `parse` 的识别顺序:
 
@@ -1316,8 +1316,8 @@ def whitelist_guard(allowed: list[str] | None, *, role: str = "这个角色") ->
 - **只拦本会话主线程**,subagent 放行 —— subagent 的工具由 `AgentDefinition.tools` 决定。
 - 没有需要拦的工具时返回 **`None`**(比如 `worker()` 那种全套工具的角色),调用方据此决定装不装。
 
-**它为什么必须存在**:`allowed_tools` 是**免审批清单,不是排他白名单**。实测三处证据 ——
-确认者用了不在白名单里的 `WebFetch`;设目标的判定者跑了 11 次 `Bash`;$0.1 的探针里
+**它为什么必须存在**:`allowed_tools` 是**免审批清单,不是排他白名单**。实测两处证据 ——
+设目标的判定者跑了 11 次 `Bash`;$0.1 的探针里
 `allowed_tools=["Read"]` 的 agent 照样调得动 `Write`/`Bash`。
 所以 `clarify()` / `judge()` 的"没有写工具"**靠的是这道 hook**,不是白名单本身。
 
@@ -1647,9 +1647,9 @@ def is_ephemeral(cmd: str) -> bool
 ```
 
 判一条 Bash 命令是不是[一次性命令](glossary.md#一次性命令)。
-**`delegate_guard` 的放行判断和剪枝的过期判断共用这一个函数** —— 主 agent 能自己跑的命令集合
-必须等于结果会被标记过期的集合。放行不剪枝,过期的 `git status` 会永久占上下文还会误导;
-剪枝不放行,主 agent 为一条 `ls` 派个 subagent,4.3k 启动成本换几十字符。
+**`delegate_guard` 的放行判断和裁剪的过期判断共用这一个函数** —— 协调者能自己跑的命令集合
+必须等于结果会被标记过期的集合。放行不裁剪,过期的 `git status` 会永久占上下文还会误导;
+裁剪不放行,协调者为一条 `ls` 派个 subagent,4.3k 启动成本换几十字符。
 
 | 参数 | 类型 | 默认 | 说明 |
 |---|---|---|---|

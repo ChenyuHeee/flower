@@ -192,7 +192,7 @@ def gate(result, ctx):
 1. **一步一个可验收的目标。** 步骤边界就是上下文边界:`resume_from=None` 的地方,
    前面那些工具结果就彻底不再常驻。见[上下文经济学](context.md)。
 2. **不确定就先 `clarify_step`。** 长程里"目标理解错了"是最贵的错误,
-   而它恰恰是剪枝清不掉的那一类。见[前置确认](clarify.md)。
+   而它恰恰是省上下文的那几层清不掉的那一类。见[前置确认](clarify.md)。
 3. **派活的任务要自足。** subagent 是干净上下文,它不知道[协调者](../reference/glossary.md#协调者)
    知道的事。需要的背景写进任务书,或者告诉它去读哪个 artifact。
 4. **长产出走磁盘,不走回话。** 这条已经写进 `WORKER_RULES` 了,你的 `instructions` 别把它

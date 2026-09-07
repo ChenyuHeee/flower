@@ -326,7 +326,7 @@ CREATE TABLE summaries (
 |---|---|---|
 | `entries` | transcript 里的一条,`payload` 是原始 JSON | `uid` 就是条目的 `uuid`,做**幂等键**:失败批次会被重试 3 次,重放不能产生重复行。没有 `uuid` 的条目(标题、标签、模式标记)不去重,所以唯一索引带 `WHERE uid IS NOT NULL` |
 | `meta` | 一条会话的游标 | `next_seq` 是下一个序号,`mtime` 是毫秒时间戳且**严格单调**(`sqlite.py:72-79`)—— `list_sessions` 和 summary 共用这个时钟,不单调会让 SDK 的判新旧走错快路径 |
-| `summaries` | 一条主会话的摘要 sidecar | **只有主 transcript 参与**,subagent 的不算(`sqlite.py:122-123`) |
+| `summaries` | 一条主线程的摘要 sidecar | **只有主 transcript 参与**,subagent 的不算(`sqlite.py:122-123`) |
 
 `store_key` 的构造(`sqlite.py:54-58`):`<project_key>/<session_id>`,subagent 再接一段
 `subpath`。`project_key` 由 SDK 从工作区路径推导 —— `/`、`_`、`.` 全换成 `-`。
@@ -424,7 +424,7 @@ TrimmingSessionStore(path, workspace, policy: TrimPolicy | None = None,
 
 判断函数是 `is_ephemeral(cmd)`,它**同时是还给协调者的权限清单**:`delegate_guard(allow_glance=True)`
 用的是同一个函数(`trim.py:63-68`、`:128-150`)。两个集合必须永远相等 ——
-放行了但不剪枝,过期的 `git status` 就永久占着上下文;剪枝了但不放行,主 agent 为一条 `ls`
+放行了但不裁剪,过期的 `git status` 就永久占着上下文;裁剪了但不放行,协调者为一条 `ls`
 派个 subagent,4.3k 启动成本换几十字符。往白名单里加一条命令,等于同时说了这两句话。
 
 **什么时候用哪个**:

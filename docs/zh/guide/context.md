@@ -8,7 +8,7 @@
 ## 解决什么问题
 
 [压缩](../reference/glossary.md#压缩)是等上下文满了再回头总结,治的是标。真正的问题是:
-**琐碎的东西一开始就不该进主上下文。**
+**琐碎的东西一开始就不该进主线程。**
 
 差别在时机。一次 `pytest` 的输出动辄几万字符,模型看一眼、拿一个结论,剩下的字符从此
 每一轮都重新发一遍;等窗口撑满,压缩把它连同旁边的决策一起总结成一段摘要 —— 省下的是体积,
@@ -22,7 +22,7 @@ flower 用四层解决,顺序就是优先级 —— 按省得多少排:
 |---|---|---|
 | 一、分工 | 动手的活派给 [subagent](../reference/glossary.md#subagent),试错进它自己的 transcript | [`core/roles.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/roles.py) |
 | 二、工作台 | 脚本 / 长产出 / 决策落盘,索引注入 system prompt | [`core/workbench.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/workbench.py) |
-| 三、当场剪枝 | `PostToolUse` hook 把超阈值的工具结果落盘,上下文里只留一行路径 | [`core/guard.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/guard.py) |
+| 三、当场落盘 | `PostToolUse` hook 把超阈值的工具结果落盘,上下文里只留一行路径 | [`core/guard.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/guard.py) |
 | 四、裁剪与剪除 | resume 之前重写会话:过期结果、被拒调用、断线残渣不再喂回去 | [`stores/trim.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/stores/trim.py)、[`stores/prune.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/stores/prune.py) |
 
 前两层管**东西进不进来**,后两层管**已经进来的留不留**。顺序不能倒:第四层再狠,
@@ -42,7 +42,7 @@ rt = Runtime(workspace="repo", workbench=True)
 ```
 
 这几行装上了前三层:`coordinator()` 恒设 `delegate_only=True`(第一层);`workbench=True` 建
-[工作台](../reference/glossary.md#工作台)并把索引注入主 agent 的 system prompt(第二层),
+[工作台](../reference/glossary.md#工作台)并把索引注入协调者的 system prompt(第二层),
 同时让 `Runtime` 装上 `spill_guard`(第三层)。第四层默认就在 —— `Runtime` 的
 [会话存储](../reference/glossary.md#会话存储)写死是 `PruningSessionStore`,构造参数里没有换它的入口。
 
@@ -56,7 +56,7 @@ rt = Runtime(workspace="repo", workbench=True)
 
 ### 第一层:分工(省得最多)
 
-主 agent 扮演"一个会用 Claude Code 的人":拆解、派活、读报告、决策。它拿不到
+协调者扮演"一个会用 Claude Code 的人":拆解、派活、读报告、决策。它拿不到
 Bash / Write / Edit —— 工具只有 `Agent`、`TodoWrite`、`Read`
 (`glance=True` 时另加一个受限的 `Bash`,见下)。动手的活全派给
 [执行者](../reference/glossary.md#执行者)。
@@ -68,7 +68,7 @@ Bash / Write / Edit —— 工具只有 `Agent`、`TodoWrite`、`Read`
 
 **省多少**:subagent 的工具调用与试错**进的是它自己的 transcript**(会话存储里用 `subpath`
 区分),主线程只留下那一次 `Agent` 调用和最终报告。试错过程不是被压缩掉的,是**从来没进过
-主上下文**。
+主线程**。
 
 - 实测(一个会产生大量工具输出的任务):83% 的 transcript 落在 subagent 里,
   主线程 13 条、21K 字符,subagent 105K 字符。
@@ -79,7 +79,7 @@ Bash / Write / Edit —— 工具只有 `Agent`、`TodoWrite`、`Read`
 两行是两次不同的测量:上面是早先的小规模测试,下面是真实规模下的复测。同一个机制,
 规模越大省得越多。
 
-省的是上下文,不是模型档次:`worker()` 默认 `model="inherit"` —— 干活的那个不该被降级。
+省的是上下文,不是模型档次:`worker()` 默认 `model="inherit"` —— 执行者不该被降级。
 
 分工唯一的反向成本是[任务书](../reference/glossary.md#任务书) —— 协调者派活时写的那段话,
 它进主线程,而且永久留着。实测 8/8 份任务书都在复述对方已知的纪律,最短一份 521 字符里
@@ -99,7 +99,7 @@ Bash / Write / Edit —— 工具只有 `Agent`、`TodoWrite`、`Read`
 
 **什么时候触发**:`INDEX.md` 自动生成(默认最多 40 条),`refresh()` 由 `PostToolUse` 的
 `index_guard` 在 `Write` / `Edit` 落在工作台内时调用,每一步开跑前也会刷一次。上面这三条规矩
-由 `prompt_block()` 注入主 agent 的 system prompt —— 它开局就知道有哪些现成脚本,
+由 `prompt_block()` 注入协调者的 system prompt —— 它开局就知道有哪些现成脚本,
 不用先花一次工具调用去发现。
 
 **省多少**:实测一次 10.4 小时的运行,**61 个脚本被写 95 次、被执行 331 次;92% 执行过不止
@@ -113,7 +113,7 @@ Bash / Write / Edit —— 工具只有 `Agent`、`TodoWrite`、`Read`
     **继承不到**(实测 $0.2461,`tests/prelude_live.py`)。所以"工作台在哪 + 长产出写
     `artifacts/`"必须由协调者在任务书里转述 —— 那是唯一通道,不是冗余。
 
-### 第三层:当场剪枝
+### 第三层:当场落盘
 
 `spill_guard` 是一个 `PostToolUse` hook,在工具结果**进模型之前**看一眼:超过 `threshold`
 (默认 **4000** 字符)的,[落盘](../reference/glossary.md#落盘)到工作台的 `spill/` 目录,
@@ -198,8 +198,8 @@ Runtime(workspace="repo", trim=TrimPolicy(keep_recent=20, min_chars=2000))   # T
 | `git status` / `ls` / `cat` | ✓ | ✓ |
 | `git commit` / `pytest` / `pip install` | ✗ 派人 | — |
 
-两边必须是同一张表,否则任一边单独成立都有害:**放行了不剪枝**,过期的 `git status` 就永久
-占着上下文,还会被当成现状误导决策;**剪枝了不放行**,主 agent 就得为一条 `ls` 付 4.3k。
+两边必须是同一张表,否则任一边单独成立都有害:**放行了不裁剪**,过期的 `git status` 就永久
+占着上下文,还会被当成现状误导决策;**裁剪了不放行**,协调者就得为一条 `ls` 付 4.3k。
 `tests/glance.py` 把这条不变式钉成断言 —— 实测 46 条命令两边判定完全一致,含 10 条对抗样本。
 
 **坑(踩过两次)**:模型不会写单条命令,它写的是
@@ -220,9 +220,9 @@ system_prompt = {"type": "preset", "preset": "claude_code", "append": spec.instr
 **专门化不以损失通用能力为代价。**
 
 工作台索引也走这条通道。它每一轮都在,但它是 system prompt 的一部分,不占对话历史,
-压缩也清不掉它 —— 代价就是上面那条:**只到主 agent**。
+压缩也清不掉它 —— 代价就是上面那条:**只到协调者**。
 
-!!! warning "不要用 `disallowed_tools` 让主 agent 不动手"
+!!! warning "不要用 `disallowed_tools` 让协调者不动手"
     `disallowed_tools` 是**会话级**的,会把 subagent 一起禁掉。实测报错原文:
 
     ```text
@@ -241,7 +241,7 @@ system_prompt = {"type": "preset", "preset": "claude_code", "append": spec.instr
 
 这四层省的都是**现场**。下面这些问题它们不解决,有的还会因为它们更难被看见:
 
-1. **目标理解错了 —— 剪枝会让它变严重。** 现场被丢掉之后,留下来的恰恰是那条建在错误前提上的
+1. **目标理解错了 —— 这四层会让它变严重。** 现场被丢掉之后,留下来的恰恰是那条建在错误前提上的
    决策,而且它**看起来和正确决策一模一样**。长程把它放大到最坏:错误前提先跑几小时、派十几个
    subagent、在磁盘落一堆产出,之后才暴露。到那时贵的不是 token,是每一个产出都是照错的需求
    建的。挡这个的是[前置确认](clarify.md),不是这一页的任何一层。
@@ -259,9 +259,3 @@ system_prompt = {"type": "preset", "preset": "claude_code", "append": spec.instr
 7. **图片、文档类工具结果不落盘。** `spill_guard` 只改输出结构里的字符串字段,list 一律不碰。
 
 参数的完整默认值与签名见 [Python API](../reference/api.md);术语见[术语表](../reference/glossary.md)。
-
-<!-- TODO(核实): 术语表 #裁剪 写的是"写入会话存储时,按策略丢掉不值得留的消息",但源码里
-     TrimmingSessionStore 的重写点是 load()(resume 前),SQLite 原文始终不动;本页按源码写成
-     "resume 之前重写"。另外术语表 #落盘 说 spill_guard 写到 `.flower/spill/`,源码是
-     `<workbench.root>/spill/` —— 只有工作台正好在 `<workspace>/.flower` 时两者才相等,
-     `Runtime(workbench=True)` 的默认位置是 `<run_dir>/workbench`。请协调者决定是否修术语表。 -->

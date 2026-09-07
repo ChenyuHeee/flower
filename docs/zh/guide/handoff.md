@@ -86,7 +86,7 @@ rt = Runtime(workspace=".", run_dir="runs", handoff=False)   # 关掉,退回 aut
 **一、水位到阈值。** 判据是 `_handoff_due`:`handoff.enabled` 且**不在写交接的那一轮**
 且 `_ctx >= handoff.at` 且这一步已经拿到过 `session_id`。`_ctx` 是**主线程**最后一轮实际看到的
 上下文规模 —— 只看[主线程](../reference/glossary.md#主线程),[subagent](../reference/glossary.md#subagent)
-的上下文是它自己那条 transcript 的事,跑完就散,不该逼主会话换代。
+的上下文是它自己那条 transcript 的事,跑完就散,不该逼主线程换代。
 
 在 `warn_at` 处会先发一次逼近提醒,每代只发一次,不刷屏。
 
@@ -119,7 +119,7 @@ rt = Runtime(workspace=".", run_dir="runs", handoff=False)   # 关掉,退回 aut
 
 因为它是**接手的人最花钱重新发现的东西**,而写的人最容易漏掉。
 
-干活的人有系统性乐观偏差([目标看守](goal.md)论证过同一件事):它会写自己做成了什么,
+执行者有系统性乐观偏差([目标看守](goal.md)论证过同一件事):它会写自己做成了什么,
 忘记写试过什么不行。而后者才是真正贵的 —— [HT002](../cases/ht002.md) 里为一个编译问题绕了一小时,
 那一小时的结论要是没写下来,接手的人会原样再绕一遍。
 
@@ -308,7 +308,7 @@ auto-compact 已经被关掉,**没有兜底**,停在这里等于撞窗口。
 
 - [接续](continuity.md) —— 跨进程接上上一次运行,和这一页是同一件事的两个方向
 - [上下文经济学](context.md) —— 当场就剪的那几层
-- [目标看守](goal.md) —— "干活的人有系统性乐观偏差"那条论证
+- [目标看守](goal.md) —— "执行者有系统性乐观偏差"那条论证
 - [Python API](../reference/api.md) —— `HandoffPolicy`、`Handoff`、`CompactPolicy`、`default_window`、`StepResult`
 - [命令行](../reference/cli.md) —— `--window`、`--no-handoff`
 - 源码:[`core/handoff.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/handoff.py) ·
