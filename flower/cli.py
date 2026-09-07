@@ -25,7 +25,7 @@ import unicodedata
 from pathlib import Path
 
 from .core.agent import AgentSpec, HandoffPolicy
-from .core.env import describe, load_dotenv
+from .core.env import check_credentials, describe, load_dotenv, user_env_path
 from .core.events import Event
 from .core.roles import oracle
 from .core.runtime import Runtime
@@ -928,10 +928,18 @@ async def _drive(wf, args, *, trim: bool | None = None) -> None:
         rt.close()
     _say(f"\n{C['dim']}总花费 ${rt.total_cost()} · 清单 {rt.run_dir/'manifest.json'}{C['off']}")
     if failed := ctx.get("_failed_at"):
+        # 配错了(token 无效 / 401)—— 当场提出帮忙重配,而不是甩个报错让人自己查。
+        res = (ctx.get("_results") or {}).get(failed)
+        err = " ".join(filter(None, [getattr(res, "error", ""), *getattr(res, "errors", [])]))
+        if err and AUTH_FAIL.search(err) and sys.stdin.isatty():
+            _say(f"\n{C['ylw']}{G['warn']} 看起来是凭证不对:{err[:120]}{C['off']}")
+            if run_setup(reason="重新配一下凭证,然后再跑一次同样的命令就接着上次继续。"):
+                _say(f"{C['dim']}配好了。再跑一次刚才的命令 —— 同一目录会接着上次。{C['off']}")
         sys.exit(f"在步骤 {failed!r} 中止")
 
 
 async def _run_workflow(args) -> None:
+    ensure_credentials()
     obj = _load(args.target)
     await _drive(obj() if callable(obj) else obj, args)
 
@@ -963,6 +971,7 @@ def _wake_banner(st: dict, args) -> None:
 
 async def _run_go(args) -> None:
     """零配置入口:`flower "帮我做一个 X"`。流程见 workflow/starter.py。"""
+    ensure_credentials()
     fresh = bool(getattr(args, "new", False))
     st = wake_state(args.workspace, run_dir=args.run_dir, isolate=args.isolate)
     waking = st["waking"] and not fresh
@@ -995,6 +1004,7 @@ async def _run_go(args) -> None:
 
 
 async def _run_once(args) -> None:
+    ensure_credentials()
     spec = AgentSpec(
         name="ad-hoc",
         instructions=args.instructions or "",
@@ -1095,7 +1105,86 @@ def build_parser() -> argparse.ArgumentParser:
     o.add_argument("--fork", action="store_true", help="分叉而非续跑")
     o.set_defaults(fn=_run_once)
 
+    st = sub.add_parser("setup", help="配置凭证(API key / 网关 / 模型),写到 ~/.config/flower/.env")
+    _add_globals(st, suppress=True)
+    st.set_defaults(fn=_run_setup_cmd)
+
     return ap
+
+
+AUTH_FAIL = re.compile(r"401|invalid[_ ]?api[_ ]?key|authentication|unauthorized|无效.*(?:key|token|密钥)", re.I)
+
+
+def _write_user_env(vals: dict[str, str]) -> Path:
+    """把配置写到 ~/.config/flower/.env(chmod 600 —— 里面有 token)。"""
+    path = user_env_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = ["# flower 凭证 —— 由 `flower setup` 写。别提交进版本库。", ""]
+    lines += [f"{k}={v}" for k, v in vals.items() if v]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    return path
+
+
+def run_setup(*, reason: str = "") -> bool:
+    """交互式问凭证,写盘,重新加载。返回是否配好了。
+
+    这是"第一次跑自动弹、配错了再弹"的那个流程 —— 用户不用自己去碰配置文件。
+    非交互(管道/CI)下不能问,返回 False,让调用方打印指引后退出。
+    """
+    if not sys.stdin.isatty():
+        return False
+    _say(f"\n{C['bold']}{C['cyn']}== 配置 flower {'=' * 40}{C['off']}")
+    if reason:
+        _say(f"{C['ylw']}{reason}{C['off']}")
+    _say(f"{C['dim']}凭证会存到 {user_env_path()}(只你可读)。装一次,处处生效。{C['off']}\n")
+
+    _say(f"{C['ylw']}1. 你的 API key 或网关 token{C['off']} "
+         f"{C['dim']}(Anthropic 官方的 sk-ant-… 或第三方网关签发的){C['off']}")
+    token = input("   > ").strip()
+    if not token:
+        _say(f"{C['red']}没给 token,取消。{C['off']}")
+        return False
+
+    _say(f"\n{C['ylw']}2. 网关地址{C['off']} "
+         f"{C['dim']}(直接回车 = Anthropic 官方;第三方网关填它的 BASE_URL){C['off']}")
+    base = input("   > ").strip()
+
+    _say(f"\n{C['ylw']}3. 模型名{C['off']} "
+         f"{C['dim']}(直接回车 = 默认;网关有自己的模型名就填,如 claude-opus-5[1m]){C['off']}")
+    model = input("   > ").strip()
+
+    key = "ANTHROPIC_API_KEY" if token.startswith("sk-ant-") else "ANTHROPIC_AUTH_TOKEN"
+    vals = {key: token}
+    if base:
+        vals["ANTHROPIC_BASE_URL"] = base
+    if model:
+        vals["ANTHROPIC_MODEL"] = model
+        vals["ANTHROPIC_DEFAULT_OPUS_MODEL"] = model
+        vals["ANTHROPIC_DEFAULT_SONNET_MODEL"] = model
+    path = _write_user_env(vals)
+    load_dotenv(str(path), override=True)               # 立刻生效
+    _say(f"\n{C['grn']}{G['yes']} 存好了:{path}{C['off']}\n")
+    return True
+
+
+def ensure_credentials() -> None:
+    """跑活之前保证有凭证。缺了就当场问(交互),非交互就打印指引退出。"""
+    load_dotenv()
+    if check_credentials() is None:
+        return
+    if run_setup(reason="第一次用?给一次凭证就行。"):
+        return
+    sys.exit(check_credentials())                       # 非交互:打印指引
+
+
+async def _run_setup_cmd(args) -> None:                 # `flower setup`
+    load_dotenv()
+    have = check_credentials() is None
+    run_setup(reason="重新配置。" if have else "还没配过凭证。")
 
 
 def main() -> None:
