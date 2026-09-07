@@ -25,6 +25,7 @@ from __future__ import annotations
 import io
 import re
 import sys
+import tempfile as _tf
 import unicodedata
 from pathlib import Path
 
@@ -153,6 +154,76 @@ def main() -> int:
         check(not over40, f"40 列屏幕下也没有超宽行(超宽 {len(over40)} 条)")
     finally:
         cli._width = real
+
+    print("\n[7] 并行:两个 flower 进程往同一个 tty 写,不许把彼此的行切开")
+    # 并行跑多个 flower 是正常用法。不加跨进程锁的话,写边界落在任意字节位置 ——
+    # 实测能把 UTF-8 字符和转义序列拦腰切断。这里在**同一个 pty** 上真起两个
+    # 子进程复现,验证加锁后归零。
+    import os as _os, pty, re as _re, time as _t
+    # **只探能力,不要真 fork** —— 早先这里写成 `_os.forkpty()` 来"检测可用性",
+    # 那一句本身就会分出一个子进程,凭空多一份跑完整个测试的副本。
+    has_pty = hasattr(pty, "fork") and hasattr(_os, "fork")
+
+    def _child():
+        import sys as _s
+        _s.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from flower.cli import _say as say, C as CC
+        blk = "\n".join(f"{CC['cyn']}A 很长的一行中文内容撑满宽度触发多次写 {i:02d}{CC['off']}"
+                         for i in range(6))
+        blk2 = blk.replace("A ", "B ").replace(CC['cyn'], CC['red'])
+        a = _os.fork()
+        if a == 0:
+            for _ in range(80):
+                say(blk)
+            _os._exit(0)
+        for _ in range(80):
+            say(blk2)
+        _os.waitpid(a, 0)
+        _os._exit(0)
+
+    if not has_pty:
+        check(True, "本平台没有 pty,跳过(锁本身在 [7b] 验)")
+    else:
+        pid, fd = pty.fork()
+        if pid == 0:
+            _child()
+        buf = b""
+        while True:
+            try:
+                d = _os.read(fd, 64)
+            except OSError:
+                break
+            if not d:
+                break
+            buf += d
+            _t.sleep(0.0003)
+        _os.waitpid(pid, 0)
+        txt = buf.decode("utf-8", "replace")
+        rows = txt.replace("\r", "").split("\n")
+        mixed = [l for l in rows if "A " in l and "B " in l]
+        torn = _re.findall("\x1b\\[[0-9;]*[^0-9;m\x1b]", _SGR.sub("", txt))
+        check(not mixed, f"没有两进程混进同一行(实测 {len(mixed)})")
+        check(txt.count(chr(0xFFFD)) == 0, f"没有 UTF-8 被切断(实测 {txt.count(chr(0xFFFD))})")
+        check(not torn, f"没有畸形转义(实测 {len(torn)})")
+
+    print("\n[7b] 锁惰性获取:按当前 tty 解析,非终端下退化不报错")
+    import flower.cli as _cli
+    g = _cli._TtyGuard()
+    with g:                                        # 非终端(测试环境)→ 解析不到 tty
+        pass
+    check(g._fd is None, "管道/重定向下 guard 退化成无操作(不在导入时定死)")
+    # 惰性是关键:换成"当前是终端"后,再进一次就该真的拿到锁 ——
+    # 早先在导入时定死,fork 出的子进程永远停在"不是终端",加了锁也白加。
+    _real = _cli._tty_lock_path
+    _cli._tty_lock_path = lambda: str(Path(_tf.gettempdir()) / ".flower-fake-tty.lock")
+    try:
+        with g:
+            check(g._fd is not None, "一旦当前 stdout 是终端,下一次进入就拿到了锁")
+    finally:
+        _cli._tty_lock_path = _real
+        if g._fd is not None:
+            import os as _o
+            _o.close(g._fd)
 
     print(f"\n{'✓ 终端安全全部通过' if ok else '✗ 有失败'}")
     return 0 if ok else 1

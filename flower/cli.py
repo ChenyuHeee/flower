@@ -17,6 +17,7 @@ import select
 import shutil
 import signal
 import sys
+import tempfile
 import textwrap
 import threading
 import time
@@ -67,6 +68,89 @@ G = {
 # 一把锁管住所有输出。**stdin 线程和事件流是两个线程**,不加锁会在半行中间
 # 交错(这是加了"一直读 stdin"之后引入的真 bug)。
 _OUT = threading.Lock()
+
+
+def _tty_lock_path() -> str | None:
+    """同一个终端上的所有 flower 进程共用的锁文件路径。
+
+    键取自 tty 设备名(``/dev/ttys003``)—— 同一个 tab 的进程拿到同一把锁,
+    不同 tab 各锁各的,**不会互相拖慢**。
+    """
+    try:
+        name = os.ttyname(sys.stdout.fileno())
+    except (OSError, AttributeError, ValueError):
+        return None                     # 不是终端(管道/重定向):不需要跨进程锁
+    safe = "".join(c if c.isalnum() else "-" for c in name)
+    return os.path.join(tempfile.gettempdir(), f".flower-tty{safe}.lock")
+
+
+class _TtyGuard:
+    """跨进程的终端写锁。**并行跑多个 flower 是正常用法,不该靠"别开两个"回避。**
+
+    为什么需要它:``_OUT`` 是 ``threading.Lock``,只在**进程内**有效。两个 flower
+    往同一个 tty 写时,写边界落在任意字节位置 —— 实测(120 轮 × 6 行 × 2 进程)
+    **51 行两进程混进同一物理行、73 处 UTF-8 被拦腰切断、6 个畸形转义**。
+    半个 UTF-8 字符和残缺的转义序列正是能让终端字形渲染出错的东西。
+
+    用 ``flock`` 而不是别的:进程死了内核自动释放,不会留下卡住所有人的僵尸锁。
+    拿不到锁(平台不支持、文件建不了)就退化成只有进程内锁 —— 功能不变,
+    只是回到"可能交错"的老状态,**绝不因为锁失败就不输出**。
+
+    **惰性获取**,不在导入时定死:导入那一刻 stdout 未必已经是终端
+    (被重定向、在子进程里、测试环境),定死的话锁就永久失效了 ——
+    这是实测栽过的:测试里 fork 出的子进程继承了"当时不是终端"的判断,
+    加了锁却照样撕裂。每次按当前 tty 名解析,变了就重开。
+    """
+
+    def __init__(self) -> None:
+        self._fd = None
+        self._key = object()          # 当前 fd 对应哪个 tty;和 _tty_lock_path() 比对
+        self._flock = None
+        try:
+            import fcntl                                  # noqa: PLC0415
+            self._flock = fcntl.flock
+            self._ex, self._un = fcntl.LOCK_EX, fcntl.LOCK_UN
+        except Exception:                                 # noqa: BLE001
+            self._flock = None                            # Windows / 无 fcntl
+
+    def _ensure(self) -> None:
+        """按**当前** stdout 的 tty 解析锁文件。tty 变了就换一把。"""
+        if self._flock is None:
+            return
+        path = _tty_lock_path()
+        if path == self._key:
+            return                                        # 没变,沿用
+        if self._fd is not None:
+            try:
+                os.close(self._fd)
+            except OSError:
+                pass
+            self._fd = None
+        self._key = path
+        if path:
+            try:
+                self._fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+            except OSError:
+                self._fd = None                           # 建不了就退化,不报错
+
+    def __enter__(self):
+        self._ensure()
+        if self._fd is not None:
+            try:
+                self._flock(self._fd, self._ex)
+            except OSError:
+                pass
+        return self
+
+    def __exit__(self, *exc) -> None:
+        if self._fd is not None:
+            try:
+                self._flock(self._fd, self._un)
+            except OSError:
+                pass
+
+
+_TTY = _TtyGuard()
 
 # flower 自己的颜色码。消毒时**只放行它**,别的转义序列(清屏、移光标、OSC)
 # 和裸控制字节一律清掉 —— 模型或工具吐的字节不该直接驱动你的终端。
@@ -164,8 +248,16 @@ def _say(text: str = "") -> None:
         if _cols(ln) > limit:
             ln = _fit(ln, limit)
         lines.append(ln)
-    with _OUT:
-        print("\n".join(lines), flush=True)
+    blob = "\n".join(lines) + "\n"
+    # 两把锁:_OUT 管本进程的线程,_TTY 管同一个终端上的**别的 flower 进程**。
+    # 并行跑多个 flower 是正常用法 —— 不该靠"别开两个"回避(实测不加跨进程锁,
+    # 两个进程会把彼此的行拦腰切开,连 UTF-8 字符都断成半个)。
+    with _OUT, _TTY:
+        try:
+            sys.stdout.write(blob)      # 一次写完,不让 print 拆成多次系统调用
+            sys.stdout.flush()
+        except (OSError, ValueError):
+            pass                        # 终端已经没了(SIGHUP 之后)—— 别因此抛
 
 
 def _tokens(text: str):

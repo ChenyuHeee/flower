@@ -113,6 +113,14 @@ echo "帮我做一个 X" | flower --timeout 0     # 全自动,不等人
 | `--new` | 这次别接上次:上一段的需求/目标/血缘收进 `notes/archive/`(不删,只是移开) |
 | `-v` | 显示思考和工具结果 |
 
+**并行跑多个 flower 是支持的。** 不同目录各有自己的 `runs/`(会话库、血缘、清单),
+互不干扰;同一个终端里的多个 flower 共用一把写锁,输出不会互相切开
+(不加锁实测会把 UTF-8 字符和转义序列拦腰切断)。锁**按终端分**,
+不同 tab 各锁各的,不会互相拖慢。
+
+> 同一个**目录**里同时跑两个 flower 是另一回事 —— 它们会抢同一份
+> `lineage.json` / `manifest.json`,后写的会盖掉先写的。一个目录一个 flower。
+
 开关写在诉求前面或后面都行,只给开关不给诉求也行(`flower --clarify-only` 会先问你要做什么)。这条路径的流程实现在
 [`flower/workflow/starter.py`](../flower/workflow/starter.py) —— 两步,通用到不含任何领域假设。
 
