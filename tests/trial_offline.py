@@ -282,6 +282,11 @@ def main() -> int:                                          # noqa: C901
           "**默认不限提问次数** —— 问几次由确认者自己判断")
     check(wf6.steps[0].spec.max_turns is None,
           "确认者 max_turns 也是不限 —— 每次提问就是一轮,设小了「不限次数」就是空话")
+    # 这一段要一个**不在任何 git 仓库里**的目录。tests/_ws_trial 在 flower 仓库内部,
+    # 而 `git rev-parse --is-inside-work-tree` 对子目录也返回 true ——
+    # 所以仓库 git init 之后这条断言会失效。用系统临时目录躲开。
+    import tempfile
+    outside = Path(tempfile.mkdtemp(prefix="flower-nogit-"))
     for bad_ask, why in (("", "空诉求"), ("   ", "只有空白")):
         try:
             starter_flow(bad_ask, workspace=ws)
@@ -289,13 +294,14 @@ def main() -> int:                                          # noqa: C901
         except ValueError as e:
             check("诉求" in str(e), f"{why}有明确报错")
     try:
-        starter_flow("x", workspace=ws, isolate=True)      # p4 还不是 git 仓库
+        starter_flow("x", workspace=outside, isolate=True)   # 系统临时目录,不在任何仓库里
         check(False, "isolate 在非 git 仓库应当报错")
     except ValueError as e:
         check("git" in str(e), f"--isolate 非 git 仓库明确报错({str(e)[:30]}…)")
-    subprocess.run(["git", "init", "-q", str(ws)], check=True, capture_output=True)
-    check(starter_flow("x", workspace=ws, isolate=True).workbench.external,
+    subprocess.run(["git", "init", "-q", str(outside)], check=True, capture_output=True)
+    check(starter_flow("x", workspace=outside, isolate=True).workbench.external,
           "isolate 时工作台自动移到仓库外(worktree 是私有副本,工作台是共享层)")
+    subprocess.run(["rm", "-rf", str(outside)], check=False)
 
     # ---------------------------------------------------------------
     print("\n[9] 真实命令行 `flower \"…\" --clarify-only`(预置确认书 → 跳过 → 零请求)")

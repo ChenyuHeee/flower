@@ -243,9 +243,14 @@ class Runtime:
             result.text = "\n".join(texts).strip() or result.text
 
     def _persist(self) -> None:
-        """运行清单:step → session_id 的血缘,事后 resume/fork 靠它。"""
+        """运行清单:step → session_id 的血缘,事后 resume/fork 靠它。
+
+        ``duration_s`` 要手工补:它是 ``@property``,而 ``asdict()`` 只收 dataclass
+        字段 —— 不补的话清单里没有时长,得自己拿 started_at/ended_at 去减。
+        """
+        rows = [{**asdict(r), "duration_s": r.duration_s} for r in self.results]
         (self.run_dir / "manifest.json").write_text(
-            json.dumps([asdict(r) for r in self.results], indent=2, ensure_ascii=False),
+            json.dumps(rows, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
 

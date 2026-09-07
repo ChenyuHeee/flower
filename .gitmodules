@@ -1,0 +1,3 @@
+[submodule "human-test/HT001"]
+	path = human-test/HT001
+	url = git@github.com:ChenyuHeee/cppide.git
