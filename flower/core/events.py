@@ -29,7 +29,10 @@ from claude_agent_sdk import (
 
 EventKind = Literal[
     "text", "thinking", "tool_call", "tool_result",
-    "task", "system", "reset", "result", "error", "retry", "prompt", "ask", "unknown",
+    "task", "system", "reset", "result", "error", "retry", "prompt", "ask",
+    "step",      # 步骤边界。由 Workflow.run 发,不来自 normalize ——
+                 # UI 靠它画出运行的骨架(确认需求 → 设定目标 → 干活 → 判定)
+    "unknown",
 ]
 # "ask" 不由 normalize() 产生 —— 它来自 core/human.py 的提问通道。
 # 放在同一个 Literal 里是有意的:UI 只认一套 Event,不必为"要人回答"另开一条路。
@@ -101,6 +104,14 @@ def normalize(message: Any) -> list[Event]:
         # 中间发言会混进 StepResult.text,再顺着 workflow 污染下一步。
         sub = getattr(message, "parent_tool_use_id", None)
         meta = {"subagent": bool(sub)} | ({"parent_tool_use_id": sub} if sub else {})
+        # 这一轮模型实际看到多少上下文。**长程运行最该被看见的数字** ——
+        # 它决定还能跑多久(实测斜率约 2.2K/轮,1M 窗口约 440 轮撞墙,
+        # 见 docs/case-ht001.md 第二节)。此前它只存在于 transcript 里,
+        # 事件流拿不到,于是终端上看不见。
+        if (u := getattr(message, "usage", None)):
+            g = u.get if isinstance(u, dict) else (lambda k, d=0: getattr(u, k, d))
+            meta["context"] = (g("input_tokens", 0) + g("cache_read_input_tokens", 0)
+                               + g("cache_creation_input_tokens", 0))
         content = message.content
         # UserMessage 的正文是**输入**(用户 prompt / 派给 subagent 的任务书),
         # 不是模型产出。归到 "prompt",不进正文。

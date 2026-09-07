@@ -143,9 +143,14 @@ class Workflow:
         sessions: dict[str, str] = ctx.setdefault("_sessions", {})
         ctx.setdefault("_results", {})
 
-        for step in self.steps:
+        for i, step in enumerate(self.steps, 1):
             if step.when and not await _settle(step.when(ctx)):
                 continue
+            if on_event:
+                # 步骤边界是这次运行的骨架。UI 靠它分段 —— 否则几小时的输出
+                # 是一条看不出结构的流。
+                on_event(Event("step", text=step.name,
+                               payload={"index": i, "total": len(self.steps)}))
 
             resume = sessions.get(step.resume_from) if step.resume_from else None
             if step.resume_from and resume is None:

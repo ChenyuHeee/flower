@@ -185,6 +185,20 @@ def main() -> int:                                          # noqa: C901
         os.chdir(cwd0)
 
     # ---------------------------------------------------------------
+    print("\n[6b] CLI 的公开面还在(导入成功 ≠ 函数还在)")
+    # 实测栽过:一次大改动的切片范围算错,把 Recent / ask_aside 整段删掉了,
+    # 而 `import flower.cli` 照样成功 —— 它们只在运行时被引用。
+    import flower.cli as _cli
+    for name in ("Render", "render", "Recent", "ask_aside", "ASIDE_PROMPT",
+                 "answer_from_stdin", "build_parser", "_with_default_cmd",
+                 "_say", "_wrap", "_drive"):
+        check(hasattr(_cli, name), f"cli.{name} 还在")
+    # _drive 真正引用到的名字,一个都不能少
+    import inspect
+    body = inspect.getsource(_cli._drive)
+    for used in ("Recent(", "ask_aside(", "Render("):
+        check(used.rstrip("(") in dir(_cli), f"_drive 用到的 {used[:-1]} 在模块里")
+
     print("\n[7] 一键入口:`flower \"诉求\"` 的参数解析(不写子命令时自动补 go)")
     ap = build_parser()
     forms = [
