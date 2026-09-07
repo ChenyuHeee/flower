@@ -27,6 +27,7 @@ flower 从头到尾在做的是**当场决定什么该留**,compact 是唯一一
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -55,6 +56,29 @@ REQUIRED = ("doing", "next")
 """必填的两段。缺了它们,接手的人既不知道在哪也不知道往哪走。"""
 
 _HEAD = _head_re(_ALIASES)
+
+_OVERFLOW = re.compile(
+    r"prompt is too long"
+    r"|context[ _-]?length[ _-]?exceeded"
+    r"|maximum context length"
+    r"|exceed(?:s)? (?:the )?context (?:window|limit)"
+    r"|too many total text bytes"
+    r"|input length and `?max_tokens`? exceed",
+    re.I,
+)
+
+
+def is_overflow(*texts: str | None) -> bool:
+    """这条报错是不是"上下文装不下了"。
+
+    **为什么需要认它**:窗口大小只能按模型名判,判大了的话换代阈值永远够不着,
+    而 auto-compact 又是关掉的 —— 那就撞死在 API 上了。认出这个信号,
+    就能把"硬错"变成"当场换代",于是判大了的代价从"这一步失败"降到
+    "这一代的交接是降级的"。默认值因此可以取积极的一侧(见
+    :func:`~flower.core.agent.default_window`)。
+    """
+    return any(t and _OVERFLOW.search(t) for t in texts)
+
 
 DEGRADED = "[降级:交接没写成]"
 """机械拼出来的残缺交接的标记。见 :func:`degraded`。"""

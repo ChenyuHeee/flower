@@ -812,9 +812,9 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--isolate", action="store_true",
                    help="每个 subagent 分一份 git worktree(要求工作区是 git 仓库)")
     g.add_argument("--window", type=int, default=None, metavar="N",
-                   help="模型上下文窗口。**默认按模型名猜**(名字里带 1m 的算 100 万,"
-                        "其余按 20 万),猜错了用这个覆盖。到 窗口−50000 就写交接"
-                        "换新会话,而不是 compact")
+                   help="模型上下文窗口,**默认 100 万**(名字带 haiku 的按 20 万)。"
+                        "判大了也不是硬错:API 退回「prompt 太长」时会当场换代。"
+                        "到 窗口−50000 就写交接换新会话,而不是 compact")
     g.add_argument("--no-handoff", action="store_true",
                    help="关掉换代 —— 退回 SDK 自带的 auto-compact(把历史总结成一段话)")
     g.add_argument("--new", action="store_true",

@@ -22,13 +22,17 @@ from claude_agent_sdk import query
 from .agent import AgentSpec, CompactPolicy, HandoffPolicy, build_options
 from .env import check_credentials, load_dotenv
 from .events import Event, normalize
-from .handoff import HANDOFF_PROMPT, Handoff, degraded
+from .handoff import HANDOFF_PROMPT, Handoff, degraded, is_overflow
 from .guard import merge_hooks, whitelist_guard, workbench_hooks
 from .resilience import Resilience, classify
 from .workbench import Workbench
 from ..stores.sqlite import SqliteSessionStore
 from ..stores.prune import PrunePolicy, PruningSessionStore
 from ..stores.trim import EphemeralPolicy, TrimPolicy
+
+
+class _Overflow(Exception):
+    """内部信号:这个会话已经装不下了,别再试着让它写交接。"""
 
 
 def _project_key(path: Path) -> str:
@@ -204,7 +208,11 @@ class Runtime:
                 continue
             # 上下文满了:写交接,换一个新会话接手 —— 不 compact。
             # 和打断一样不受 max_attempts 约束:换代不是故障。
-            if result.error == self.HANDOFF_DUE:
+            # 装不下了。窗口是按模型名判的,判大了的话阈值永远够不着 ——
+            # 而 auto-compact 是关的。认出这个信号就能把硬错变成一次换代。
+            overflowed = (self.handoff.enabled and result.session_id
+                          and is_overflow(result.error, *result.errors))
+            if result.error == self.HANDOFF_DUE or overflowed:
                 if len(result.retired) >= self.handoff.max_generations:
                     # 阈值低于这个 agent 的启动地板时,每个新会话一开口就越线,
                     # 于是永远换代下去(换代不吃重试额度)。这里是那道闸。
@@ -214,7 +222,9 @@ class Runtime:
                         f"把 window 调大(现在 {self.handoff.window}),或 --no-handoff。")
                     break
                 retiring = result.session_id
-                h = await self._write_handoff(spec, prompt, result, on_event)
+                # 已经装不下的会话跑不动"再写一轮交接" —— 直接用机械拼的降级件。
+                h = await self._write_handoff(spec, prompt, result, on_event,
+                                              forced=overflowed)
                 if retiring:
                     result.retired.append(retiring)
                 cur_resume, cur_fork = None, False       # ← 全新会话,这是重点
@@ -284,6 +294,7 @@ class Runtime:
         prompt: str,
         result: StepResult,
         on_event: Callable[[Event], None] | None,
+        forced: bool = False,
     ) -> Handoff:
         """让**当前这个会话**写一份交接,冻结到磁盘。
 
@@ -304,9 +315,11 @@ class Runtime:
                 f"上下文 {before / 1000:.1f}K/{h.window / 1000:.0f}K —— 正在写交接…"),
                 payload={"phase": "writing", "step": name,
                          "context": before, "window": h.window}))
-        why = ""
+        why = "上下文已经装不下,连交接都跑不了一轮" if forced else ""
         self._writing_handoff = True
         try:
+            if forced:
+                raise _Overflow
             await self._attempt(
                 replace(spec, max_budget_usd=None),   # 交接必须写得出来,别卡在预算上
                 HANDOFF_PROMPT.format(used=f"{before / 1000:.1f}K",
@@ -319,6 +332,8 @@ class Runtime:
             doc = Handoff.parse(probe.text or "", step=name)
             if not doc.complete():
                 why = f"缺{'/'.join(doc.missing())}"
+        except _Overflow:
+            doc = Handoff(step=name)                  # why 已经写好了
         except Exception as exc:                      # noqa: BLE001
             doc, why = Handoff(step=name), f"{type(exc).__name__}"
         finally:

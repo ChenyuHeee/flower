@@ -58,20 +58,27 @@ class CompactPolicy:
         return e
 
 
+SMALL_WINDOW = ("haiku",)
+"""名字里带这些的按 200k 算。其余按 100 万 —— flower 面向的是长程活,
+而它实际会用到的那几个模型(Opus 5 / Sonnet 5)都到 100 万。"""
+
+
 def default_window() -> int:
-    """按配置里的模型名猜上下文窗口。猜不出来就按 200k 算。
+    """按配置里的模型名判上下文窗口。**默认 100 万。**
 
-    **为什么值得猜**:这个数字定了什么时候换代,而它配错的后果是不对称的 ——
-    猜大了会来不及(撞窗口),猜小了只是换代偏早(浪费)。所以只认一个非常明确的
-    信号:模型名里带 ``1m``(``claude-opus-5[1m]`` / ``...-1m`` 这类写法)。
-    别的一律按保守的 200k 算,让人用 ``--window`` 自己说。
+    判错了不会变成硬错:真实窗口比这个小的话,请求会被 API 以"prompt 太长"
+    退回,而 :class:`~flower.core.runtime.Runtime` 认得这个信号 ——
+    它会当场换代(用机械拼的降级交接,因为那个会话已经大到跑不动一轮了),
+    而不是让这一步失败。所以这里可以取积极的默认值。
 
-    实测:开发这台机器的网关配的就是 ``claude-opus-5[1m]`` —— 按 200k 算的话
-    每 150k 就换一次代,而它其实能跑到 950k。差 5 倍。
+    实测:开发这台机器的网关配的是 ``claude-opus-5[1m]``。早先按 200k 算的话
+    每 15 万就换一代,而它其实能跑到 95 万 —— 差 5 倍,长程活会被切得稀碎。
     """
     name = (os.environ.get("ANTHROPIC_MODEL")
             or os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL") or "").lower()
-    return 1_000_000 if re.search(r"(?:^|[^a-z0-9])1m(?:[^a-z0-9]|$)", name) else 200_000
+    if re.search(r"(?:^|[^a-z0-9])1m(?:[^a-z0-9]|$)", name):
+        return 1_000_000
+    return 200_000 if any(k in name for k in SMALL_WINDOW) else 1_000_000
 
 
 @dataclass
@@ -82,9 +89,9 @@ class HandoffPolicy:
     这里是"到阈值就写一份可读可改的文书,换一个新会话接手"。
     机制和产物都在 :mod:`~flower.core.handoff`。
 
-    ``window`` 默认由 :func:`default_window` 按模型名猜(只认 ``1m`` 这个明确信号,
-    别的按 200k 算)。**换模型或换网关时最需要确认的就是它**:真实窗口更大时换代
-    偏早(浪费,不出错);更小时会来不及 —— **那种情况必须自己调小**。
+    ``window`` 默认由 :func:`default_window` 按模型名判,**默认 100 万**。
+    判大了不会变成硬错:API 会以"prompt 太长"退回,Runtime 认得这个信号,
+    当场换代(降级交接)。判小了只是换代偏早,浪费而已。
 
     ``headroom`` 为什么默认 50k:auto-compact 在窗口 −33k 触发,换代要赶在它前面;
     而"写交接"本身还要再跑一轮。50k 同时满足这两件事。

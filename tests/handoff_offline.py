@@ -34,7 +34,8 @@ from flower.core.agent import (AgentSpec, CompactPolicy,          # noqa: E402
                                HandoffPolicy, default_window)
 from flower.core.events import Event                                    # noqa: E402
 from flower.core.guard import spill_guard                               # noqa: E402
-from flower.core.handoff import DEGRADED, Handoff, degraded             # noqa: E402
+from flower.core.handoff import (DEGRADED, Handoff, degraded,   # noqa: E402
+                                 is_overflow)
 from flower.core.runtime import Runtime, StepResult                     # noqa: E402
 from flower.core.workbench import Workbench                             # noqa: E402
 
@@ -242,21 +243,23 @@ async def main() -> int:
     check(off.handoff.enabled is False, "handoff=False 关得掉(退回 auto-compact)")
     off.close()
 
-    print("\n[7b] 窗口按模型名猜 —— 配错的后果不对称,所以只认 1m 这一个明确信号")
+    print("\n[7b] 窗口按模型名判,**默认 100 万**(判大了有安全网,见 [11])")
     import os
     keep = {k: os.environ.get(k) for k in ("ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL")}
     try:
         for m, want in (("claude-opus-5[1m]", 1_000_000), ("claude-sonnet-5-1m", 1_000_000),
-                        ("claude-opus-5", 200_000), ("gpt-1master", 200_000),
-                        ("claude-haiku-4-5-20251001", 200_000), ("", 200_000)):
+                        ("claude-opus-5", 1_000_000), ("claude-sonnet-5", 1_000_000),
+                        ("claude-haiku-4-5-20251001", 200_000), ("", 1_000_000)):
             os.environ["ANTHROPIC_MODEL"] = m
             os.environ.pop("ANTHROPIC_DEFAULT_OPUS_MODEL", None)
             got = default_window()
             check(got == want, f"{m or '(没配)':<28} → {got:,}")
         os.environ["ANTHROPIC_MODEL"] = ""
         os.environ["ANTHROPIC_DEFAULT_OPUS_MODEL"] = "claude-opus-5[1m]"
-        check(default_window() == 1_000_000, "ANTHROPIC_MODEL 空时退到 OPUS 默认那一项")
+        os.environ["ANTHROPIC_DEFAULT_OPUS_MODEL"] = "claude-haiku-4-5-20251001"
+        check(default_window() == 200_000, "ANTHROPIC_MODEL 空时退到 OPUS 默认那一项")
         os.environ["ANTHROPIC_MODEL"] = "claude-opus-5[1m]"
+        os.environ.pop("ANTHROPIC_DEFAULT_OPUS_MODEL", None)
         check(HandoffPolicy().window == 1_000_000 and HandoffPolicy(window=200_000).window == 200_000,
               "HandoffPolicy 默认用推断值,显式给了就用给的")
     finally:
@@ -295,6 +298,42 @@ async def main() -> int:
           "读回来又超阈值、又落盘、又给一行指针,无限循环")
     check(not await fire({"pattern": "^", "path": str(spill)}),
           "Grep 落盘件同理(判据看的是 tool_input 里所有字符串)")
+
+    print("\n[11] 装不下了 → 当场换代,不是硬错(这是默认取 100 万的底气)")
+    for t, want in (("prompt is too long: 1049000 tokens > 1000000 maximum", True),
+                    ("API Error: context_length_exceeded", True),
+                    ("input length and max_tokens exceed context limit", True),
+                    ("Connection reset by peer", False), (None, False)):
+        check(is_overflow(t) is want, f"{str(t)[:46]:<48} → {is_overflow(t)}")
+
+    rt = runtime(tmp / "j", window=1_000_000, headroom=50_000)
+    calls_seen = []
+
+    async def overflow_then_ok(sp, pr, result, *, resume, fork, resume_at, on_event):
+        calls_seen.append((pr, resume))
+        if len(calls_seen) == 1:
+            # 阈值 950K 永远够不着(判大了),API 直接退回
+            result.ok, result.error = False, "prompt is too long: 1049000 tokens > 1000000"
+        else:
+            result.ok, result.text, result.session_id = True, "接着干完了", "new"
+
+    rt._attempt = overflow_then_ok                   # type: ignore[method-assign]
+    r = StepResult(step="干活")
+
+    async def seed(sp, pr, result, *, resume, fork, resume_at, on_event):
+        calls_seen.append((pr, resume))
+        result.session_id = "old"
+        if len(calls_seen) == 1:
+            result.ok, result.error = False, "prompt is too long: 1049000 tokens > 1000000"
+        else:
+            result.ok, result.text = True, "接着干完了"
+
+    rt._attempt = seed                               # type: ignore[method-assign]
+    res = await rt.run(SPEC, "任务", step_name="干活")
+    check(res.retired == ["old"], f"装不下 → 换代,而不是这一步失败(retired={res.retired})")
+    check(DEGRADED in calls_seen[1][0], "用的是机械拼的降级件 —— 装不下的会话跑不动写交接那一轮")
+    check(calls_seen[1][1] is None, "接班的是新会话")
+    check(res.ok, "整步照常算成功")
 
     print(f"\n{'✓ 换代全部通过' if ok else '✗ 有失败'}")
     return 0 if ok else 1

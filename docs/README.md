@@ -108,7 +108,7 @@ echo "帮我做一个 X" | flower --timeout 0     # 全自动,不等人
 | `--judge-can-run` | 让判定者能跑命令(判定更硬,但它能改动工作区)|
 | `--timeout 秒` | 等你多久,默认 1800;**`0` = 全自动,没人时不阻塞** |
 | `--isolate` | 每个 subagent 分一份 git worktree(要求项目是 git 仓库) |
-| `--window N` | 模型窗口。**默认按模型名猜**(带 `1m` 的算 100 万)。到 窗口−50000 就写交接换新会话,而不是 compact |
+| `--window N` | 模型窗口,**默认 100 万**(名字带 `haiku` 的按 20 万)。到 窗口−50000 就写交接换新会话,而不是 compact |
 | `--no-handoff` | 关掉换代,退回 SDK 的 auto-compact |
 | `--new` | 这次别接上次:上一段的需求/目标/血缘收进 `notes/archive/`(不删,只是移开) |
 | `-v` | 显示思考和工具结果 |
