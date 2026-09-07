@@ -98,6 +98,8 @@ class Runtime:
         self.resilience = (resilience if isinstance(resilience, Resilience)
                            else Resilience(enabled=bool(resilience)))
         self.results: list[StepResult] = []
+        self._interrupt: str | None = None
+        """人按下 Ctrl+C 时想说的话。见 :meth:`interrupt`。"""
 
         # 工作台:脚本/产出/笔记落到磁盘,索引注入 system prompt。
         # 它承担的是"别重写、别贴回来"这两件事,和压缩无关 —— 压缩清得掉上下文,
@@ -119,6 +121,26 @@ class Runtime:
         if err := check_credentials():
             raise RuntimeError(err)
 
+    INTERRUPTED = "interrupted-by-human"
+
+    def interrupt(self, message: str = "") -> None:
+        """人要打断当前这一轮。**任何线程都能调**(UI 通常在别的线程)。
+
+        为什么必须有这个:在此之前 Ctrl+C 直接杀进程 —— 一次十小时的运行
+        会被肌肉记忆干掉。那比"没有打断功能"更糟。
+
+        做法上复用了断网重试那条现成的路(见 :meth:`run` 的循环):
+        把"失败原因"换成"人打断了",把 ``resume_prompt`` 换成人说的话,
+        于是它 **resume 同一个 session 接着跑**,已经干完的活和上下文都在。
+
+        是**协作式**的:在消息循环里检查,在消息边界干净地断开,
+        而不是硬取消任务。代价是延迟到下一条消息 —— subagent 正跑着的话
+        可能要等它回来。换来的是不会在半路撕裂状态。
+
+        空字符串 = 只打断,不说话(等价于"停一下,我看看")。
+        """
+        self._interrupt = message or ""
+
     async def run(
         self,
         spec: AgentSpec,
@@ -139,7 +161,24 @@ class Runtime:
             result.attempts = attempt
             await self._attempt(spec, cur_prompt, result, resume=cur_resume,
                                 fork=cur_fork, resume_at=resume_at, on_event=on_event)
-            if result.ok or not r.enabled or attempt >= r.max_attempts:
+            if result.ok:
+                break
+            # 人打断:不受 max_attempts 约束(那是给故障用的),也不用等网络。
+            # 直接带着他的话 resume 同一个 session —— 已经干完的活都还在。
+            if result.error == self.INTERRUPTED:
+                said, self._interrupt = self._interrupt, None
+                if not result.session_id:
+                    break            # 还没拿到 session,没法续 —— 只能停下
+                note = self._notifier(on_event, name, attempt)
+                note("已打断,带着你的话续跑" if said else "已打断,继续跑")
+                cur_resume, cur_fork = result.session_id, False
+                cur_prompt = (f"人在这里打断了你,说:\n\n{said}\n\n"
+                              "按这句话调整,接着做 —— 不要重头开始。"
+                              if said else r.resume_prompt)
+                result.resumed = True
+                attempt -= 1          # 打断不算一次失败尝试
+                continue
+            if not r.enabled or attempt >= r.max_attempts:
                 break
             kind = classify(result.error)
             if not r.should_retry(kind):
@@ -226,6 +265,18 @@ class Runtime:
         result.ok, result.error = False, None
         try:
             async for message in query(prompt=prompt, options=options):
+                # session_id 尽早抓住:它此前只从末尾那条 result 事件取,
+                # 于是**中途打断时根本没有 session 可续**(实测:打断后
+                # session_id 是 None,只能停下,十小时的活白干)。
+                # SDK 的 init 系统消息一开始就带它,这里见一条记一条。
+                if (sid := getattr(message, "session_id", None)):
+                    result.session_id = sid
+                if self._interrupt is not None:
+                    # 人按了 Ctrl+C。在消息边界断开 —— 已经收到的都算数,
+                    # 正在跑的 subagent 会丢(和断网那次同一个后果,已实测)。
+                    result.error = self.INTERRUPTED
+                    result.ok = False
+                    break
                 for ev in normalize(message):
                     if on_event:
                         on_event(ev)

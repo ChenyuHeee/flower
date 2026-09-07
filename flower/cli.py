@@ -12,6 +12,7 @@ import asyncio
 import collections
 import importlib
 import select
+import signal
 import sys
 import threading
 import time
@@ -368,6 +369,30 @@ async def _drive(wf, args, *, trim: bool | None = None) -> None:
             t.add_done_callback(asides.discard)
         loop.call_soon_threadsafe(spawn)
 
+    # ---- Ctrl+C = 打断这一轮,不是杀进程 ----------------------------
+    # 在此之前 Ctrl+C 直接杀掉一切 —— 一次十小时的运行会被肌肉记忆干掉,
+    # 那比"没有打断功能"更糟。现在第一次打断、第二次才退出(和常见 TUI 一致)。
+    armed = {"quit": False}
+
+    def on_sigint(signum, frame) -> None:                      # noqa: ARG001
+        if armed["quit"]:
+            raise KeyboardInterrupt                            # 第二次:真退出
+        armed["quit"] = True
+        pend = len(wf.channel.pending()) if getattr(wf, "channel", None) else 0
+        print(f"\n{C['ylw']}⚠ 已打断这一轮。正在跑的 subagent 会丢掉半成品。{C['off']}\n"
+              f"{C['dim']}  要说什么?(直接回车 = 什么都不说,接着跑;"
+              f"再按一次 Ctrl+C = 退出){C['off']}", flush=True)
+        try:
+            said = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            raise KeyboardInterrupt from None
+        armed["quit"] = False
+        rt.interrupt(said)
+        if pend:
+            print(f"{C['dim']}  (有 {pend} 个提问还等着,打断不影响它们){C['off']}", flush=True)
+
+    prev_sigint = signal.signal(signal.SIGINT, on_sigint) if sys.stdin.isatty() else None
+
     try:
         # workflow 自己挂了提问通道 → 给它接上标准输入。
         # 通道的 on_event 由 Workflow.run 自动接到同一个出口,这里只管"谁来答"。
@@ -380,6 +405,8 @@ async def _drive(wf, args, *, trim: bool | None = None) -> None:
             stop = answer_from_stdin(wf.channel, on_aside=on_aside)
         ctx = await wf.run(rt, on_event=sink)
     finally:
+        if prev_sigint is not None:
+            signal.signal(signal.SIGINT, prev_sigint)
         if stop is not None:
             stop.set()
         if asides:
