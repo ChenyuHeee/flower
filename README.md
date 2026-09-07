@@ -19,7 +19,7 @@ curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
 > [目标看守](docs/goal.md) · [接续](docs/continuity.md) · [换代](docs/handoff.md) ·
 > [换交互层](docs/interaction.md) · [容器](docker/README.md) ·
 > **真实运行案例：[HT001](docs/case-ht001.md) · [HT002](docs/case-ht002.md)**。
-> 本页讲的是**为什么是这些设计** —— 实测数据、对照实验和踩过的坑。
+> 本页讲的是**为什么是这些设计** ���— 实测数据、对照实验和踩过的坑。
 
 ---
 
@@ -34,7 +34,7 @@ curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
 | 断网不丢活 | DNS+TCP 探针挂着等，恢复后 resume 续跑；错误消息不进上下文 | `core/resilience.py`、`stores/prune.py` |
 | 脱离 claude CLI | Python wheel 内置原生二进制 `claude_agent_sdk/_bundled/claude`，依赖只有 anyio/jsonschema/mcp/sniffio。无 Node、无需装 Claude Code | `pyproject.toml` |
 | 可移植 | `setting_sources=[]` 隔离宿主 `~/.claude/` 与项目 `.claude/`；领域能力走 `plugins=[local]` 随仓库走；凭证走 `.env` 自带 | `core/agent.py`、`core/env.py` |
-| 定制交互 | SDK 消息流被压平成稳定的 `Event`，UI 层不 import 任何 SDK 类型 | `core/events.py` |
+| 定制交互 | SDK 消息流被压平成稳定的 `Event`，UI ��不 import 任何 SDK 类型 | `core/events.py` |
 | 长程 workflow | 可插拔 `SessionStore`（SQLite 落盘，`flush="eager"`）+ resume / fork / resume_at + `max_budget_usd` | `stores/sqlite.py`、`core/runtime.py` |
 
 ### 关键一条：叠加，不替换
@@ -79,7 +79,7 @@ rt = Runtime(workspace="repo", workbench=True)
 
 subagent 默认 `model="inherit"` —— 干活的那个不该降级。省的是上下文，不是模型档次。
 
-**第二层：工作台（治“每次重写”）。** `.flower/` 下三个目录随工作区走：
+**第二层：工作台（治“每次重写”）。** `.flower/` 下三个目录随工作区走��
 
 | 目录 | 放什么 | 解决什么 |
 |---|---|---|
@@ -312,7 +312,7 @@ fan out 几个 subagent 分别修不同的 issue，它们**共用一个 checkout
 harness 其实自带解法：Agent 工具接受 `isolation: "worktree"`，给 subagent 一份独立的
 git worktree（自己的目录 + 自己的分支 + 自己的索引）。问题是怎么用上它 ——
 写进系统提示词的话，不需要隔离的场景（只读调研、单个 agent 干活）白白常驻 token，
-而且提示词是**建议**，��型可以不听。
+而且提示词是**建议**，模型可以不听。
 
 flower 的做法：**隔离是角色的属性，由 hook 强制执行。**
 
@@ -339,7 +339,7 @@ workers = {
 每个分支只含自己那一行改动，互不污染 —— 三个 PR 直接可开。
 
 **为什么是 hook 而不是提示词**，做了对照实验：系统提示明确写着“不要使用 worktree 隔离，
-让 subagent 直接在当前目录切分支”，��型照做了（传的 `isolation=None`），hook 照样注入成功，
+让 subagent 直接在当前目录切分支”，模型照做了（传的 `isolation=None`），hook 照样注入成功，
 两个 subagent 还是落进了各自的 worktree。提示词是建议，hook 是保证。
 
 不覆盖模型的明确选择：它自己给了 `cwd`（两者互斥）或已经指定了 `isolation`，一律不动。
@@ -382,10 +382,10 @@ flower/
   workflow/goal.py    goal_step + with_goal      ← 目标看守：判定 + 打回接着做
   workflow/starter.py starter_flow               ← `flower` 的三步默认流程
   cli.py              参考 UI，~200 行，可整体替换
- docs/               给读者的文档（开源入口）
- examples/trial.py   模板 —— 照它写自己的 flows.py（直接试用不需要它）
- plugin/             领域能力包（skills/agents/hooks/mcp），随仓库走
- runs/               sessions.db + manifest.json
+  docs/               给读者的文档（开源入口）
+  examples/trial.py   模板 —— 照它写自己的 flows.py（直接试用不需要它）
+  plugin/             领域能力包（skills/agents/hooks/mcp），随仓库走
+  runs/               sessions.db + manifest.json
 ```
 
 ---
@@ -532,7 +532,7 @@ cp .env.example .env   # 填 token；.env 已被 gitignore
 - **微压缩在 `DISABLE_AUTO_COMPACT=1` 下是否仍然工作**。这是**读二进制反汇编推断的，不是实测**。
   真要验证得填满 167k 上下文，很贵。
 - 压缩相关 beta 参数经该网关的透传、`PreCompact` hook、几十轮以上的超长会话。
-- **worktree 的收尾**：合并回 main、清理 worktree、从分支开 PR，目前都留给你的 workflow 自己做。
+- **worktree 的收尾**：合并回 main、清理 worktree、从分支开 PR，目���都留给你的 workflow 自己做。
   harness 只保证“改动落在各自的 worktree 里，agent 无改动时自动清理”。
 - **非 git 仓库**下的隔离：harness 支持配 `WorktreeCreate`/`WorktreeRemove` hook 走其它 VCS，
   flower 没有封装，也没测过。
@@ -553,7 +553,7 @@ cp .env.example .env   # 填 token；.env 已被 gitignore
    关掉全量压缩就没有兜底了，撞上限是硬错 —— 必须配合前面三层一起用。
 3. **真正能改写规则的那一层是 `SessionStore.load()`**。它是 resume 前唯一的改写点：
    SDK 拿它的返回值物化成临时 jsonl，子进程从那里恢复。`stores/trim.py` 就写在这里 ——
-   保留全部交互历史，只把旧的大 tool_result 正文换成文件指针，SQLite 原���不动。
+   保留全部交互历史，只把旧的大 tool_result 正文换成文件指针，SQLite 原文不动。
 
    ```python
    Runtime(workspace="repo", trim=TrimPolicy(keep_recent=20, min_chars=2000))
