@@ -196,8 +196,15 @@ html[lang="ko"] .md-typeset {
 .md-nav__title { font-weight: 650; }
 .md-typeset .md-typeset__scrollwrap { margin: 0; }
 
-/* The language switcher lists nine locales — keep it scrollable. */
-.md-select__list { max-height: 20rem; overflow-y: auto; }
+/* The language switcher lists nine locales; Material sizes the panel for about
+   five. Raise the OPEN state on __inner — never set a height on __list, which
+   inherits max-height from __inner and is what collapses the panel when closed.
+   A fixed height there leaves an invisible 20rem block under the button that
+   keeps :hover true, so the dropdown can never close. */
+.md-select:focus-within .md-select__inner,
+.md-select:hover .md-select__inner {
+  max-height: 20rem;
+}
 
 @media screen and (max-width: 76.1875em) {
   .fl-hero { padding-top: 1.2rem; }
