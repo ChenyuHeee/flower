@@ -103,7 +103,20 @@ class HandoffPolicy:
 
     enabled: bool = True
     window: int = field(default_factory=default_window)
-    headroom: int = 50_000
+    headroom: int = 0
+    """留给"写交接那一轮"的余量。**0 = 按窗口比例自动算**(见 :attr:`at`)。
+
+    别写死一个数:实测栽过。固定 50k 在 200k 窗口上占 25%,够;到 1M 窗口只占 5% ——
+    阈值 950k,而写交接那一轮要在 950k 之上再跑一整轮(系统提示 + 工作台索引 +
+    交接提示词 + 输出),放不下,于是**交接每次都降级成空的**。
+    接手的新会话拿到空交接,只被告知"自己去现场看",重新摸索一遍,再撞满,再降级 ——
+    循环到撞上 max_generations。novel 那次 8 次换代里 7 次是空交接,$3021。"""
+
+    HEADROOM_FRACTION = 0.25
+    """余量占窗口的比例。25% 来自 200k 窗口下那个够用的 50k。"""
+
+    HEADROOM_FLOOR = 50_000
+    """余量下限。再小的窗口也得给写交接留这么多。"""
     max_generations: int = 8
     """一步最多换几代。**这是防跑飞的闸,不是容量规划。**
 
@@ -117,9 +130,16 @@ class HandoffPolicy:
     """
 
     @property
+    def room(self) -> int:
+        """实际余量:显式给了就用给的,否则按窗口比例算(下限 HEADROOM_FLOOR)。"""
+        if self.headroom > 0:
+            return self.headroom
+        return max(self.HEADROOM_FLOOR, int(self.window * self.HEADROOM_FRACTION))
+
+    @property
     def at(self) -> int:
         """越过这个数就换代。下限 10k —— 再小就连交接都写不出来了。"""
-        return max(10_000, self.window - self.headroom)
+        return max(10_000, self.window - self.room)
 
     @property
     def warn_at(self) -> int:

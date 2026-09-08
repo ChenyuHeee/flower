@@ -118,6 +118,7 @@ class Runtime:
         self._ctx = 0            # 本次 _attempt 里主线程见过的最大上下文
         self._warned = False     # 逼近提醒每代只发一次
         self._writing_handoff = False   # 见 _handoff_due:写交接那一轮豁免阈值
+        self._degraded = 0              # 连续降级计数;见 run() 的换代分支
         self.results: list[StepResult] = []
         # 这次进程的标记 + 上次留下的账。manifest 是**跨进程累积**的:
         # 同一个目录接着跑(见 core/lineage.py),它就是唯一能查到
@@ -255,6 +256,21 @@ class Runtime:
                                               forced=overflowed)
                 if retiring:
                     result.retired.append(retiring)
+                # **连着降级就别再空转。** 降级交接是空的,接手的会话只被告知
+                # "自己去现场看" —— 它重新摸索一遍,再撞满,再降级,循环到撞上限。
+                # 实测代价:novel 那次 8 次换代里 7 次空交接,$3021。
+                # 一次降级可以接受(偶发),连着两次说明余量根本不够写交接,
+                # 再换下去只是烧钱 —— 停下来,把话说清楚。
+                self._degraded = self._degraded + 1 if h.degraded else 0
+                if self._degraded >= 2:
+                    result.error = (
+                        f"连着 {self._degraded} 次交接都写不出来(降级空交接)。"
+                        f"接手的会话拿不到任何上下文,只会重新摸索、再撞满 —— "
+                        f"再换代只是烧钱。当前窗口 {self.handoff.window}、"
+                        f"阈值 {self.handoff.at}、余量 {self.handoff.room}:"
+                        f"余量不够写交接那一轮。把 --window 调到模型真实窗口,"
+                        f"或显式给更大的 headroom。")
+                    break
                 cur_resume, cur_fork = None, False       # ← 全新会话,这是重点
                 cur_prompt = h.prompt_block()
                 result.session_id = None                 # 新会话会带来新的

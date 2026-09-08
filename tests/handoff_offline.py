@@ -335,6 +335,42 @@ async def main() -> int:
     check(calls_seen[1][1] is None, "接班的是新会话")
     check(res.ok, "整步照常算成功")
 
+    print("\n[12] 余量按窗口比例算 —— 固定值在大窗口上不够写交接")
+    # novel 实测:1M 窗口 + 固定 50k 余量 → 阈值 950k,而写交接那一轮要在 950k 之上
+    # 再跑一整轮,放不下 → **8 次换代里 7 次是空交接**,$3021。
+    for win, want_at in ((200_000, 150_000), (1_000_000, 750_000)):
+        h = HandoffPolicy(window=win)
+        check(h.at == want_at,
+              f"窗口 {win:,} → 阈值 {h.at:,}(余量 {h.room:,} = {h.room/win:.0%})")
+    check(HandoffPolicy(window=200_000).room == 50_000,
+          "200k 窗口的行为**一点没变** —— 修大窗口不该动小窗口")
+    check(HandoffPolicy(window=1_000_000, headroom=50_000).at == 950_000,
+          "显式给了 headroom 就听人的,不自作主张")
+    check(HandoffPolicy(window=20_000).room >= HandoffPolicy.HEADROOM_FLOOR,
+          "再小的窗口也保底留够写交接的量")
+
+    print("\n[13] 连着降级就停下 —— 空交接换代只是烧钱")
+    rt = runtime(tmp / "k")
+    seq = []
+
+    async def always_degrade(sp, pr, result, *, resume, fork, resume_at, on_event):
+        seq.append(pr)
+        if len(seq) % 2 == 1:                  # 干活轮:越线
+            result.session_id = f"s{len(seq)}"
+            result.error, result.ok = rt.HANDOFF_DUE, False
+        else:                                  # 写交接轮:写不出来(降级)
+            result.session_id = f"s{len(seq)}"
+            result.ok, result.text = True, "我不知道该写什么"
+
+    rt._attempt = always_degrade               # type: ignore[method-assign]
+    res = await rt.run(SPEC, "任务", step_name="干活")
+    check(len(res.retired) <= 3,
+          f"连着降级 → 早早停下(换了 {len(res.retired)} 代,不是撞满 8 代)")
+    check("降级" in (res.error or "") and "烧钱" in (res.error or ""),
+          f"错误里说清为什么停:{(res.error or '')[:60]}")
+    check("窗口" in (res.error or "") and "余量" in (res.error or ""),
+          "并给出可操作的下一步(调 window / 给更大 headroom)")
+
     print(f"\n{'✓ 换代全部通过' if ok else '✗ 有失败'}")
     return 0 if ok else 1
 
