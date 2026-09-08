@@ -1,51 +1,46 @@
 # Python API
 
-Diese Seite erfasst erschöpfend die **62 öffentlichen Symbole** in `flower`s Top-Level-`__all__`:
-Signaturen, Parameter, Defaultwerte, Semantik, öffentliche Attribute und Methoden. Nach dem
-Lesen musst du den Quellcode nicht mehr öffnen, um Parameter nachzuschlagen.
+Diese Seite arbeitet die **62 öffentlichen Symbole** von `flower`s Top-Level-`__all__` erschöpfend durch: Signaturen, Parameter, Defaults, Semantik,
+öffentliche Attribute und Methoden. Nach dem Lesen musst du für Parameter nicht mehr in den Quellcode schauen.
 
-Gegliedert ist es nach **worum es dir geht**, nicht nach Moduldateien — willst du wissen, „wie
-hindere ich den [Coordinator](glossary.md#协调者) daran, selbst Hand anzulegen", geh zur
-[Hook-Ebene](#hook); willst du wissen, „wie kommt das Ergebnis des vorigen Schritts in den
-nächsten", geh zum [Workflow](#流程). Terminologie durchgehend nach dem
-[Glossar](glossary.md).
+Gegliedert ist sie nach **dem, was dich interessiert**, nicht nach Moduldateien — willst du wissen, "wie halte ich den [Coordinator](glossary.md#协调者)
+davon ab, selbst Hand anzulegen", geh zur [Hook-Schicht](#hook); willst du wissen, "wie kommt das Ergebnis des vorigen Schritts in den nächsten", geh zum [Workflow](#流程).
+Terminologie durchgehend nach dem [Glossar](glossary.md).
 
-Version `0.1.0`, Abhängigkeit `claude-agent-sdk>=0.2.152`. Alle Signaturen entsprechen dem
-Quellcode wörtlich.
+Version `0.1.0`, Abhängigkeit `claude-agent-sdk>=0.2.152`. Alle Signaturen entsprechen wörtlich dem Quellcode.
 
 ```python
-from flower import Runtime, Workflow, Step, coordinator, worker   # ein einziger Top-Level-Import
+from flower import Runtime, Workflow, Step, coordinator, worker   # 顶层一次导入
 ```
 
 ## Was auf dieser Seite steht {#索引}
 
 | Worum es geht | Symbole |
 |---|---|
-| [einen Agent laufen lassen](#运行时) | `Runtime` `StepResult` |
-| [mehrere Schritte verketten](#流程) | `Step` `Workflow` `StepAbort` `clarify_step` `goal_step` `with_goal` `starter_flow` `wake_state` `BRIEF_KEY` `MISSING_KEY` `CLARIFY_RESUME` `GOAL_KEY` `VERDICT_KEY` `ROUND_KEY` |
-| [eine Rolle bauen](#角色工厂) | `coordinator` `worker` `clarify` `judge` `oracle` `COORDINATOR_RULES` `WORKER_RULES` `CLARIFIER_RULES` `JUDGE_RULES` `ORACLE_RULES` |
-| [eine Agent-Definition von Hand schreiben](#agent-定义) | `AgentSpec` `build_options` `CompactPolicy` `HandoffPolicy` `default_window` |
-| [strukturierte Dokumente](#文书) | `Brief` `Handoff` `Goal` `Verdict` |
-| [Tools abfangen, Ergebnisse trimmen, Isolation aufteilen](#hook) | `whitelist_guard` `delegate_guard` `spill_guard` `index_guard` `isolate_guard` `isolated` `wants_isolation` `workbench_hooks` `merge_hooks` |
-| [das Arbeitsverzeichnis zum Spillen](#工作台) | `Workbench` |
-| [wie und was die Session speichert](#会话存储) | `SqliteSessionStore` `TrimmingSessionStore` `PruningSessionStore` `TrimPolicy` `EphemeralPolicy` `PrunePolicy` `is_ephemeral` `trim_report` |
-| [was tun bei Netzausfall](#韧性) | `Resilience` `classify` `endpoint` `reachable` |
-| [die UI austauschen](#事件与交互) | `Event` `normalize` `Ask` `HumanChannel` |
-| [prozessübergreifend an letztes Mal anknüpfen](#血缘) | `Lineage` |
+| [Einen Agent laufen lassen](#运行时) | `Runtime` `StepResult` |
+| [Mehrere Schritte verketten](#流程) | `Step` `Workflow` `StepAbort` `clarify_step` `goal_step` `with_goal` `starter_flow` `wake_state` `BRIEF_KEY` `MISSING_KEY` `CLARIFY_RESUME` `GOAL_KEY` `VERDICT_KEY` `ROUND_KEY` |
+| [Eine Rolle bauen](#角色工厂) | `coordinator` `worker` `clarify` `judge` `oracle` `COORDINATOR_RULES` `WORKER_RULES` `CLARIFIER_RULES` `JUDGE_RULES` `ORACLE_RULES` |
+| [Agent-Definitionen von Hand schreiben](#agent-定义) | `AgentSpec` `build_options` `CompactPolicy` `HandoffPolicy` `default_window` |
+| [Strukturierte Dokumente](#文书) | `Brief` `Handoff` `Goal` `Verdict` |
+| [Tools abfangen, Ergebnisse trimmen, Isolation trennen](#hook) | `whitelist_guard` `delegate_guard` `spill_guard` `index_guard` `isolate_guard` `isolated` `wants_isolation` `workbench_hooks` `merge_hooks` |
+| [Das Arbeitsverzeichnis fürs Spilling](#工作台) | `Workbench` |
+| [Wie und was Sessions speichern](#会话存储) | `SqliteSessionStore` `TrimmingSessionStore` `PruningSessionStore` `TrimPolicy` `EphemeralPolicy` `PrunePolicy` `is_ephemeral` `trim_report` |
+| [Was tun bei Netzausfall](#韧性) | `Resilience` `classify` `endpoint` `reachable` |
+| [Das UI austauschen](#事件与交互) | `Event` `normalize` `Ask` `HumanChannel` |
+| [Prozessübergreifend anknüpfen](#血缘) | `Lineage` |
 
-## Sechs Defaultwerte, die beißen {#危险默认值}
+## Sechs Defaults, die beißen {#危险默认值}
 
-Diese sechs sind kein Beiwerk, sondern die sechs häufigsten Ausrutscher. Jeder ist im
-zugehörigen Abschnitt vollständig erklärt.
+Diese sechs Punkte sind kein Randmaterial, sondern die sechs häufigsten Unfälle. Jeder ist im zugehörigen Abschnitt vollständig erklärt.
 
-| Defaultwert | Folge | Näheres |
+| Default | Folge | Details |
 |---|---|---|
-| `Runtime(workbench=False)` + `coordinator()` | `Bash`/`Write`/`Edit` im Main-Thread haben **keinen einzigen Hook** | [Runtime](#runtime) |
-| `Runtime(handoff=True)` | erzwingt am Spec `CompactPolicy(mode="no_summary")`, also `DISABLE_AUTO_COMPACT=1` | [Runtime](#runtime) |
-| `Workflow(continuous=True)` | ein Schritt mit `resume_from=None` knüpft dennoch prozessübergreifend an jene letzte Session an | [Workflow](#workflow) |
-| `build_options(fork=True)` ohne `resume` | still wirkungslos, kein Fehler | [build_options](#build-options) |
-| `clarify(max_turns=<kleine Zahl>)` | macht „unbegrenzt oft fragen" zur leeren Phrase — jede Frage ist eine Runde | [clarify()](#clarify-role) |
-| `AgentSpec.disallowed_tools` | session-weit, sperrt die Subagents gleich mit | [AgentSpec](#agentspec) |
+| `Runtime(workbench=False)` + `coordinator()` | `Bash`/`Write`/`Edit` im Main Thread haben **keinen einzigen Hook** | [Runtime](#runtime) |
+| `Runtime(handoff=True)` | Erzwingt `CompactPolicy(mode="no_summary")` auf der Spec, also `DISABLE_AUTO_COMPACT=1` | [Runtime](#runtime) |
+| `Workflow(continuous=True)` | Schritte mit `resume_from=None` knüpfen trotzdem prozessübergreifend an die letzte Session an | [Workflow](#workflow) |
+| `build_options(fork=True)` ohne `resume` | Wirkungslos, ohne Fehlermeldung | [build_options](#build-options) |
+| `clarify(max_turns=<kleine Zahl>)` | Macht "unbegrenzt nachfragen" zur leeren Behauptung — jede Rückfrage ist eine Runde | [clarify()](#clarify-role) |
+| `AgentSpec.disallowed_tools` | Gilt sessionweit, sperrt Subagents gleich mit aus | [AgentSpec](#agentspec) |
 
 ---
 
@@ -53,11 +48,9 @@ zugehörigen Abschnitt vollständig erklärt.
 
 Quellcode: [`flower/core/runtime.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/runtime.py)
 
-`Runtime` ist der Ausführungskern. Es hält den Workspace, den [Session-Store](glossary.md#会话存储),
-die [Workbench](glossary.md#工作台), die [Resilience](glossary.md#韧性)-Strategie und die
-[Handoff](glossary.md#换代)-Strategie und bietet nach außen nur ein einziges Verb: `run` einen
-Schritt. Wiederholung, Weiterlauf nach Unterbrechung, Handoff bei vollem Kontext — all das
-geschieht innerhalb dieses einen Aufrufs.
+`Runtime` ist der Ausführungskern. Er hält Workspace, [Session Store](glossary.md#会话存储), [Workbench](glossary.md#工作台),
+[Resilience](glossary.md#韧性)-Strategie und [Handoff](glossary.md#换代)-Strategie und hat nach außen nur ein Verb: einen Schritt `run`.
+Retry, Weiterlaufen nach einer Unterbrechung, Handoff bei vollem Kontext — alles passiert innerhalb dieses einen Aufrufs.
 
 ### `Runtime` {#runtime}
 
@@ -77,83 +70,74 @@ Runtime(
 )
 ```
 
-Die Konstruktorparameter sind **allesamt keyword-only** (`*` ganz vorne), `workspace` ist
-Pflicht.
+Die Konstruktorparameter sind **allesamt keyword-only** (`*` ganz vorne), `workspace` ist Pflicht.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `workspace` | `str \| Path` | Pflicht | Das `cwd` des Agents. Wird bei der Konstruktion resolved und `mkdir(parents=True, exist_ok=True)`. Der `project_key` des SDK leitet sich daraus ab — ist das Verzeichnis wegkopiert, findet man die alte `session_id` nicht mehr |
-| `run_dir` | `str \| Path` | `"runs"` | Ort für `sessions.db`, `manifest.json`, `lineage.json` und, bei `workbench=True`, die Default-Workbench. Wird ebenfalls resolved und ge-mkdir-t |
-| `portable` | `bool` | `True` | Durchgereicht an `build_options(portable=)`, also `setting_sources=[]`: liest weder das `~/.claude/` des Hosts noch das `.claude/` des Projekts. Siehe [Portabilität](glossary.md#可移植) |
-| `trim` | `TrimPolicy \| bool` | `False` | Eine Instanz wird direkt verwendet; bei `bool` dann `TrimPolicy(enabled=bool(trim))`. **Abschalten heißt nur, große Ergebnisse nicht zu trimmen, das Pruning läuft trotzdem** |
-| `ephemeral` | `EphemeralPolicy \| bool` | `True` | Gleiche Konvertierungsregel wie oben. Bildet mit `coordinator(glance=True)` ein Paar — lässt du den Main-Thread `git status` fahren, muss gesichert sein, dass dieses Ergebnis verfällt |
-| `keep_denials` | `int` | `1` | Wird an `PrunePolicy(keep_denials=)` gereicht. Behält die letzten N abgelehnten Tool-Aufrufe, ältere werden samt Aufruf und Ergebnis entfernt |
+| `workspace` | `str \| Path` | Pflicht | Das `cwd` des Agents. Wird beim Konstruieren resolved und `mkdir(parents=True, exist_ok=True)`. Der `project_key` des SDK wird daraus abgeleitet — wird das Verzeichnis wegkopiert, ist die alte `session_id` nicht mehr auffindbar |
+| `run_dir` | `str \| Path` | `"runs"` | Enthält `sessions.db`, `manifest.json`, `lineage.json` sowie die Default-Workbench bei `workbench=True`. Wird ebenfalls resolved und angelegt |
+| `portable` | `bool` | `True` | Wird an `build_options(portable=)` durchgereicht, also `setting_sources=[]`: liest weder das `~/.claude/` des Hosts noch das `.claude/` des Projekts. Siehe [portabel](glossary.md#可移植) |
+| `trim` | `TrimPolicy \| bool` | `False` | Eine Instanz wird direkt verwendet; bei `bool` wird `TrimPolicy(enabled=bool(trim))` gebaut. **Ausschalten heißt nur, dass große Ergebnisse nicht getrimmt werden — geprunt wird trotzdem** |
+| `ephemeral` | `EphemeralPolicy \| bool` | `True` | Gleiche Umwandlungsregel. Gehört mit `coordinator(glance=True)` zusammen — wer den Main Thread `git status` laufen lässt, muss dafür sorgen, dass dieses Ergebnis verfällt |
+| `keep_denials` | `int` | `1` | Geht an `PrunePolicy(keep_denials=)`. Behält die letzten N abgelehnten Tool-Aufrufe, ältere werden samt Aufruf und Ergebnis entfernt |
 | `workbench` | `Workbench \| bool` | `False` | Eine Instanz wird direkt verwendet; bei `True` wird `Workbench(workspace, home=run_dir / "workbench")` gebaut (**liegt per Default außerhalb des Workspace**). Danach sofort `refresh()` |
 | `spill_threshold` | `int \| None` | `4000` | Ab wie vielen Zeichen ein Tool-Ergebnis [gespillt](glossary.md#落盘) wird. `None` oder `0` = kein `spill_guard` |
-| `resilience` | `Resilience \| bool` | `True` | Gleiche Konvertierungsregel |
-| `handoff` | `HandoffPolicy \| bool` | `True` | Gleiche Konvertierungsregel |
+| `resilience` | `Resilience \| bool` | `True` | Gleiche Umwandlungsregel |
+| `handoff` | `HandoffPolicy \| bool` | `True` | Gleiche Umwandlungsregel |
 
-**Der Session-Store ist fest verdrahtet**: stets
+**Der Session Store ist fest verdrahtet**: immer
 `PruningSessionStore(run_dir/"sessions.db", workspace=..., policy=<TrimPolicy>, ephemeral=<EphemeralPolicy>, prune=PrunePolicy(keep_denials=...))`.
-Die Konstruktorparameter **bieten keinen** Einstieg zum Backend-Wechsel — willst du wechseln,
-konstruiere selbst `AgentSpec` + `build_options(session_store=...)` oder überschreibe nach der
-Konstruktion `rt.store`.
+Die Konstruktorparameter bieten **keinen** Einstiegspunkt zum Wechseln des Backends — wer wechseln will, baut sich selbst `AgentSpec` + `build_options(session_store=...)`
+oder überschreibt nach dem Konstruieren `rt.store`.
 
-Die letzten beiden Schritte der Konstruktion sind `load_dotenv()` und `check_credentials()`,
-**bei einem Fehler in Letzterem `raise RuntimeError`**. Fehlen die Credentials, kracht es schon
-in der Konstruktionsphase, nicht erst bei `run()`.
+Die letzten beiden Schritte des Konstruktors sind `load_dotenv()` und `check_credentials()`, **letzteres wirft bei Fehler `RuntimeError`**.
+Ohne Credentials fliegt es also schon beim Konstruieren, nicht erst bei `run()`.
 
-!!! warning "`workbench=False` + `coordinator()` = keine einzige Mauer für den Main-Thread"
-    `delegate_guard` wird nur in `workbench_hooks` installiert, und `workbench_hooks` wird nur
-    aufgerufen, wenn `self.workbench is not None`; `whitelist_guard` wiederum wird durch
-    `if not spec.delegate_only` übersprungen. `coordinator()` aber setzt konstant
-    `delegate_only=True` und gibt per Default `glance=True` an `Bash`.
+!!! warning "`workbench=False` + `coordinator()` = keine einzige Mauer im Main Thread"
+    `delegate_guard` wird nur in `workbench_hooks` installiert, und `workbench_hooks` wird nur aufgerufen, wenn `self.workbench is not None`;
+    `whitelist_guard` wiederum wird durch `if not spec.delegate_only` übersprungen. Und `coordinator()` setzt konstant
+    `delegate_only=True` und gibt per Default `glance=True` für `Bash`.
 
-    **Fazit: Kombinierst du den Coordinator mit `Runtime(workbench=False)`, fängt kein einziger
-    Hook sein `Bash`/`Write`/`Edit` ab.** Nutzt du `coordinator()`, dann schalte die
-    `workbench` ein — `Runtime(..., workbench=True)` oder gib eine `Workbench`-Instanz.
+    **Fazit: Kombiniert man den Coordinator mit `Runtime(workbench=False)`, fängt kein einziger Hook seine `Bash`/`Write`/`Edit` ab.**
+    Wer `coordinator()` benutzt, schaltet die `workbench` ein — `Runtime(..., workbench=True)` oder eine
+    `Workbench`-Instanz übergeben.
 
 !!! warning "`handoff=True` (Default) schaltet Auto-Compact zwangsweise ab"
     In `_attempt`: `handoff.enabled and spec.compact is None` → `spec = replace(spec, compact=CompactPolicy(mode="no_summary"))`,
-    im Kindprozess ist das `DISABLE_AUTO_COMPACT=1`. Der Grund: sind beide Mechanismen zugleich
-    an, lässt sich nicht sagen, wer das Zurückgehen des Kontexts verursacht hat.
+    im Subprozess also `DISABLE_AUTO_COMPACT=1`. Der Grund: Laufen beide Mechanismen gleichzeitig, lässt sich nicht mehr sagen, wer den Kontextabfall verursacht hat.
 
-    **Der Preis: der Schritt, der das Handoff schreibt, muss einen Degradierungspfad haben**
-    (`handoff.degraded`), denn ein Compact als Auffangnetz gibt es nicht mehr. Willst du
-    Auto-Compact behalten, gib `AgentSpec.compact` explizit an (hat das Spec es selbst gesetzt,
-    wird das respektiert und nicht überschrieben).
+    **Der Preis: Der Schritt, der das Handoff-Dokument schreibt, braucht zwingend einen Degradationspfad** (`handoff.degraded`), weil kein Compact mehr auffängt.
+    Wer Auto-Compact behalten will, setzt `AgentSpec.compact` explizit (gibt die Spec selbst etwas an, wird das respektiert und nicht überschrieben).
 
 #### Öffentliche Attribute {#runtime-属性}
 
 | Attribut | Typ | Beschreibung |
 |---|---|---|
-| `workspace` | `Path` | Der resolvete Workspace |
-| `run_dir` | `Path` | Das resolvete Run-Verzeichnis |
+| `workspace` | `Path` | Der resolvte Workspace |
+| `run_dir` | `Path` | Das resolvte Run-Verzeichnis |
 | `portable` | `bool` | Unverändert gespeichert |
-| `store` | `PruningSessionStore` | Der Session-Store. Ein Backend-Wechsel geht nur durch Überschreiben nach der Konstruktion |
+| `store` | `PruningSessionStore` | Der Session Store. Ein Backend-Wechsel geht nur durch Überschreiben nach dem Konstruieren |
 | `resilience` | `Resilience` | Die normalisierte Instanz |
 | `handoff` | `HandoffPolicy` | Die normalisierte Instanz |
-| `workbench` | `Workbench \| None` | Bei `workbench=False` ist es `None` |
-| `spill_threshold` | `int \| None` | Unverändert gespeichert, in `_attempt` an `workbench_hooks` gereicht |
-| `results` | `list[StepResult]` | Jeder in diesem Prozess gelaufene Schritt, der Reihe nach angehängt |
-| `run_id` | `str` | `"%Y%m%d-%H%M%S" + "-" + uuid4().hex[:6]`. **Muss pro Instanz eindeutig sein** — `manifest.json` dedupliziert nach dem Feld `run`; kollidieren zwei ids, hält der später Schreibende die Zeile des anderen für seine eigene vom letzten Mal und löscht sie |
-| `on_session` | `Callable[[str], None] \| None` | Ruft **sofort** zurück, sobald eine neue `session_id` da ist, Default `None`. **Sollte nur über die eine Zeile `runtime.run` gelegt werden** — der [Judge](glossary.md#判定者) nutzt dasselbe `Runtime`; hängt es während der Gate-Phase noch dran, schreibt es die Session des Judge in die [Lineage](glossary.md#血缘) des arbeitenden Schritts |
+| `workbench` | `Workbench \| None` | Bei `workbench=False` gleich `None` |
+| `spill_threshold` | `int \| None` | Unverändert gespeichert, in `_attempt` an `workbench_hooks` durchgereicht |
+| `results` | `list[StepResult]` | Jeder in diesem Prozess gelaufene Schritt, in Reihenfolge angehängt |
+| `run_id` | `str` | `"%Y%m%d-%H%M%S" + "-" + uuid4().hex[:6]`. **Muss pro Instanz eindeutig sein** — `manifest.json` dedupliziert nach dem Feld `run`, bei kollidierenden IDs hält der später Schreibende die Zeilen des anderen für seine eigenen vom letzten Mal und löscht sie |
+| `on_session` | `Callable[[str], None] \| None` | Callback **sofort** beim Erhalt einer neuen `session_id`, Default `None`. **Sollte nur die eine Zeile `runtime.run` umschließen** — der [Judge](glossary.md#判定者) benutzt dasselbe `Runtime`, hängt der Callback während des Gates noch dran, landet die Session des Judge in der [Lineage](glossary.md#血缘) des arbeitenden Schritts |
 
 Klassenkonstanten: `INTERRUPTED = "interrupted-by-human"`, `HANDOFF_DUE = "context-full-handoff"`,
-`INTERRUPT_NOTE` (ein Absatz, der beim Weiterlauf nach Unterbrechung hinter den Worten des
-Menschen angehängt wird und erklärt, dass „ein damals fliegender Tool-Aufruf, der interrupted
-zurückgibt, ein normaler Nebeneffekt der Unterbrechung ist, kein Umgebungsfehler").
+`INTERRUPT_NOTE` (ein Absatz, der beim Weiterlaufen nach einer Unterbrechung an die Worte des Menschen angehängt wird und erklärt, dass "ein damals fliegender Tool-Aufruf, der interrupted zurückgibt, eine normale Nebenwirkung der Unterbrechung ist, kein Umgebungsfehler").
 
 #### Öffentliche Methoden {#runtime-方法}
 
 | Methode | Signatur | Beschreibung |
 |---|---|---|
 | `run` | `async (spec, prompt, *, step_name=None, resume=None, fork=False, resume_at=None, on_event=None) -> StepResult` | Einen Schritt laufen lassen. Siehe unten |
-| `interrupt` | `(message: str = "") -> None` | Fordert die Unterbrechung der aktuellen Runde an. **Aus jedem Thread aufrufbar**. Kooperativ: trennt sauber an der **Nachrichtengrenze**, kein hartes Abbrechen. Leerer String = nur unterbrechen, ohne etwas zu sagen |
-| `rescue` | `() -> None` | Bringt die Abrechnung vor dem harten Kill so weit wie möglich in Ordnung, wird vom `SIGHUP`/`SIGTERM`-Handler aufgerufen. Schreibt auch den gerade fliegenden Schritt ins Manifest, `error="killed-by-signal"`. Macht nur kleine synchrone Schreibvorgänge |
+| `interrupt` | `(message: str = "") -> None` | Fordert die Unterbrechung der aktuellen Runde an. **Aus jedem Thread aufrufbar**. Kooperativ: bricht sauber an einer **Nachrichtengrenze** ab, kein hartes Abwürgen. Leerer String = nur unterbrechen, nichts sagen |
+| `rescue` | `() -> None` | Schreibt vor dem harten Abschuss möglichst alle Buchungen weg, aufgerufen vom `SIGHUP`/`SIGTERM`-Handler. Auch der fliegende Schritt landet im Manifest, mit `error="killed-by-signal"`. Macht nur kleine synchrone Schreibvorgänge |
 | `manifest_path` | `@property -> Path` | `run_dir / "manifest.json"` |
-| `project_key` | `@property -> str` | In `str(workspace.resolve())` werden `/`, `_`, `.` allesamt durch `-` ersetzt. **Vom SDK aus dem cwd abgeleitet, vom Aufrufer nicht angebbar** |
-| `has_session` | `(session_id: str) -> bool` | Ist diese id unter **diesem Workspace** noch auffindbar. Synchron, liest kein Payload |
+| `project_key` | `@property -> str` | In `str(workspace.resolve())` werden `/`, `_` und `.` allesamt durch `-` ersetzt. **Das SDK leitet es aus dem cwd ab, der Aufrufer kann es nicht vorgeben** |
+| `has_session` | `(session_id: str) -> bool` | Ist diese ID unter **diesem Workspace** noch auffindbar? Synchron, liest kein Payload |
 | `context_of` | `(session_id: str) -> int` | Die Kontextgröße der letzten Runde einer Session, delegiert an `store.last_context` |
 | `total_cost` | `() -> float` | `round(sum(r.cost_usd for r in self.results), 4)` |
 | `close` | `() -> None` | `self.store.close()` |
@@ -176,52 +160,42 @@ async def run(
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `spec` | `AgentSpec` | Pflicht, Positionsargument | Die Deklaration des zu laufenden Agents |
-| `prompt` | `str` | Pflicht, Positionsargument | Die Worte dieser Runde |
-| `step_name` | `str \| None` | `None` | Der Schlüssel, der in `StepResult.step`, Manifest und Lineage landet. `None` → `spec.name` |
-| `resume` | `str \| None` | `None` | An dieser `session_id` weiterlaufen |
-| `fork` | `bool` | `False` | Zweigt eine neue Session ab, ohne die ursprüngliche zu verschmutzen. **Wirkt nur, wenn `resume` truthy ist** |
-| `resume_at` | `str \| None` | `None` | Ab einer bestimmten Nachricht weiterlaufen (Rollback). Ebenfalls **nur wirksam, wenn `resume` truthy ist** |
+| `spec` | `AgentSpec` | Pflicht, positional | Die Deklaration des laufenden Agents |
+| `prompt` | `str` | Pflicht, positional | Was in dieser Runde gesagt wird |
+| `step_name` | `str \| None` | `None` | Der Schlüssel in `StepResult.step`, im Manifest und in der Lineage. `None` → `spec.name` |
+| `resume` | `str \| None` | `None` | Diese `session_id` fortsetzen |
+| `fork` | `bool` | `False` | Eine neue Session abzweigen, ohne die ursprüngliche zu verschmutzen. **Wirkt nur, wenn `resume` gesetzt ist** |
+| `resume_at` | `str \| None` | `None` | Ab einer bestimmten Nachricht fortsetzen (Rollback). Ebenfalls **nur wirksam, wenn `resume` gesetzt ist** |
 | `on_event` | `Callable[[Event], None] \| None` | `None` | Der Event-Ausgang, siehe [`Event`](#event) |
 
-Zu Beginn jedes Schritts wird der Kontextpegel auf null gesetzt (`self._ctx, self._warned = 0, False`).
-Danach folgt eine Schleife mit vier Ausgängen:
+Zu Beginn jedes Schritts wird der Kontextpegel auf null gesetzt (`self._ctx, self._warned = 0, False`). Danach folgt eine Schleife mit vier Ausgängen:
 
-1. **Erfolg** → ausbrechen.
-2. **Mensch unterbricht** (`result.error == INTERRUPTED`) → **nicht durch `max_attempts` beschränkt**,
-   wartet nicht aufs Netz. Knüpft mit den Worten des Menschen per `resume` an dieselbe Session an,
-   `attempt -= 1` (eine Unterbrechung zählt nicht als fehlgeschlagener Versuch), prompt = Worte des
-   Menschen + `INTERRUPT_NOTE`. **Ohne eine erhaltene `session_id` bleibt nur anhalten**.
-3. **Kontext voll** (`result.error == HANDOFF_DUE`, oder `handoff.enabled` und eine `session_id`
-   erhalten und `is_overflow(...)` schlägt an) → **ebenfalls nicht durch `max_attempts` beschränkt**.
-   Zuerst wird `len(result.retired) >= handoff.max_generations` geprüft; ist es überschritten, wird
-   der error durch eine Diagnosezeile ersetzt und ausgebrochen; sonst wird das [Handoff-Dokument](glossary.md#交接书)
-   geschrieben → `resume=None, fork=False` (**brandneue Session**) → prompt wird zu `h.prompt_block()`
-   → Pegel auf null → `attempt -= 1`.
-4. **Wiederholbarer Fehler** → bei `not resilience.enabled or attempt >= max_attempts` ausbrechen;
-   entscheidet `classify(error)`, dass nicht wiederholt werden soll, auch ausbrechen; sonst
-   `Event("retry")` senden, mit `wait_online()` aufs Netz warten, `sleep(delay_for(attempt))`;
-   **wurde je eine `session_id` erhalten, per `resume` weiterlaufen** (prompt wird zu
-   `resilience.resume_prompt`) und `result.resumed` auf `True` setzen.
+1. **Erfolg** → raus.
+2. **Mensch unterbricht** (`result.error == INTERRUPTED`) → **nicht durch `max_attempts` begrenzt**, wartet nicht aufs Netz.
+   Mit den Worten des Menschen wird dieselbe Session `resume`t, `attempt -= 1` (eine Unterbrechung zählt nicht als fehlgeschlagener Versuch), Prompt = Worte des Menschen + `INTERRUPT_NOTE`.
+   **Ohne `session_id` bleibt nur anhalten.**
+3. **Kontext voll** (`result.error == HANDOFF_DUE`, oder `handoff.enabled` und eine `session_id` liegt vor und
+   `is_overflow(...)` greift) → **ebenfalls nicht durch `max_attempts` begrenzt**. Zuerst wird `len(result.retired) >= handoff.max_generations` geprüft,
+   bei Überschreitung wird der Fehler durch eine Diagnosemeldung ersetzt und die Schleife verlassen; sonst [Handoff-Dokument](glossary.md#交接书) schreiben → `resume=None, fork=False`
+   (**ganz neue Session**) → Prompt wird zu `h.prompt_block()` → Pegel auf null → `attempt -= 1`.
+4. **Wiederholbarer Fehler** → bei `not resilience.enabled or attempt >= max_attempts` raus;
+   ergibt `classify(error)`, dass nicht wiederholt werden soll, ebenfalls raus; sonst `Event("retry")` senden, mit `wait_online()` aufs Netz warten,
+   `sleep(delay_for(attempt))`; **lag jemals eine `session_id` vor, wird mit `resume` fortgesetzt** (Prompt wird zu
+   `resilience.resume_prompt`) und `result.resumed` auf `True` gesetzt.
 
 Zum Abschluss: `ended_at` schreiben, an `self.results` anhängen, `manifest.json` schreiben.
 
-`manifest.json` hat **Append**-Semantik: bei jedem Schreiben wird die Platte neu gelesen, nach dem
-Feld `run` dedupliziert (die eigene Zeile wird ersetzt, fremde Zeilen bleiben stehen), sodass es
-sicher ist, im selben `run_dir` zwei Flower parallel laufen zu lassen — vorausgesetzt, die `run_id`
-kollidieren nicht.
+`manifest.json` hat **Append**-Semantik: bei jedem Schreiben wird die Platte neu gelesen und nach dem Feld `run` dedupliziert (die eigene Zeile wird ersetzt, fremde bleiben stehen),
+deshalb ist es sicher, zwei flower parallel im selben `run_dir` laufen zu lassen — vorausgesetzt, die `run_id`s kollidieren nicht.
 
-**Die drei Beobachtungspunkte des Handoffs** (alle `Event("handoff")`, unterschieden per
-`payload["phase"]`): `near` (nähert sich `warn_at`, pro Generation nur einmal gesendet),
-`writing` (schreibt gerade das Handoff, dauert gut zehn Sekunden), `done` (payload trägt
-`degraded` / `path` / `sections`). Die Runde, die das Handoff schreibt, läuft mit
-`replace(spec, max_budget_usd=None)` — das Handoff muss geschrieben werden können, darf nicht am
-Budget hängenbleiben; zudem `on_event=None`, diese Runde spielt nichts an die UI.
+**Die drei Beobachtungspunkte des Handoffs** (alle `Event("handoff")`, unterschieden durch `payload["phase"]`):
+`near` (nähert sich `warn_at`, wird pro Generation nur einmal gesendet), `writing` (das Handoff-Dokument wird geschrieben, dauert gut zehn Sekunden),
+`done` (Payload enthält `degraded` / `path` / `sections`). Die Runde, die das Handoff-Dokument schreibt, läuft mit
+`replace(spec, max_budget_usd=None)` — das Handoff muss geschrieben werden können und darf nicht am Budget hängenbleiben;
+außerdem `on_event=None`, diese Runde erscheint nicht im UI.
 
-Das Handoff wird nach `<workbench.notes>/交接-<Schrittname>.md` gespillt; **ohne Workbench kein
-Spill**, das Dokument wird trotzdem per prompt an den Nachfolger übergeben, nur ist es hinterher
-nicht mehr auffindbar. Ein altes Handoff wird nach `notes/archive/交接/<Name>-<Zeitstempel>.md`
-verschoben.
+Das Handoff-Dokument landet unter `<workbench.notes>/交接-<步骤名>.md`; **ohne Workbench wird nichts geschrieben**, das Dokument geht trotzdem per Prompt
+an den Nachfolger, es lässt sich hinterher nur nicht mehr nachschlagen. Alte Handoffs werden nach `notes/archive/交接/<名>-<时间戳>.md` verschoben.
 
 ### `StepResult` {#stepresult}
 
@@ -244,27 +218,27 @@ class StepResult:
     context: int = 0
 ```
 
-Die vollständige Abrechnung eines gelaufenen Schritts.
+Die komplette Abrechnung eines gelaufenen Schritts.
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
 | `step` | `str` | Pflicht | Schrittname (`step_name` oder `spec.name`) |
-| `session_id` | `str \| None` | `None` | **Immer jene Session, die zuletzt übernommen hat** — die bei einem zwischenzeitlichen Handoff verbrannten stehen in `retired` |
+| `session_id` | `str \| None` | `None` | **Immer die zuletzt übernehmende Session** — die unterwegs beim Handoff verbrannten stehen in `retired` |
 | `ok` | `bool` | `False` | Ob dieser Schritt geklappt hat |
-| `cost_usd` | `float` | `0.0` | US-Dollar. Über Wiederholung und Handoff hinweg **akkumuliert** |
-| `num_turns` | `int` | `0` | Rundenzahl, ebenfalls akkumuliert |
-| `text` | `str` | `""` | **Enthält nur den Fließtext des Main-Threads**. Die Äußerungen der Subagents bleiben in deren eigenen Transcript, das ihnen zugeteilte Task-Brief ist `kind="prompt"`, beides kommt nicht hinein |
-| `error` | `str \| None` | `None` | Grund des Fehlschlags. Für Sonderwerte siehe `Runtime.INTERRUPTED` / `Runtime.HANDOFF_DUE` |
+| `cost_usd` | `float` | `0.0` | In Dollar. Über Retries und Handoffs hinweg **kumuliert** |
+| `num_turns` | `int` | `0` | Anzahl Runden, ebenfalls kumuliert |
+| `text` | `str` | `""` | **Enthält nur den Fließtext des Main Thread**. Was ein Subagent sagt, bleibt in seinem eigenen Transcript, das an ihn vergebene Task Brief ist `kind="prompt"` — beides landet hier nicht |
+| `error` | `str \| None` | `None` | Fehlerursache. Spezialwerte siehe `Runtime.INTERRUPTED` / `Runtime.HANDOFF_DUE` |
 | `started_at` / `ended_at` | `float` | `0.0` | Unix-Zeitstempel |
-| `attempts` | `int` | `1` | Tatsächliche Zahl der Versuche. Unterbrechung und Handoff **zählen nicht mit** |
-| `errors` | `list[str]` | `[]` | Gesammelte synthetische API-Fehlermeldungen, **kommen nicht in `text`** |
-| `resumed` | `bool` | `False` | Ob zwischendurch per resume weitergelaufen wurde |
-| `retired` | `list[str]` | `[]` | Die bei den Handoffs dieses Schritts verbrannten `session_id`, der Reihe nach |
-| `context` | `int` | `0` | Die Kontextgröße, die der Main-Thread in der letzten Runde tatsächlich gesehen hat, also das Handoff-Kriterium |
+| `attempts` | `int` | `1` | Tatsächliche Anzahl Versuche. Unterbrechungen und Handoffs **zählen nicht mit** |
+| `errors` | `list[str]` | `[]` | Gesammelte synthetische API-Fehlermeldungen, **landen nicht in `text`** |
+| `resumed` | `bool` | `False` | Ob unterwegs per Resume fortgesetzt wurde |
+| `retired` | `list[str]` | `[]` | Die bei Handoffs dieses Schritts verbrannten `session_id`s, in Reihenfolge |
+| `context` | `int` | `0` | Die Kontextgröße, die der Main Thread in der letzten Runde tatsächlich gesehen hat, also das Handoff-Kriterium |
 
 | Attribut | Typ | Beschreibung |
 |---|---|---|
-| `duration_s` | `@property -> float` | `round(ended_at - started_at, 2)`, bei nicht abgeschlossenem Lauf `0.0` |
+| `duration_s` | `@property -> float` | `round(ended_at - started_at, 2)`, `0.0` solange nicht fertig |
 
 ---
 
@@ -272,13 +246,9 @@ Die vollständige Abrechnung eines gelaufenen Schritts.
 
 Quellcode: [`flower/workflow/`](https://github.com/ChenyuHeee/flower/tree/main/flower/workflow)
 
-Ein [Workflow](glossary.md#流程) ist eine der Reihe nach aufgefädelte Menge von [Schritten](glossary.md#步骤),
-plus die Regeln, wie Zustand zwischen den Schritten weitergereicht wird und wann vorzeitig abgebrochen wird.
-**Das Framework liefert keinen fertigen Workflow, den Workflow schreibst du** — `starter_flow` ist nur eine
-lauffähige Vorlage.
+Ein [Workflow](glossary.md#流程) ist eine Reihe hintereinandergehängter [Schritte](glossary.md#步骤), plus die Regeln, wie Zustand zwischen den Schritten weitergereicht wird und wann vorzeitig abgebrochen wird. **Das Framework liefert keine fertigen Workflows, den Workflow schreibst du** — `starter_flow` ist nur eine lauffähige Vorlage.
 
-Typ-Alias `Ctx = dict[str, Any]` (`flower.workflow.base.Ctx`, steht in `flower.workflow.__all__`,
-nicht im obersten `__all__`).
+Typ-Alias `Ctx = dict[str, Any]` (`flower.workflow.base.Ctx`, steht in `flower.workflow.__all__`, nicht im obersten `__all__`).
 
 ### `Step` {#step}
 
@@ -301,54 +271,51 @@ class Step:
     reduce: Callable[[StepResult, Ctx], str] | None = None
 ```
 
-Die **Deklaration** eines Schritts. `Step` selbst ist keine Funktion — ausgeführt wird tatsächlich
-`Runtime.run(step.spec, prompt, ...)`. Die ersten drei Felder sind Positionsargumente,
-`Step("取词", terse, "读 seed.txt …")` ist gültige Schreibweise.
+Die **Deklaration** eines Schritts. `Step` selbst ist keine Funktion — ausgeführt wird tatsächlich `Runtime.run(step.spec, prompt, ...)`. Die ersten drei Felder sind positional, `Step("取词", terse, "读 seed.txt …")` ist eine gültige Schreibweise.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
 | `name` | `str` | Pflicht | Schrittname. **Prozessübergreifend stabiler Schlüssel** — landet in `ctx[name]`, `ctx["_results"]`, im Manifest und in der Lineage. Umbenennen = Lineage gekappt |
 | `spec` | `AgentSpec` | Pflicht | Welcher Agent läuft |
-| `prompt` | `str \| Callable[[Ctx], str]` | Pflicht | Was gesagt wird. Kann ein Closure sein, das `ctx` bekommt und live rechnet |
-| `resume_from` | `str \| None` | `None` | Session welches Schritts fortgesetzt wird. Hat der referenzierte Schritt keine Session erzeugt, **wirft es `ValueError`**, statt still zu überspringen |
-| `fork` | `bool` | `False` | Auf Basis von `resume_from` verzweigen. **Ohne `resume_from` wirkungslos** |
-| `retries` | `int` | `0` | Wie oft maximal nachgelegt wird, wenn das Gate nicht durchgeht. `retries=0` = nur eine Runde |
-| `gate` | `Callable[[StepResult, Ctx], bool] \| None` | `None` | Entscheidet, ob dieser Durchgang zählt. **Darf async sein.** `False` gilt als Fehlschlag. **Wird pro Versuch genau einmal aufgerufen** — es kann Seiteneffekte haben (etwa den Brief auf Platte schreiben) und darf nicht mehrfach ausgelöst werden |
+| `prompt` | `str \| Callable[[Ctx], str]` | Pflicht | Was gesagt wird. Darf ein Closure sein, das mit `ctx` gerechnet wird |
+| `resume_from` | `str \| None` | `None` | Die Session welchen Schritts fortgesetzt wird. Hat der referenzierte Schritt keine Session erzeugt, **wird `ValueError` geworfen**, nicht still übersprungen |
+| `fork` | `bool` | `False` | Forkt auf Basis von `resume_from`. **Ohne `resume_from` wirkungslos** |
+| `retries` | `int` | `0` | Wie oft nach nicht bestandenem gate maximal erneut versucht wird. `retries=0` = nur eine Runde |
+| `gate` | `Callable[[StepResult, Ctx], bool] \| None` | `None` | Entscheidet, ob dieser Durchlauf als bestanden gilt. **Darf async sein**. `False` gilt als Fehlschlag. **Wird pro Versuch genau einmal aufgerufen** — es kann Seiteneffekte haben (etwa den Brief auf Platte schreiben) und darf nicht mehrfach ausgelöst werden |
 | `on_fail` | `str` | `"stop"` | `"stop"` / `"skip"` / `"continue"`, siehe unten |
 | `when` | `Callable[[Ctx], bool] \| None` | `None` | Bei `False` wird **der ganze Schritt übersprungen**: kein Result, kein Eintrag in `ctx["_results"]`. **Darf async sein** |
-| `on_reject` | `Callable[[StepResult, Ctx], str] \| None` | `None` | Was in der **nächsten Runde** gesagt wird, wenn das Gate nicht durchging. **Darf async sein.** Wird es gesetzt, ändert sich die Retry-Semantik, siehe unten |
+| `on_reject` | `Callable[[StepResult, Ctx], str] \| None` | `None` | Was in der **nächsten Runde** gesagt wird, wenn das gate nicht bestanden wurde. **Darf async sein**. Wird es gesetzt, ändert sich die Retry-Semantik, siehe unten |
 | `resume_prompt` | `str \| Callable[[Ctx], str] \| None` | `None` | Prompt für den Fall der Continuity (statt von vorn zu beginnen) |
-| `reduce` | `Callable[[StepResult, Ctx], str] \| None` | `None` | Bestimmt, was in `ctx[name]` landet. Default ist der Rohtext `result.text`. **Muss eine synchrone Funktion sein** |
+| `reduce` | `Callable[[StepResult, Ctx], str] \| None` | `None` | Bestimmt, was in `ctx[name]` landet. Default ist der Originaltext `result.text`. **Muss synchron sein** |
 
 | Methode | Signatur | Beschreibung |
 |---|---|---|
-| `render` | `(ctx: Ctx, *, resuming: bool = False) -> str` | Bei `resuming` und vorhandenem `resume_prompt` wird letzteres genommen, sonst `prompt`; ist es aufrufbar, wird es mit `ctx` aufgerufen |
+| `render` | `(ctx: Ctx, *, resuming: bool = False) -> str` | Bei `resuming` und vorhandenem `resume_prompt` wird dieses genommen, sonst `prompt`; ist es aufrufbar, wird es mit `ctx` aufgerufen |
 
 **Drei Arten, Sessions zu verbinden** (innerhalb desselben Runs):
 
-| Schreibweise | Wirkung |
+| Schreibweise | Effekt |
 |---|---|
 | `resume_from=None` (Default) | Neue Session, nur mit dem im Prompt übergebenen Kontext. Billig, isoliert. **Aber bei `Workflow(continuous=True)` wird die Session des gleichnamigen Schritts aus der prozessübergreifenden Lineage geholt** |
 | `resume_from="Name des vorigen Schritts"` | Dieselbe Session wird fortgesetzt, vollständiger Kontext. Teuer, zusammenhängend |
-| `resume_from="Name des vorigen Schritts", fork=True` | Verzweigen, ohne die Ursprungs-Session zu verschmutzen. Für Nachprüfung / parallele Varianten |
+| `resume_from="Name des vorigen Schritts", fork=True` | Fork, verschmutzt die Originalsession nicht. Für Nachprüfung / parallele Varianten |
 
 **`on_reject` ändert die Retry-Semantik**:
 
 - Nicht gesetzt → der nächste Versuch **läuft von vorn** (gleicher Prompt, gleiches `resume_from`).
 - Gesetzt → der nächste Versuch **setzt genau die eben abgelehnte Session fort**, der Prompt wird durch den Rückgabewert ersetzt, `fork` wird auf `False` gezwungen.
-- Gibt es einen leeren String zurück → kein Zurückweisen, es fällt auf „von vorn“ zurück.
-- Ist `result.session_id` gleich `None` → ebenfalls Rückfall auf „von vorn“.
+- Rückgabe leerer String → keine Rückweisung, degradiert zum Lauf von vorn.
+- `result.session_id` ist `None` → degradiert ebenfalls zum Lauf von vorn.
 
 **Die drei Werte von `on_fail`**:
 
 | Wert | Verhalten |
 |---|---|
 | `"stop"` (Default) | Schreibt `ctx["_failed_at"] = name` und **bricht den gesamten Workflow ab** |
-| `"skip"` | Springt zum nächsten Schritt, **`ctx[name]` wird nicht geschrieben** — ein nachgelagertes `lambda ctx: ctx["某步"]` läuft in einen `KeyError` |
+| `"skip"` | Springt zum nächsten Schritt, **`ctx[name]` wird nicht geschrieben** — nachgelagertes `lambda ctx: ctx["某步"]` läuft in einen `KeyError` |
 | `"continue"` | `ctx[name] = result.text`, es geht mit dem unvollständigen Ergebnis weiter |
 
-Ob bestanden oder nicht, `ctx["_results"][name] = result` wird immer geschrieben; ist `result.session_id`
-nicht leer, wird zusätzlich in `ctx["_sessions"]` geschrieben und `lineage.remember(...)` aufgerufen.
+Ob bestanden oder nicht: `ctx["_results"][name] = result` wird immer geschrieben; ist `result.session_id` nicht leer, wird zusätzlich `ctx["_sessions"]` geschrieben und `lineage.remember(...)` aufgerufen.
 
 ### `Workflow` {#workflow}
 
@@ -371,56 +338,47 @@ class Workflow:
     ) -> Ctx
 ```
 
-Führt eine Kette von `Step` der Reihe nach aus und gibt den finalen `ctx` zurück. `steps` ist ein
-Positionsargument, `Workflow([...])` ist gültig.
+Führt eine Reihe von `Step` der Reihe nach aus und gibt das finale `ctx` zurück. `steps` ist positional, `Workflow([...])` ist gültig.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `steps` | `list[Step]` | Pflicht | Wird der Reihe nach ausgeführt |
+| `steps` | `list[Step]` | Pflicht | Werden der Reihe nach ausgeführt |
 | `name` | `str` | `"workflow"` | Name des Workflows |
 | `context` | `Ctx` | `{}` | Initiales Kontext-Dict. **Läuft derselbe `Workflow` ein zweites Mal, ist ctx dasselbe dict** |
-| `channel` | `HumanChannel \| None` | `None` | Hier hängt der Kanal, wenn angehalten und ein Mensch gefragt werden muss. `run()` hängt dessen `on_event` automatisch an denselben Ausgang, **nur wenn `channel.on_event is None`**; auch das Treiberprogramm erfährt über dieses Feld, wem es antworten soll |
-| `workbench` | `Workbench \| None` | `None` | Die vom Workflow bestimmte Workbench, damit das Treiberprogramm sie findet |
-| `continuous` | `bool` | `True` | Gleicher Pfad = gleiches Gespräch. Umgesetzt über [`Lineage`](#lineage) |
+| `channel` | `HumanChannel \| None` | `None` | Hier wird eingehängt, wenn angehalten und ein Mensch gefragt werden muss. `run()` hängt dessen `on_event` automatisch an denselben Ausgang, **nur wenn `channel.on_event is None`**; auch das Treiberprogramm erfährt über dieses Feld, wem es antworten soll |
+| `workbench` | `Workbench \| None` | `None` | Die vom Workflow vorgegebene Workbench, damit das Treiberprogramm sie findet |
+| `continuous` | `bool` | `True` | Gleicher Pfad = dasselbe Gespräch. Umgesetzt über [`Lineage`](#lineage) |
 
 | Parameter von `run()` | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `runtime` | `Runtime` | Pflicht, Positionsargument | Auf welcher Runtime gelaufen wird |
+| `runtime` | `Runtime` | Pflicht, positional | Mit welcher Runtime gelaufen wird |
 | `on_event` | `Callable[[Event], None] \| None` | `None` | Event-Ausgang, wird an jedes `Runtime.run` durchgereicht |
 | `on_step` | `Callable[[Step, StepResult], None] \| None` | `None` | Callback nach jedem abgeschlossenen Schritt |
 
 !!! warning "`continuous=True` ist der Default, `resume_from=None` heißt nicht neue Session"
-    Ist Continuity an, ruft `run()` zuerst `Lineage.open(run_dir, workspace)` und prüft dann jeden
-    Eintrag einzeln per `runtime.has_session(sid)`, ob er noch im Store liegt; nur lebende Einträge
-    fließen in `ctx["_sessions"]`. Damit **redet auch ein Schritt mit `resume_from=None` in der Session
-    vom letzten Mal weiter** — auch wenn der Prozess getötet oder die Maschine neu gestartet wurde.
+    Ist Continuity an, ruft `run()` zuerst `Lineage.open(run_dir, workspace)` auf und prüft dann jeden Eintrag einzeln mit `runtime.has_session(sid)`, ob er noch in der Datenbank ist; nur die lebenden werden in `ctx["_sessions"]` eingespielt. Damit **spricht auch ein Schritt mit `resume_from=None` in der Session von letztem Mal weiter** — auch wenn der Prozess gekillt oder die Maschine neu gestartet wurde.
 
-    Wer jedes Mal eine frische Session will, schreibt explizit `Workflow(..., continuous=False)`.
-    Außerdem: **Schrittnamen sind prozessübergreifend stabile Schlüssel; einen Schrittnamen zu ändern heißt, die Lineage zu kappen.**
+    Wer jedes Mal eine ganz neue Session will, schreibt explizit `Workflow(..., continuous=False)`.
+    Außerdem: **Der Schrittname ist ein prozessübergreifend stabiler Schlüssel; wer ihn ändert, kappt die Lineage.**
 
 Die **privaten Schlüssel**, die `run()` in ctx schreibt (alle mit `_` beginnend, kollidieren also nicht mit Schrittnamen):
 
 | Schlüssel | Inhalt |
 |---|---|
-| `_runtime` | Die übergebene `Runtime`. **Darüber schickt ein Gate Agents los** |
-| `_on_event` | Event-Ausgang. Auch der Agent im Gate muss die UI erreichen, sonst bleibt die Oberfläche schwarz |
+| `_runtime` | Die übergebene `Runtime`. **Darüber werden im gate Agents losgeschickt** |
+| `_on_event` | Event-Ausgang. Auch der Agent im gate muss ans UI durchkommen, sonst bleibt die Oberfläche schwarz |
 | `_sessions` | `dict[Schrittname, session_id]`, wird per `setdefault` gelesen |
 | `_results` | `dict[Schrittname, StepResult]` |
-| `_lineage` | Das `Lineage`-Objekt. Nur vorhanden, wenn `continuous=True` und die Runtime `run_dir` + `workspace` hat |
-| `_woke` | Rückgabewert von `lineage.bump()`, das wievielte Wake dies ist |
-| `_aborted` | Die Nachricht des `StepAbort` |
-| `_failed_at` | Name des gescheiterten Schritts bei `on_fail="stop"` |
+| `_lineage` | Das `Lineage`-Objekt. Nur vorhanden bei `continuous=True` und wenn die Runtime `run_dir` + `workspace` hat |
+| `_woke` | Rückgabewert von `lineage.bump()`, das wievielte Wake das ist |
+| `_aborted` | Die Nachricht von `StepAbort` |
+| `_failed_at` | Bei `on_fail="stop"` der Name des fehlgeschlagenen Schritts |
 
 Payload von `Event("step")`: `{"index": i, "total": len(steps), "resumed": bool, "woke": int}`.
 
-**Retry-Labels**: Versuch 0 nutzt `step.name`; danach mit `on_reject` `f"{name}#round{attempt+1}"`,
-ohne `on_reject` `f"{name}#retry{attempt}"`. Im Manifest sieht man auf einen Blick, wie dieser Schritt
-zu Ende gegangen ist. **Namen mit Suffix gehen nicht in die prozessübergreifende Lineage** —
-`Lineage.remember` verwendet den Originalnamen.
+**Retry-Labels**: Beim 0. Versuch `step.name`; danach mit `on_reject` `f"{name}#round{attempt+1}"`, ohne `on_reject` `f"{name}#retry{attempt}"`. Im Manifest sieht man auf einen Blick, wie dieser Schritt zu Ende gegangen ist. **Namen mit Suffix gehen nicht in die prozessübergreifende Lineage** — `Lineage.remember` verwendet den Originalnamen.
 
-`runtime.on_session` umschließt nur die eine Zeile `runtime.run` und wird per `try/finally` garantiert
-vor dem Gate wieder abgenommen. `prompt_cur` / `resume_cur` / `fork_cur` sind lokale Variablen und werden
-nicht in `step` zurückgeschrieben — dasselbe `Step`-Objekt kann ein zweites Mal laufen.
+`runtime.on_session` umschließt nur die eine Zeile `runtime.run`; `try/finally` stellt sicher, dass es vor dem gate garantiert wieder abgenommen wird. `prompt_cur` / `resume_cur` / `fork_cur` sind lokale Variablen und werden nicht nach `step` zurückgeschrieben — dasselbe `Step`-Objekt kann ein zweites Mal laufen.
 
 ### `StepAbort` {#stepabort}
 
@@ -428,15 +386,11 @@ nicht in `step` zurückgeschrieben — dasselbe `Step`-Objekt kann ein zweites M
 class StepAbort(Exception): ...
 ```
 
-Vom `gate` geworfen = **sofort stoppen, nicht weiter versuchen**. Unterschied zu „gibt `False` zurück“:
-`False` heißt „diesmal nicht, noch eine Runde“; `StepAbort` heißt „noch eine Runde bringt nichts“.
+Aus dem `gate` geworfen = **sofort stoppen, nicht weiter versuchen**. Unterschied zu „`False` zurückgeben": `False` heißt „diesmal nicht, noch eine Runde"; `StepAbort` heißt „noch eine Runde bringt auch nichts".
 
-Nach dem Wurf: `ctx["_aborted"] = str(exc)`, `passed = False`, **Ausstieg aus der Retry-Schleife
-(die restlichen `retries` werden nicht verbraucht)**, danach geht es wie bei einem normalen Fehlschlag
-über `on_fail` weiter (Default `"stop"`).
+Nach dem Wurf: `ctx["_aborted"] = str(exc)`, `passed = False`, **Ausstieg aus der Retry-Schleife (die restlichen `retries` werden nicht verbraucht)**, danach geht es wie bei einem normalen Fehlschlag über `on_fail` weiter (Default `"stop"`).
 
-`with_goal` wirft es an zwei Stellen: wenn `ctx["_runtime"]` nicht zu bekommen ist, und wenn der Verdict
-`unreachable` lautet und niemand antwortet.
+`with_goal` wirft es an zwei Stellen: wenn `ctx["_runtime"]` nicht zu bekommen ist, und wenn das Verdict `unreachable` lautet und niemand antwortet.
 
 ### `clarify_step()` {#clarify-step}
 
@@ -456,45 +410,37 @@ def clarify_step(
 ) -> Step
 ```
 
-Erzeugt einen `Step`, der [Clarify](glossary.md#前置确认) macht: Anforderung ausfragen → zu einem
-[`Brief`](#brief) parsen → sind alle vier Abschnitte da, einfrieren und auf Platte schreiben.
+Erzeugt einen `Step`, der [Clarify](glossary.md#前置确认) durchführt: Bedarf klären → in einen [`Brief`](#brief) parsen → wenn alle vier Abschnitte vollständig sind, einfrieren und auf Platte schreiben.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `channel` | `HumanChannel` | Pflicht, Positionsargument | Kanal zum Fragen |
-| `brief_path` | `str \| Path` | Pflicht | Wohin der [Brief](glossary.md#需求确认书) fällt. **Muss in genau der Workbench liegen, deren Index tatsächlich injiziert wird** |
+| `channel` | `HumanChannel` | Pflicht, positional | Kanal zum Nachfragen |
+| `brief_path` | `str \| Path` | Pflicht | Wohin der [Brief](glossary.md#需求确认书) geschrieben wird. **Muss in genau die Workbench fallen, deren Index tatsächlich injiziert wird** |
 | `prompt` | `str \| Callable[[Ctx], str]` | Pflicht | Das ursprüngliche Anliegen des Menschen |
 | `name` | `str` | `"确认需求"` | Schrittname, zugleich Schlüssel in `ctx` |
-| `spec` | `AgentSpec \| None` | `None` | Ohne Angabe wird `clarify(name, channel, instructions=instructions, **spec_kw)` verwendet |
+| `spec` | `AgentSpec \| None` | `None` | Ohne Angabe wird `clarify(name, channel, instructions=instructions, **spec_kw)` benutzt |
 | `instructions` | `str` | `""` | Zusätzliche Anweisungen an den [Clarifier](glossary.md#确认者) |
 | `always_ask` | `bool` | `False` | `True` = jedes Mal neu fragen, egal ob ein Brief existiert |
 | `on_fail` | `str` | `"stop"` | Wie `Step.on_fail` |
-| `retries` | `int` | `0` | Wie oft nachgefragt wird, wenn die vier Abschnitte nicht vollständig sind |
-| `**spec_kw` | | | Wird direkt an [`clarify()`](#clarify-role) durchgereicht, also sind `can_read=False`, `max_budget_usd=...` möglich |
+| `retries` | `int` | `0` | Wie oft nachgefragt wird, wenn die vier Abschnitte nicht zusammenkommen |
+| `**spec_kw` | | | Wird direkt an [`clarify()`](#clarify-role) durchgereicht, man kann also `can_read=False`, `max_budget_usd=...` schreiben |
 
-So sind die Felder im erzeugten `Step` belegt:
+So sind die Felder im erzeugten `Step` gefüllt:
 
 - `resume_prompt = CLARIFY_RESUME`.
-- `when`: bei `always_ask=True` → immer `True`; sonst wird bei vollständigem `Brief.load(brief_path)` dieser
-  in ctx gefüllt und **dann `False` (überspringen) zurückgegeben** — auch beim Überspringen muss gefüllt
-  werden, sonst bekommt das Nachgelagerte die Anforderung nicht.
-- `gate`: `Brief.parse(result.text)`, unvollständig → `ctx[MISSING_KEY]` schreiben und `False` zurückgeben;
-  vollständig → `b.write(brief_path)` einfrieren, in ctx füllen, `True` zurückgeben.
-- `reduce`: gibt `ctx[BRIEF_KEY].prompt_block()` zurück, **nicht den Rohtext des Modells** — im Rohtext
-  kann Zusatzgeschriebenes stecken.
-- `resume_from` **bleibt auf dem Default `None`**: der nächste Schritt ist eine neue Session, er bekommt nur
-  den Brief, nicht das Frage-Antwort-Protokoll.
-  Die Fragen und Antworten des Clarify **waren nie** im Kontext des Koordinators; sie wurden nicht erst
-  hineingelassen und dann herausgeschnitten.
+- `when`: bei `always_ask=True` → immer `True`; sonst wird `Brief.load(brief_path)` bei Vollständigkeit in ctx eingespielt **und dann `False` zurückgegeben (übersprungen)** — auch beim Überspringen muss eingespielt werden, sonst bekommt die nachgelagerte Stufe den Bedarf nicht.
+- `gate`: `Brief.parse(result.text)`, unvollständig → `ctx[MISSING_KEY]` schreiben und `False` zurückgeben; vollständig → `b.write(brief_path)` einfrieren, in ctx einspielen, `True` zurückgeben.
+- `reduce`: gibt `ctx[BRIEF_KEY].prompt_block()` zurück, **nicht den Originaltext des Modells** — im Originaltext kann Zusatzgeschriebenes stecken.
+- `resume_from` **bleibt beim Default `None`**: Der nächste Schritt ist eine neue Session, bekommt nur den Brief, nicht das Frage-Antwort-Protokoll.
+  Die Fragen und Antworten des Clarify **waren nie** im Kontext des Koordinators, sie wurden nicht nachträglich herausgeschnitten.
 
-Drei Stellen, die in ctx gefüllt werden: `ctx[BRIEF_KEY] = b`, `ctx[name] = b.prompt_block()`,
-`ctx.pop(MISSING_KEY, None)`.
+Drei Stellen, an denen in ctx eingespielt wird: `ctx[BRIEF_KEY] = b`, `ctx[name] = b.prompt_block()`, `ctx.pop(MISSING_KEY, None)`.
 
 | Konstante | Wert | Beschreibung |
 |---|---|---|
-| `BRIEF_KEY` | `"_brief"` | `ctx[BRIEF_KEY]` ist das `Brief`-Objekt; `ctx[step.name]` ist dessen `prompt_block()` |
-| `MISSING_KEY` | `"_brief_missing"` | Welche Abschnitte bei gescheiterter Klärung fehlen (Abschnittsnamen auf Chinesisch), zur Anzeige in der UI |
-| `CLARIFY_RESUME` | Ein Prompt-Text auf Chinesisch | „Mach mit der eben nicht zu Ende geführten Anforderungsklärung weiter — **nicht von vorn anfangen** …“. Ohne diesen Satz schickt die Continuity das ursprüngliche Anliegen als neue Aufgabe erneut, und der Clarifier fragt womöglich schon Gefragtes noch einmal |
+| `BRIEF_KEY` | `"_brief"` | `ctx[BRIEF_KEY]` ist ein `Brief`-Objekt; `ctx[step.name]` ist dessen `prompt_block()` |
+| `MISSING_KEY` | `"_brief_missing"` | Welche Abschnitte bei fehlgeschlagenem Clarify fehlen (chinesische Abschnittsnamen), zur Anzeige im UI |
+| `CLARIFY_RESUME` | Ein chinesischer Prompt-Text | „Mach mit dem eben nicht zu Ende gebrachten Clarify weiter — **nicht von vorn anfangen** …". Ohne diesen Satz schickt die Continuity das ursprüngliche Anliegen als neue Aufgabe erneut los, und der Clarifier fragt womöglich bereits Gefragtes noch einmal |
 
 ### `goal_step()` {#goal-step}
 
@@ -514,40 +460,32 @@ def goal_step(
 ) -> Step
 ```
 
-Erzeugt einen `Step`, der **das Ziel setzt**: Der [Judge](glossary.md#判定者) liest den Brief und schreibt
-Ziel + Prüfliste; das wird zu einem [`Goal`](#goal) geparst, eingefroren und auf Platte geschrieben.
-Gleiche Form wie `clarify_step`.
+Erzeugt einen `Step`, der **das Ziel setzt**: Der [Judge](glossary.md#判定者) liest den Brief, schreibt Ziel + Prüfliste, das Ganze wird in ein [`Goal`](#goal) geparst, eingefroren und auf Platte geschrieben. Gleiche Form wie `clarify_step`.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `channel` | `HumanChannel` | Pflicht, Positionsargument | Kanal zum Fragen |
-| `goal_path` | `str \| Path` | Pflicht | Wohin die Zieldatei fällt |
-| `brief_key` | `str` | `"确认需求"` | Aus `ctx[brief_key]` wird der Brief-Rohtext in den Prompt gesteckt. **Ist nichts zu holen, steht dort `"(没有确认书)"`** |
+| `channel` | `HumanChannel` | Pflicht, positional | Kanal zum Nachfragen |
+| `goal_path` | `str \| Path` | Pflicht | Wohin die Zieldatei geschrieben wird |
+| `brief_key` | `str` | `"确认需求"` | Aus `ctx[brief_key]` wird der Originaltext des Briefs geholt und in den Prompt gesteckt. **Ist da nichts, steht dort `"(没有确认书)"`** |
 | `name` | `str` | `"设定目标"` | Schrittname |
-| `spec` | `AgentSpec \| None` | `None` | Ohne Angabe wird `judge(name, channel, instructions=instructions, **spec_kw)` verwendet |
+| `spec` | `AgentSpec \| None` | `None` | Ohne Angabe wird `judge(name, channel, instructions=instructions, **spec_kw)` benutzt |
 | `instructions` | `str` | `""` | Zusätzliche Anweisungen |
-| `always_set` | `bool` | `False` | `True` = Prüfliste neu herleiten, egal ob eine Zieldatei existiert |
+| `always_set` | `bool` | `False` | `True` = Prüfliste neu herleiten, egal ob die Zieldatei existiert |
 | `on_fail` | `str` | `"stop"` | Wie oben |
 | `retries` | `int` | `0` | Wie oben |
 | `**spec_kw` | | | Wird an [`judge()`](#judge-role) durchgereicht |
 
-**Es gibt keinen Parameter `can_run`** — soll der zielsetzende Judge Kommandos ausführen dürfen, geht das
-nur über `**spec_kw` mit `can_run=True`. Ohne das bekommt er kein `Bash`, und die Regel aus `JUDGE_RULES`
-„sieh dir erst genau an, in welcher Umgebung du bist“ lässt sich nicht ausführen.
+**Es gibt keinen `can_run`-Parameter** — wer will, dass der zielsetzende Judge Kommandos ausführen kann, muss `can_run=True` über `**spec_kw` durchreichen. Ohne das bekommt er kein `Bash`, und die Regel aus `JUDGE_RULES` „verschaffe dir zuerst Klarheit, in welcher Umgebung du bist" ist nicht ausführbar.
 
-Das `gate` tut außer Parsen und Einfrieren noch eines: Enthält das Ziel Einträge mit
-`[此环境无法验证:…]`, schickt es **an Ort und Stelle** über `ctx["_on_event"]` ein
-`Event("task", payload={"unverifiable", "total", "path"})` als Hinweis —
-das Schicksal dieser Einträge entscheidet sich im Moment der Zielsetzung; bis zum Verdict ist das Geld
-für eine ganze Arbeitsrunde schon ausgegeben.
+Das `gate` tut neben Parsen und Einfrieren noch eines: Enthält das Ziel Einträge `[此环境无法验证:…]`, wird **sofort** über `ctx["_on_event"]` ein `Event("task", payload={"unverifiable", "total", "path"})` als Hinweis gesendet — das Schicksal dieser Einträge entscheidet sich genau in diesem Moment des Zielsetzens; bis zum Verdict ist bereits das Geld einer ganzen Arbeitsrunde ausgegeben.
 
-**Kein `resume_prompt` gesetzt** — beim Zielsetzen soll der Brief ohnehin im Volltext neu geschickt werden.
+**Es ist kein `resume_prompt` gesetzt** — beim Zielsetzen soll der Brief ohnehin im Volltext neu geschickt werden.
 
 | Konstante | Wert | Beschreibung |
 |---|---|---|
-| `GOAL_KEY` | `"_goal"` | `ctx[GOAL_KEY]` ist das `Goal`-Objekt; `ctx[step.name]` ist Markdown |
-| `VERDICT_KEY` | `"_verdict"` | Der jüngste [`Verdict`](#verdict), für die UI |
-| `ROUND_KEY` | `"_goal_rounds"` | Wie viele Runden der Verdict schon gelaufen ist |
+| `GOAL_KEY` | `"_goal"` | `ctx[GOAL_KEY]` ist ein `Goal`-Objekt; `ctx[step.name]` ist Markdown |
+| `VERDICT_KEY` | `"_verdict"` | Das letzte [`Verdict`](#verdict), fürs UI |
+| `ROUND_KEY` | `"_goal_rounds"` | Wie viele Runden das Verdict gelaufen ist |
 
 ### `with_goal()` {#with-goal}
 
@@ -566,20 +504,17 @@ def with_goal(
 ) -> Step
 ```
 
-Legt einem bestehenden `Step` den [Goal Guard](glossary.md#目标看守) an: Nach jeder Runde beurteilt der
-Judge unabhängig; ist das Ziel nicht erreicht, geht es zurück zum Weiterarbeiten.
+Legt einem vorhandenen `Step` den [Goal Guard](glossary.md#目标看守) um: Nach jeder Runde beurteilt der Judge unabhängig; ist das Ziel nicht erreicht, wird zurückgewiesen und weitergearbeitet.
 
-Das Ergebnis ist `replace(step, retries=max(0, rounds - 1), gate=<neues gate>, on_reject=<neues on_reject>)` —
-mit `dataclasses.replace` statt feldweisem Neuaufbau; beim einmaligen Neuaufbau fiel `resume_prompt` unter den
-Tisch, **und das ohne Fehlermeldung**, es wurde bei der Continuity nur der ganze Brief noch einmal verschickt.
+Das Ergebnis ist `replace(step, retries=max(0, rounds - 1), gate=<neues gate>, on_reject=<neues on_reject>)` — mit `dataclasses.replace` statt feldweisem Neubau; beim Neubau ging einmal `resume_prompt` verloren, **und zwar ohne Fehlermeldung**, es wurde bei der Continuity nur der ganze Brief noch einmal verschickt.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `step` | `Step` | Pflicht, Positionsargument | Der bewachte Schritt |
-| `channel` | `HumanChannel` | Pflicht, Positionsargument | Kanal, um einen Menschen zu fragen, wenn keine Entscheidung möglich ist |
-| `goal_path` | `str \| Path` | Pflicht | Zieldatei; von hier wird gelesen, wenn `ctx[GOAL_KEY]` unvollständig ist |
-| `spec` | `AgentSpec \| None` | `None` | Ohne Angabe wird `judge(label, channel, instructions=..., can_run=can_run, **spec_kw)` verwendet |
-| `rounds` | `int` | `3` | **Gesamtzahl der Runden, nicht zusätzliche Runden**: `rounds=3` → `retries=2` → höchstens drei Arbeitsrunden. `rounds=1` = eine Runde arbeiten, einmal beurteilen, bei Nichtbestehen Fehlschlag |
+| `step` | `Step` | Pflicht, positional | Der bewachte Schritt |
+| `channel` | `HumanChannel` | Pflicht, positional | Kanal, um bei Nicht-Entscheidbarkeit den Menschen um Hilfe zu bitten |
+| `goal_path` | `str \| Path` | Pflicht | Zieldatei, aus der gelesen wird, wenn `ctx[GOAL_KEY]` unvollständig ist |
+| `spec` | `AgentSpec \| None` | `None` | Ohne Angabe wird `judge(label, channel, instructions=..., can_run=can_run, **spec_kw)` benutzt |
+| `rounds` | `int` | `3` | **Gesamtzahl der Runden, nicht Zusatzrunden**: `rounds=3` → `retries=2` → höchstens drei Arbeitsrunden. `rounds=1` = eine Runde arbeiten, einmal beurteilen, bei Nichtbestehen Fehlschlag |
 | `instructions` | `str` | `""` | Zusätzliche Anweisungen an den Judge |
 | `can_run` | `bool` | `False` | Ob der Judge `Bash` ausführen darf |
 | `name` | `str \| None` | `None` | Name des Judge, Default `f"{step.name}·判定"` |
@@ -587,25 +522,22 @@ Tisch, **und das ohne Fehlermeldung**, es wurde bei der Continuity nur der ganze
 
 Das `gate` ist **async**, Ablauf:
 
-1. `ctx["_runtime"]` fehlt → **`StepAbort` werfen** („Runtime nicht zu bekommen, Ziel nicht beurteilbar“). **Nicht so tun, als wäre bestanden.**
+1. `ctx["_runtime"]` fehlt → **`StepAbort` werfen** („Runtime nicht verfügbar, Ziel kann nicht beurteilt werden"). **Nicht so tun, als sei es bestanden.**
 2. `ctx[ROUND_KEY] += 1`.
-3. Ziel holen: bevorzugt ein vollständiges `Goal` aus `ctx[GOAL_KEY]`, sonst `Goal.load(goal_path)`, sonst leeres `Goal()`.
+3. Ziel holen: bevorzugt ein vollständiges `Goal` aus `ctx[GOAL_KEY]`, sonst `Goal.load(goal_path)`, sonst ein leeres `Goal()`.
 4. `await rt.run(judger, VERIFY_PROMPT..., step_name=f"{label}#{轮次}", on_event=...)`.
-   **Der Judge ist ein eigener `Runtime.run`, `resume` ist immer `None` — es ist stets eine neue Session**;
-   `step_name` trägt die Rundennummer und geht deshalb nicht in die prozessübergreifende Lineage.
+   **Der Judge ist ein eigenständiges `Runtime.run`, `resume` ist immer `None` — es ist immer eine neue Session**; `step_name` trägt die Rundennummer und geht damit nicht in die prozessübergreifende Lineage.
 5. `Verdict.parse(vr.text)` wird nach `ctx[VERDICT_KEY]` geschrieben.
 6. `v.achieved` → `True` zurückgeben.
-7. Nicht `unreachable` (einschließlich der unklaren Fälle mit `v.ok=False`) → bei Unklarheit einen
-   Default-`reason` ergänzen, `False` zurückgeben.
-   **Unklarheit gilt ausnahmslos als nicht erreicht** — ein „sieht okay aus“ darf die Arbeit nicht abschließen.
+7. Nicht `unreachable` (einschließlich unklarer Fälle mit `v.ok=False`) → bei Unklarheit wird ein Default-Reason ergänzt, Rückgabe `False`.
+   **Unklarheit zählt ausnahmslos als nicht erreicht** — ein „sieht ok aus" darf die Arbeit nicht abschließen.
 8. `unreachable` → `await channel.ask(...)` fragt den Menschen, drei Optionen:
-   - Niemand antwortet (`a.state != "answered"`) → **`StepAbort` werfen**. Weiter im Leerlauf zu drehen ist die teuerste Option.
-   - „Ergebnis akzeptieren und so weitermachen“ → `True` zurückgeben.
-   - „Ziel ändern“ → noch einmal nach dem neuen Ziel fragen, `g.amend(...).write(goal_path)`, `ctx[GOAL_KEY]` aktualisieren, `False` zurückgeben.
-   - Alles Übrige (inklusive frei getippter Antworten) → gilt als „du hast falsch geurteilt“, die Aussage des Menschen wird in `v.reason` festgehalten, `False` zurückgeben.
+   - Niemand antwortet (`a.state != "answered"`) → **`StepAbort` werfen**. Weiter leerzudrehen ist die teuerste Option.
+   - „Ergebnis akzeptieren und so weitermachen" → `True` zurückgeben.
+   - „Ziel ändern" → noch einmal nach dem neuen Ziel fragen, `g.amend(...).write(goal_path)`, `ctx[GOAL_KEY]` aktualisieren, `False` zurückgeben.
+   - Alles andere (einschließlich frei getippter Antworten) → gilt als „du hast falsch beurteilt", die Aussage des Menschen wird in `v.reason` festgehalten, Rückgabe `False`.
 
-`on_reject` ist **synchron**: gibt `ctx[VERDICT_KEY].feedback()` zurück, ohne `Verdict` `""`
-(Rückfall auf „von vorn“).
+`on_reject` ist **synchron**: gibt `ctx[VERDICT_KEY].feedback()` zurück, ohne `Verdict` `""` (degradiert zum Lauf von vorn).
 
 ### `starter_flow()` {#starter-flow}
 
@@ -631,18 +563,17 @@ def starter_flow(
 ) -> Workflow
 ```
 
-Baut einen sofort lauffähigen Drei-Schritt-Workflow zusammen: **Anforderung klären → Ziel setzen → arbeiten**
-(mit Goal Guard). Genau den benutzt das Kommandozeilenwerkzeug `flower`.
+Baut einen sofort lauffähigen Drei-Schritt-Workflow zusammen: **Bedarf klären → Ziel setzen → arbeiten** (mit Goal Guard). Genau das benutzt die Kommandozeile `flower`.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `ask` | `str` | Pflicht, Positionsargument | Ein Satz Anliegen. **Beim Wake ist er keine neue Aufgabe, sondern „noch ein Satz, der gesagt wurde“** |
-| `workspace` | `str \| Path` | `"."` | Arbeitsbereich |
+| `ask` | `str` | Pflicht, positional | Ein Satz mit dem Anliegen. **Beim Wake ist er keine neue Aufgabe, sondern „noch ein Satz, den jemand gesagt hat"** |
+| `workspace` | `str \| Path` | `"."` | Workspace |
 | `run_dir` | `str \| Path` | `"runs"` | Run-Verzeichnis |
 | `new` | `bool` | `False` | `True` = Lineage + Brief + Ziel archivieren (alle drei zusammen), von vorn beginnen |
-| `isolate` | `bool` | `False` | [Isolation](glossary.md#隔离) per Worktree für den Worker. Die Workbench wandert entsprechend nach `<ws>.parent/.flower-<ws.name>` |
-| `clarify_only` | `bool` | `False` | Gibt nur den Workflow mit dem Klärungsschritt zurück |
-| `goal` | `bool` | `True` | Ob der [Goal Guard](glossary.md#目标看守) angebaut wird. `False` = der Arbeitsschritt gilt nach seinem Durchlauf als fertig |
+| `isolate` | `bool` | `False` | Öffnet für den Worker eine Worktree-[Isolation](glossary.md#隔离). Die Workbench wandert entsprechend nach `<ws>.parent/.flower-<ws.name>` |
+| `clarify_only` | `bool` | `False` | Gibt nur den Workflow mit dem Clarify-Schritt zurück |
+| `goal` | `bool` | `True` | Ob der [Goal Guard](glossary.md#目标看守) angebaut wird. `False` = nach der Arbeitsstufe ist Schluss |
 | `rounds` | `int` | `3` | Wird an `with_goal(rounds=)` durchgereicht, Gesamtzahl der Runden |
 | `judge_can_run` | `bool` | `False` | Wird an `with_goal(can_run=)` durchgereicht |
 | `max_asks` | `int \| None` | `None` | Wird an `HumanChannel` durchgereicht, `None` = unbegrenzt |
@@ -659,20 +590,14 @@ Feste Verdrahtung:
 Workflow(name="starter", channel=ch, workbench=wb, steps=[...])
 # ch = HumanChannel(log_path=<notes>/问答记录.md, amend_path=<brief_path>,
 #                   max_asks=max_asks, timeout_s=timeout_s)
-# Koordinator = coordinator("协调者", "", {"coder": worker(..., isolate=isolate)}, channel=ch)
+# 协调者 = coordinator("协调者", "", {"coder": worker(..., isolate=isolate)}, channel=ch)
 ```
 
 Verhaltensverzweigungen:
 
-- `isolate=True` und der Workspace ist kein Git-Repo → **`ValueError` werfen**, statt es erst am Fehler des
-  `Agent`-Tools zu merken (dann ist das Geld schon weg).
-- **Wake-Erkennung**: existiert `Brief.load(brief_path)` und ist `complete()`, gilt es als Wake. Kein Wake und
-  `ask` leer → **`ValueError("要给一句诉求,例如 flower '帮我做一个 X'")` werfen**.
-- Beim Wake landet dieser Satz gleichzeitig an **drei Stellen**, fehlt eine, verpufft er still: er wird an den
-  Brief angehängt (`ch.amend(said, label="唤醒时追加")`, steht er schon in der Datei, wird er nicht doppelt
-  geschrieben), er lässt `goal_step(always_set=True)` die Prüfliste neu herleiten (ohne Neuherleitung liest der
-  Judge weiter das alte Ziel), und er geht direkt an den Koordinator (in dessen Kontext steht das **alte** Ziel;
-  ohne diesen Satz arbeitet er nach altem Maßstab und wird nach neuem beurteilt).
+- `isolate=True` und der Workspace ist kein Git-Repo → **`ValueError` werfen**, nicht erst warten, bis das `Agent`-Tool einen Fehler meldet (dann ist das Geld schon ausgegeben).
+- **Wake-Erkennung**: Existiert `Brief.load(brief_path)` und ist `complete()`, gilt es als Wake. Kein Wake und `ask` leer → **`ValueError("要给一句诉求,例如 flower '帮我做一个 X'")` werfen**.
+- Beim Wake landet dieser Satz gleichzeitig an **drei Stellen**, fehlt eine davon, verpufft er still: angehängt an den Brief (`ch.amend(said, label="唤醒时追加")`, steht er schon in der Datei, wird er nicht doppelt geschrieben), `goal_step(always_set=True)` leitet die Prüfliste neu her (ohne Neuherleitung liest der Judge weiter das alte Ziel), und er geht direkt an den Koordinator (in dessen Kontext steht das **alte** Ziel; ohne diesen Schritt arbeitet er nach altem Maßstab und wird nach neuem beurteilt).
 
 ### `wake_state()` {#wake-state}
 
@@ -687,14 +612,13 @@ def wake_state(
 ) -> dict
 ```
 
-**Eine reine Lese-Sondierung vor dem Start, es wird kein einziges Byte geschrieben.** Damit lässt sich einem
-Menschen vor dem eigentlichen Loslaufen sagen: „Das setzt das letzte Mal fort“ oder „das fängt von vorn an“.
+**Eine nur lesende Sondierung vor dem Start, es wird kein einziges Byte geschrieben.** Damit man dem Menschen vor dem eigentlichen Lauf sagen kann: „Das ist eine Fortsetzung" oder „das fängt von vorn an".
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `workspace` | `str \| Path` | `"."` | Arbeitsbereich, Positionsargument |
+| `workspace` | `str \| Path` | `"."` | Workspace, positional |
 | `run_dir` | `str \| Path` | `"runs"` | Run-Verzeichnis |
-| `isolate` | `bool` | `False` | Bestimmt den Ort der Workbench, muss denselben Wert haben wie bei `starter_flow` |
+| `isolate` | `bool` | `False` | Bestimmt die Lage der Workbench, muss denselben Wert haben wie bei `starter_flow` |
 | `brief_name` | `str` | `"需求.md"` | Dateiname des Briefs |
 | `goal_name` | `str` | `"目标.md"` | Dateiname des Ziels |
 
@@ -702,17 +626,14 @@ Das zurückgegebene dict:
 
 | Schlüssel | Typ | Beschreibung |
 |---|---|---|
-| `waking` | `bool` | Der Brief existiert und alle vier Abschnitte sind vollständig |
+| `waking` | `bool` | Brief existiert und alle vier Abschnitte sind vollständig |
 | `brief` | `Path` | `<workbench.notes>/需求.md` |
 | `goal` | `Path` | `<workbench.notes>/目标.md` |
 | `checks` | `int` | Anzahl der Einträge in der Zielprüfliste, ohne Ziel `0` |
-| `woke` | `int` | `Lineage.woke`, wie oft schon aufgeweckt wurde |
+| `woke` | `int` | `Lineage.woke`, wie oft schon geweckt wurde |
 | `steps` | `dict` | Kopie von `Lineage.steps`, Schrittname → `session_id` |
 
-Der Ort der Workbench ist **nur hier und in `starter_flow` einmal definiert**: `isolate=True` →
-`<ws>.parent/.flower-<ws.name>` (außerhalb des Repos); sonst `<ws>/.flower`. Auch ein Treiberprogramm, das
-wissen will, wo der Brief liegt, geht über diese Funktion — ein selbst zusammengebauter falscher Pfad wirft
-keinen Fehler, er verpufft nur still.
+Die Lage der Workbench wird **nur hier und in `starter_flow` je einmal definiert**: `isolate=True` → `<ws>.parent/.flower-<ws.name>` (außerhalb des Repos); sonst `<ws>/.flower`. Auch ein Treiberprogramm, das wissen will, wo der Brief liegt, geht über diese Funktion — wer den Pfad selbst zusammensetzt und sich vertut, bekommt keinen Fehler, es verpufft nur still.
 
 ---
 
@@ -720,11 +641,11 @@ keinen Fehler, er verpufft nur still.
 
 Quelle: [`flower/core/roles.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/roles.py)
 
-Alle fünf Rollen sind Factory-Funktionen. Jede Rolle = **ein Stück injizierter Regeltext + eine Menge Tools + eine Menge Hooks**.
-`worker()` liefert eine `AgentDefinition` des SDK (zur Verwendung durch einen subagent), die anderen vier liefern [`AgentSpec`](#agentspec)
-(starten also eine eigene session).
+Alle fünf Rollen sind Factory-Funktionen. Jede Rolle = **ein Stück injizierter Regeltext + ein Satz Tools + ein Satz Hooks**.
+`worker()` liefert eine `AgentDefinition` des SDK (für Subagents gedacht), die anderen vier liefern [`AgentSpec`](#agentspec)
+(startet jeweils eine eigene Session).
 
-Die Rollen selbst **hängen keine Hooks ein** — das Abfangen von Tools montiert `Runtime._attempt` anhand von `spec.delegate_only` automatisch,
+Die Rollen selbst **hängen keine Hooks ein** — das Abfangen von Tools montiert `Runtime._attempt` automatisch anhand von `spec.delegate_only`,
 siehe [Hook-Schicht](#hook).
 
 Interne Tool-Gruppenkonstanten (nicht exportiert, bestimmen aber die Defaults):
@@ -757,37 +678,58 @@ def coordinator(
 ) -> AgentSpec
 ```
 
-Erzeugt den [Coordinator](glossary.md#主线程) auf dem [Main Thread](glossary.md#协调者): Aufgaben zerlegen, delegieren, Berichte lesen, entscheiden —
-**aber nicht selbst Hand anlegen**. Die ersten drei Parameter sind Positionsparameter.
+Baut den [Koordinator](glossary.md#协调者) auf dem [Haupt-Thread](glossary.md#主线程): Aufgabe zerlegen, delegieren, Berichte lesen, entscheiden,
+**aber nicht selbst Hand anlegen**. Die ersten drei Parameter sind Positionsargumente.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `name` | `str` | Pflicht | Rollenname, zugleich der Default-Name des Steps |
-| `instructions` | `str` | Pflicht | Domänenanweisung. Ergibt am Ende `f"{COORDINATOR_RULES}\n{instructions}".strip()` |
-| `workers` | `dict[str, AgentDefinition]` | Pflicht | Welche Rollen ihm unterstehen, landet in `AgentSpec.agents` |
-| `channel` | `HumanChannel \| None` | `None` | Wenn gesetzt, werden **beide** Tools `inbox` **und** `ask` angehängt und `mcp_servers` gesetzt |
+| `name` | `str` | Pflicht | Rollenname, zugleich der Default-Schrittname |
+| `instructions` | `str` | Pflicht | Fachliche Anweisungen. Ergibt am Ende `f"{COORDINATOR_RULES}\n{instructions}".strip()` |
+| `workers` | `dict[str, AgentDefinition]` | Pflicht | Welche Rollen ihm unterstehen, landet in `AgentSpec.agents`. **Deren nur lesende Web-Tools werden zusätzlich in die `allowed_tools` des Koordinators selbst gemischt**, siehe unten |
+| `channel` | `HumanChannel \| None` | `None` | Wenn gesetzt, werden gleichzeitig die beiden Tools `inbox` **und** `ask` angehängt und `mcp_servers` gesetzt |
 | `can_read` | `bool` | `True` | `True` → `["Agent", "TodoWrite", "Read"]`; `False` → ohne `Read` |
 | `glance` | `bool` | `True` | Hängt `"Bash"` an und setzt `AgentSpec.glance`. **Was konkret laufen darf, entscheidet `delegate_guard`**, nicht diese Stelle |
 | `model` | `str \| None` | `None` | Modell |
 | `effort` | `str \| None` | `None` | Denkintensität |
-| `max_turns` | `int \| None` | `None` | Obergrenze der Runden |
+| `max_turns` | `int \| None` | `None` | Obergrenze für Runden |
 | `max_budget_usd` | `float \| None` | `None` | Obergrenze des [Budgets](glossary.md#预算) |
-| `permission_mode` | `str` | **`"acceptEdits"`** | Berechtigungsmodus. **Achtung auf diesen Default** — gibt man ihn an `clarify()`/`judge()` weiter, reißt man den Schutz dieser beiden Rollen ein |
-| `compact` | `CompactPolicy \| None` | `None` | Wenn gesetzt, erzwingt `Runtime` kein `no_summary` |
-| `hooks` | `dict[str, Any] \| None` | `None` | Zusätzliche Hooks, werden mit `workbench_hooks` zusammengeführt |
+| `permission_mode` | `str` | **`"acceptEdits"`** | Berechtigungsmodus. **Achtung auf diesen Default** — an `clarify()`/`judge()` weitergereicht, reißt er den Schutz dieser beiden Rollen ein |
+| `compact` | `CompactPolicy \| None` | `None` | Wenn gesetzt, wird es von `Runtime` nicht zwangsweise auf `no_summary` gestellt |
+| `hooks` | `dict[str, Any] \| None` | `None` | Zusätzliche Hooks, werden mit `workbench_hooks` gemerged |
 | `env` | `dict[str, str] \| None` | `None` | Zusätzliche Umgebungsvariablen |
 
-Die drei fixen Einträge der erzeugten `AgentSpec`: `delegate_only=True`, `agents=workers`,
-`workbench` behält den `AgentSpec`-Default `True`.
+Drei Dinge stehen in der erzeugten `AgentSpec` fest: `delegate_only=True`, `agents=workers`,
+und `workbench` behält den `AgentSpec`-Default `True`.
 
-Im Quellcode steht ausdrücklich: **`disallowed_tools` nicht verwenden, um „nur koordinieren, nicht anfassen" umzusetzen** — das gilt auf session-Ebene
-und würde `Bash`/`Write` auch für subagents sperren, siehe die Warnung bei [`AgentSpec`](#agentspec).
-Der richtige Weg ist genau der hier: `delegate_only=True` + keine `allowed_tools`,
-und [`delegate_guard`](#delegate-guard) fängt anhand der `agent_id` nur den Main Thread ab.
+#### Die Web-Tools aus `workers` werden mit eingemischt {#coordinator-web-merge}
 
-Ist `channel` gesetzt, kommen **beide Tools zusammen**, nicht wahlweise: sobald der MCP-Server hängt, sind beide da, und
-`allowed_tools` ist nicht exklusiv — ob gelistet oder nicht, aufrufbar sind sie. Unbeaufsichtigt blockiert jedes `ask` bis zum vollen `timeout_s` —
-in dem Fall `HumanChannel(timeout_s=0)` verwenden.
+Nachdem die Liste gebaut ist, geht `coordinator()` jede `AgentDefinition.tools` durch; alles, was in
+`WEB_TOOLS` (`WebFetch`, `WebSearch`, `roles.py:33`) liegt, wird zusätzlich in die eigenen
+`allowed_tools` des Koordinators aufgenommen (`roles.py:523-526`).
+
+**Grund: `allowed_tools` ist genau wie `disallowed_tools` session-weit.** Das ist der härteste Beleg im ganzen Text für diesen Punkt —
+es betrifft nicht nur den Haupt-Thread. Ein Tool, das nicht in dieser session-weiten Liste steht, muss auch beim Aufruf durch einen
+**Subagent** durch die Berechtigungsfreigabe; im unbeaufsichtigten Betrieb gibt es niemanden, der freigibt, und die Harness antwortet mit
+`Claude requested permissions to use X, but you haven't granted it yet`
+(`toolDenialKind=user-rejected`), während das Modell denselben Aufruf immer wieder wiederholt. In der Praxis reingefallen: dem Worker
+`WebFetch`/`WebSearch` gegeben, aber nur in `AgentDefinition.tools` geschrieben — in jenem Novel-Run gab es über zwanzig
+user-rejected und kein einziges geschriebenes Wort (`roles.py:513-518`).
+
+Beide Felder sind gleichermaßen session-weit, die **Symptome unterscheiden sich**: `disallowed_tools` wirft sofort einen Fehler,
+`allowed_tools` führt zu stillem Wiederholen bis zum Ende. Letzteres ist schwerer zu finden, weil auf dem Bildschirm nichts nach Fehler aussieht.
+
+**Eingemischt wird nur, was lesend und nebenwirkungsfrei ist.** `Write`/`Edit`/`Bash` werden **absichtlich nicht** eingemischt: Sobald der Haupt-Thread
+dafür freigabefrei ist, ist die Mauer „der Koordinator legt nicht selbst Hand an" von `delegate_guard` sinnlos; und `Bash`/`Write` im Subagent
+funktionieren ohnehin (gemessen 462-mal durchgelassen, `roles.py:520-522`).
+
+Im Quellcode steht ausdrücklich, dass man **„nur koordinieren, nicht selbst Hand anlegen" nicht über `disallowed_tools` umsetzen soll** — das ist session-weit
+und sperrt `Bash`/`Write` der Subagents gleich mit, siehe die Warnung bei [`AgentSpec`](#agentspec).
+Der richtige Weg ist genau der hier: `delegate_only=True` + nichts in `allowed_tools`,
+und [`delegate_guard`](#delegate-guard) blockt anhand der `agent_id` nur den Haupt-Thread.
+
+Ist `channel` gesetzt, kommen **beide Tools zusammen**, das ist nicht optional: Hängt der MCP-Server dran, sind beide da, und
+`allowed_tools` ist nicht exklusiv — aufrufbar sind sie so oder so. Im unbeaufsichtigten Betrieb blockiert jedes `ask` die volle `timeout_s` —
+für solche Fälle `HumanChannel(timeout_s=0)` verwenden.
 
 ### `worker()` {#worker}
 
@@ -807,25 +749,25 @@ def worker(
 ) -> AgentDefinition
 ```
 
-Erzeugt die Definition des [subagent](glossary.md#subagent), der tatsächlich arbeitet. Die ersten beiden Parameter sind Positionsparameter.
+Baut die Definition des [Subagents](glossary.md#subagent), der die eigentliche Arbeit macht. Die ersten beiden Parameter sind Positionsargumente.
 Zurück kommt eine `AgentDefinition` des SDK, die direkt in `coordinator(workers={...})` gesteckt wird.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `description` | `str` | Pflicht | **Grundlage, nach der der Coordinator auswählt** — klar schreiben, „welche Arbeit an ihn geht" |
-| `prompt` | `str` | Pflicht | Sein System-Prompt. Bei `discipline=True` zusammengesetzt als `f"{prompt}\n\n{WORKER_RULES}"` |
+| `description` | `str` | Pflicht | **Grundlage, nach der der Koordinator auswählt** — klar schreiben, „welche Arbeit an ihn geht" |
+| `prompt` | `str` | Pflicht | Sein System-Prompt. Bei `discipline=True` zusammengesetzt zu `f"{prompt}\n\n{WORKER_RULES}"` |
 | `tools` | `list[str] \| None` | `None` | `None` → `Read` `Write` `Edit` `Bash` `Glob` `Grep` `WebFetch` `WebSearch` |
-| `model` | `str` | **`"inherit"`** | Ein Worker soll nicht heruntergestuft werden |
+| `model` | `str` | **`"inherit"`** | Der Worker soll nicht heruntergestuft werden |
 | `effort` | `str \| int \| None` | `None` | Denkintensität |
-| `max_turns` | `int \| None` | `None` | Landet im SDK als **`maxTurns`** (CamelCase) |
-| `permission_mode` | `str \| None` | `None` | Landet im SDK als **`permissionMode`** (CamelCase) |
+| `max_turns` | `int \| None` | `None` | Wird zu **`maxTurns`** im SDK (CamelCase) |
+| `permission_mode` | `str \| None` | `None` | Wird zu **`permissionMode`** im SDK (CamelCase) |
 | `skills` | `list[str] \| None` | `None` | Welche Skills er benutzen darf |
-| `discipline` | `bool` | `True` | Ob die Berichtsdisziplin `WORKER_RULES` angehängt wird |
-| `isolate` | `bool` | `False` | Setzt die [Isolations](glossary.md#隔离)-Markierung, läuft über `isolated()`, **ist kein Feld von `AgentDefinition`** |
+| `discipline` | `bool` | `True` | Ob die Berichtsdisziplin aus `WORKER_RULES` angehängt wird |
+| `isolate` | `bool` | `False` | Setzt die [Isolations](glossary.md#隔离)-Markierung, geht über `isolated()`, **kein Feld von `AgentDefinition`** |
 
 `isolate=True` verlangt, dass der Workspace ein Git-Repository ist, sonst meldet das `Agent`-Tool direkt `"not in a git repository"` —
-**es degradiert nicht stillschweigend**. Außerdem ist die Markierung ein Python-Attribut — ein `dataclasses.replace()` auf die `AgentDefinition`
-verliert sie, und die Isolation fällt stillschweigend aus.
+**es degradiert nicht still**. Und die Markierung ist ein Python-Attribut — ein `dataclasses.replace()` auf der `AgentDefinition`
+verliert sie, die Isolation fällt still aus.
 
 ### `clarify()` {#clarify-role}
 
@@ -843,13 +785,13 @@ def clarify(
 ) -> AgentSpec
 ```
 
-Erzeugt den [Clarifier](glossary.md#确认者): vor dem Anfangen die Anforderung ausfragen, nichts tun, nur fragen, und am Ende genau vier Abschnitte ausgeben.
+Baut den [Clarifier](glossary.md#确认者): vor dem Loslegen die Anforderungen klären, nichts tun, nur fragen, am Ende genau vier Abschnitte ausgeben.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `name` | `str` | Pflicht | Rollenname, Positionsparameter |
-| `channel` | `HumanChannel` | Pflicht | Frage-Kanal, Positionsparameter |
-| `instructions` | `str` | `""` | Ergänzende Anweisung, hinter `CLARIFIER_RULES` angehängt |
+| `name` | `str` | Pflicht | Rollenname, Positionsargument |
+| `channel` | `HumanChannel` | Pflicht | Fragekanal, Positionsargument |
+| `instructions` | `str` | `""` | Zusätzliche Anweisungen, hinter `CLARIFIER_RULES` gehängt |
 | `can_read` | `bool` | `True` | Bei `True` werden `Read` `Glob` `Grep` `WebFetch` `WebSearch` angehängt |
 | `model` | `str \| None` | `None` | Modell |
 | `effort` | `str \| None` | `None` | Denkintensität |
@@ -859,12 +801,12 @@ Erzeugt den [Clarifier](glossary.md#确认者): vor dem Anfangen die Anforderung
 Die erzeugte `AgentSpec`: `allowed_tools = [channel.tool_name] + (die fünf, wenn lesend)`,
 `mcp_servers = channel.mcp_servers()`, `workbench=False` (er hat keine Schreib-Tools, der Index bringt ihm nichts),
 `permission_mode` erbt den `AgentSpec`-Default `"default"`.
-**Kein `Write` / `Edit` / `Bash` / `Agent`, und auch kein `inbox`** (anders als beim Coordinator).
+**Kein `Write` / `Edit` / `Bash` / `Agent`, und auch kein `inbox`** (anders als beim Koordinator).
 
-!!! warning "Ein kleines `max_turns` macht das unbegrenzte Fragen zur leeren Behauptung"
-    Jede Frage ist eine Runde. `max_turns=16` heißt „höchstens gut ein Dutzend Fragen", und der Satz im Kanal „keine Rundenobergrenze" ist damit auf der Stelle hinfällig.
+!!! warning "`max_turns` klein zu setzen macht das unbegrenzte Nachfragen zur leeren Behauptung"
+    Jede Frage ist eine Runde. `max_turns=16` heißt „höchstens gut ein Dutzend Fragen", und der Satz „es gibt keine Rundenobergrenze" im Kanal ist auf der Stelle hinfällig.
 
-    Wer das Fragen freigeben will, muss **beides** freigeben: `HumanChannel.max_asks` (Default ist bereits `None` = unbegrenzt)
+    Wer das Fragen wirklich freigeben will, muss **beides** freigeben: `HumanChannel.max_asks` (Default ist bereits `None` = unbegrenzt)
     und `max_turns` (Default ist bereits `None`).
 
 ### `judge()` {#judge-role}
@@ -883,24 +825,24 @@ def judge(
 ) -> AgentSpec
 ```
 
-Erzeugt den [Judge](glossary.md#判定者): entweder vor dem Start das Ziel festlegen oder nach jeder Runde diese Runde beurteilen.
+Baut den [Judge](glossary.md#判定者): entweder vor dem Start das Ziel festlegen oder nach jeder Runde diese Runde beurteilen.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `name` | `str` | Pflicht | Rollenname, Positionsparameter |
-| `channel` | `HumanChannel` | Pflicht | Frage-Kanal, Positionsparameter |
-| `instructions` | `str` | `""` | Ergänzende Anweisung, hinter `JUDGE_RULES` angehängt |
-| `can_run` | `bool` | `False` | Bei `True` kommt `Bash` in die Whitelist, `whitelist_guard` lässt `Bash` durch und blockt weiterhin `Write`/`Edit` |
+| `name` | `str` | Pflicht | Rollenname, Positionsargument |
+| `channel` | `HumanChannel` | Pflicht | Fragekanal, Positionsargument |
+| `instructions` | `str` | `""` | Zusätzliche Anweisungen, hinter `JUDGE_RULES` gehängt |
+| `can_run` | `bool` | `False` | Bei `True` kommt `Bash` in die Whitelist, `whitelist_guard` lässt `Bash` entsprechend durch, blockt `Write`/`Edit` weiterhin |
 | `model` | `str \| None` | `None` | Modell |
 | `effort` | `str \| None` | `None` | Denkintensität |
-| `max_turns` | `int \| None` | `None` | Obergrenze der Runden |
+| `max_turns` | `int \| None` | `None` | Obergrenze für Runden |
 | `max_budget_usd` | `float \| None` | `None` | Budgetobergrenze |
 
 Die erzeugte `AgentSpec`: `allowed_tools = [channel.tool_name, "Read", "Glob", "Grep"]` + (bei `can_run`) `["Bash"]`,
-`workbench=False`, der Rest wie bei `clarify()`. **Kein `Write` / `Edit` / `Agent`, und kein `inbox`.**
+`workbench=False`, der Rest wie bei `clarify()`. **Kein `Write` / `Edit` / `Agent`, und auch kein `inbox`.**
 
-**Abwägung**: `can_run=True` macht das Urteil härter (er kann Abnahmebefehle wirklich ausführen), um den Preis, dass der Judge damit den Workspace verändern kann —
-`Bash` allein kann Dateien schreiben. Wer ein absolut neutrales Urteil will, lässt es aus.
+**Abwägung**: `can_run=True` macht die Beurteilung härter (Abnahmebefehle können wirklich laufen), der Preis ist, dass der Judge damit
+den Arbeitsbereich verändern kann — `Bash` allein kann schon Dateien schreiben. Wer absolut neutrale Beurteilung will, lässt es aus.
 
 ### `oracle()` {#oracle}
 
@@ -916,32 +858,32 @@ def oracle(
 ) -> AgentSpec
 ```
 
-Erzeugt den [Oracle](glossary.md#旁路顾问): Während der Run noch läuft, fragt man ihn „wo stehen wir gerade", er sieht sich die letzten Events und die Workbench an
-und antwortet. **Was er sagt, gelangt nicht in den Kontext dieses Runs.**
+Baut den [Oracle](glossary.md#旁路顾问): Während der Run noch läuft, fragt man ihn „wo stehen wir gerade", er sieht sich die letzten Events und die Workbench an
+und antwortet dann. **Was er sagt, gelangt nicht in den Kontext dieses Runs.**
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `name` | `str` | `"旁路问答"` | Rollenname, Positionsparameter |
-| `instructions` | `str` | `""` | Ergänzende Anweisung, hinter `ORACLE_RULES` angehängt |
+| `name` | `str` | `"旁路问答"` | Rollenname, Positionsargument |
+| `instructions` | `str` | `""` | Zusätzliche Anweisungen, hinter `ORACLE_RULES` gehängt |
 | `model` | `str \| None` | `None` | Modell |
 | `effort` | `str \| None` | `None` | Denkintensität |
 | `max_turns` | `int \| None` | **`12`** | Standardmäßig mit Bremse |
-| `max_budget_usd` | `float \| None` | **`0.5`** | Standardmäßig mit Bremse. Das ist „mal eben nachgefragt" und darf nicht entgleisen |
+| `max_budget_usd` | `float \| None` | **`0.5`** | Standardmäßig mit Bremse. Das ist „mal eben nachfragen" und darf nicht entgleisen |
 
 Die erzeugte `AgentSpec`: `allowed_tools = ["Read", "Glob", "Grep"]` (**kein Channel** — er fragt nicht,
-er antwortet nur), `workbench=True` (**der einzige der fünf, der kein Coordinator ist und trotzdem die Workbench anhat** — er soll ja genau diese Artefakte und Notizen lesen).
+er antwortet nur), `workbench=True` (**der einzige der fünf Rollen, der kein Koordinator ist und trotzdem die Workbench anhat** — er soll ja genau die Ergebnisse und Notizen lesen).
 
 ### Die fünf Regeltexte {#rules}
 
-Alle fünf Konstanten stehen in `__all__` und lassen sich direkt importieren, lesen, zusammensetzen und ändern.
+Alle fünf Konstanten stehen in `__all__`, man kann sie direkt importieren, lesen, zusammensetzen und ändern.
 
-| Konstante | Injiziert an | Art der Injektion | Kernpunkte |
+| Konstante | Injiziert in | Injektionsart | Kernpunkte |
 |---|---|---|---|
-| `COORDINATOR_RULES` | `coordinator()` | `f"{RULES}\n{instructions}".strip()` | Du bist „ein Mensch, der Claude Code bedienen kann", kein Worker; keine Dateien schreiben/Code ändern/Tests laufen lassen; `Bash` reicht nur zum „kurz Hinsehen" und das Ergebnis veraltet; **im [Task Brief](glossary.md#任务书) steht nur, was für genau diese Aufgabe spezifisch ist**; die einzige Regel, die noch mitzuteilen ist, lautet „wo die Workbench liegt + lange Artefakte nach `artifacts/` + in der Antwort nur Pfade"; nach jeder abgeschlossenen Etappe einmal `inbox` prüfen; `ask` blockiert, also nur an echten Weggabelungen einsetzen |
-| `WORKER_RULES` | `worker()` | **hinter** den `prompt` des subagent gehängt | Antwortformat **Ergebnis / Beleg / Artefakt / Ungeprüft**, höchstens 30 Zeilen; verboten sind eingefügte Dateiinhalte, Kommandoausgaben, Logs, roher Diff; verboten ist das Nacherzählen von Versuch und Irrtum; vor dem Anfangen erst in `.flower/scripts/` schauen. **Bewusst steht dort nicht „lange Artefakte nach `artifacts/`"** — den echten Pfad erzeugt `Workbench`, ein fest verdrahteter wäre falsch |
-| `CLARIFIER_RULES` | `clarify()` | `f"{RULES}\n{instructions}".strip()` | Nichts tun, nur die Anforderung klären; **keine Mengenbegrenzung, fragen bis es klar ist**; der Mensch ist vielleicht nicht da, bei Timeout selbst entscheiden und es unter „Unbekanntes und Annahmen" schreiben; Ausgabe **genau vier Abschnitte**; keinen Code schreiben, keine Dateiinhalte einfügen |
-| `JUDGE_RULES` | `judge()` | `f"{RULES}\n{instructions}".strip()` | Zwei Dinge, eines davon. **Ziel setzen**: Jeder Listenpunkt muss auf der Stelle prüfbar sein, die Länge der Liste ergibt sich aus der Anzahl der Fehlermodi, **Grenzen sind kein Prüfpunkt**, an nicht prüfbare Punkte kommt am Ende `[此环境无法验证:原因]`. **Diese Runde beurteilen**: Ausgabe **genau drei Abschnitte**, beurteilt wird **das Artefakt, nicht der Quellcode**, „ist fertig" wird standardmäßig nicht geglaubt, „nicht erreicht" und „hier nicht prüfbar" sind zwei verschiedene Ergebnisse, und Letzteres **darf auf keinen Fall als bestanden gewertet werden** |
-| `ORACLE_RULES` | `oracle()` | `f"{RULES}\n{instructions}".strip()` | Ein Nebenweg; der Run läuft noch, du unterbrichst nicht und beteiligst dich nicht; **nur lesen**; nach der Antwort verworfen, was du sagst, gelangt nicht in den Kontext dieses Runs; du hast nur das „Fenster der letzten Events" und die „Workbench"; erst schauen, dann antworten, kannst du nicht antworten, sag das, kurz |
+| `COORDINATOR_RULES` | `coordinator()` | `f"{RULES}\n{instructions}".strip()` | Du bist „ein Mensch, der Claude Code bedienen kann", kein Worker; keine Dateien schreiben / keinen Code ändern / keine Tests laufen lassen; `Bash` reicht nur für „einen Blick", und das Ergebnis veraltet; **im [Task Brief](glossary.md#任务书) steht nur, was für genau diese Aufgabe spezifisch ist**; die einzige Regel, die noch mitzugeben ist, lautet „wo die Workbench liegt + lange Ergebnisse nach `artifacts/` + in der Antwort nur den Pfad"; nach jeder abgeschlossenen Zwischenaktion einmal `inbox` prüfen; `ask` blockiert, nur an echten Weggabelungen einsetzen |
+| `WORKER_RULES` | `worker()` | **hinter** den `prompt` des Subagents gehängt | Antwortformat 结论 / 依据 / 产出 / 未验证, höchstens 30 Zeilen; verboten sind Dateiinhalte, Kommandoausgaben, Logs, roher Diff; verboten ist das Nacherzählen von Versuch und Irrtum; vor dem Loslegen erst in `.flower/scripts/` schauen. **Bewusst steht dort nicht „lange Ergebnisse nach `artifacts/`"** — den echten Pfad erzeugt die `Workbench`, fest verdrahtet wäre er falsch |
+| `CLARIFIER_RULES` | `clarify()` | `f"{RULES}\n{instructions}".strip()` | Nichts tun, nur die Anforderungen klarfragen; **keine Mengenbegrenzung, fragen bis es klar ist**; der Mensch ist womöglich nicht da, bei Timeout selbst entscheiden und es unter 「未知与假设」 schreiben; Ausgabe **genau vier Abschnitte**; keinen Code schreiben, keine Dateiinhalte einfügen |
+| `JUDGE_RULES` | `judge()` | `f"{RULES}\n{instructions}".strip()` | Zwei Dinge, eins davon. **Ziel festlegen**: Jeder Listenpunkt muss auf der Stelle überprüfbar sein, die Länge der Liste ergibt sich aus der Zahl der Fehlerarten, **Grenzen sind kein Prüfpunkt**, an nicht prüfbare Punkte am Ende `[此环境无法验证:原因]` anhängen. **Diese Runde beurteilen**: Ausgabe **genau drei Abschnitte**, beurteilt wird **das Ergebnis, nicht der Quellcode**, „ist fertig" wird per Default nicht geglaubt, „nicht geschafft" und „lässt sich hier nicht prüfen" sind zwei verschiedene Schlüsse, letzterer darf **auf keinen Fall als bestanden gewertet werden** |
+| `ORACLE_RULES` | `oracle()` | `f"{RULES}\n{instructions}".strip()` | Ein Nebenweg; jener Run läuft noch, du unterbrichst ihn nicht und nimmst nicht teil; **nur lesend**; nach der Antwort wird alles verworfen, was du sagst, gelangt nicht in den Kontext jenes Runs; du hast nur das „Fenster der letzten Events" und die „Workbench"; erst schauen, dann antworten, wenn du nicht antworten kannst, sag das, kurz |
 
 ---
 
@@ -949,8 +891,8 @@ Alle fünf Konstanten stehen in `__all__` und lassen sich direkt importieren, le
 
 Quelle: [`flower/core/agent.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/agent.py)
 
-`AgentSpec` ist die vollständige Deklaration eines spezialisierten Agents, `build_options` kompiliert sie in `ClaudeAgentOptions` des SDK.
-Die [Rollen-Factories](#角色工厂) liefern genau `AgentSpec` — braucht man eine Kombination außerhalb der Factories, konstruiert man sie direkt.
+`AgentSpec` ist die vollständige Deklaration eines spezialisierten Agents, `build_options` kompiliert sie zu den `ClaudeAgentOptions` des SDK.
+Die [Rollen-Factories](#角色工厂) liefern genau eine `AgentSpec` — wer eine Kombination außerhalb der Factories braucht, konstruiert sie direkt.
 
 ### `AgentSpec` {#agentspec}
 
@@ -978,31 +920,31 @@ class AgentSpec:
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `name` | `str` | Pflicht | Rollenname. Zugleich der Default für `step_name` in `Runtime.run` und die Selbstbezeichnung im Ablehnungstext von `whitelist_guard` |
-| `instructions` | `str` | Pflicht | Domänenanweisung. **Wird hinter den nativen System-Prompt von Claude Code [angehängt](glossary.md#叠加), nicht ersetzt** |
-| `allowed_tools` | `list[str]` | `["Read", "Glob", "Grep"]` | **Liste ohne Genehmigungspflicht, keine exklusive Whitelist** — das Modell kann weiterhin Tools aufrufen, die nicht darin stehen. Exklusivität kommt von [`whitelist_guard`](#whitelist-guard) |
-| `disallowed_tools` | `list[str]` | `[]` | **Auf session-Ebene**. Siehe Warnung unten |
+| `name` | `str` | Pflicht | Rollenname. Zugleich der Default-`step_name` von `Runtime.run` und die Selbstbezeichnung im Ablehnungstext von `whitelist_guard` |
+| `instructions` | `str` | Pflicht | Fachliche Anweisungen. **Wird hinter den nativen System-Prompt von Claude Code [angehängt](glossary.md#叠加), nicht ersetzt** |
+| `allowed_tools` | `list[str]` | `["Read", "Glob", "Grep"]` | **Liste ohne Freigabepflicht, keine exklusive Whitelist** — das Modell kann weiterhin Tools aufrufen, die nicht drinstehen. Exklusivität macht [`whitelist_guard`](#whitelist-guard) |
+| `disallowed_tools` | `list[str]` | `[]` | **Session-weit.** Siehe die Warnung unten |
 | `model` | `str \| None` | `None` | Modell |
 | `effort` | `str \| None` | `None` | Denkintensität |
-| `max_turns` | `int \| None` | `None` | Obergrenze der Runden |
+| `max_turns` | `int \| None` | `None` | Obergrenze für Runden |
 | `max_budget_usd` | `float \| None` | `None` | Obergrenze des [Budgets](glossary.md#预算) |
 | `permission_mode` | `str` | `"default"` | Berechtigungsmodus |
-| `agents` | `dict[str, Any] \| None` | `None` | Tabelle der subagent-Definitionen, Werte sind `AgentDefinition` |
-| `mcp_servers` | `dict[str, Any]` | `{}` | Tabelle der MCP-Server. `HumanChannel.mcp_servers()` füllt direkt hierhin |
-| `hooks` | `dict[str, Any] \| None` | `None` | Zusätzliche Hooks, `Runtime` führt sie per `merge_hooks` mit den eigenen zusammen |
-| `compact` | `CompactPolicy \| None` | `None` | Wenn gesetzt, erzwingt `Runtime` kein `no_summary` |
-| `env` | `dict[str, str]` | `{}` | Umgebungsvariablen für den Subprozess. `compact.env()` wird darauf ge-updated |
-| `glance` | `bool` | `False` | Erlaubt dem Coordinator eigenes `Bash` zum „kurz Hinsehen". Was durchgelassen wird, entscheidet [`is_ephemeral`](#is-ephemeral), das Ergebnis wird von `EphemeralPolicy` als veraltet markiert |
-| `workbench` | `bool` | `True` | Ob der Workbench-Index in den System-Prompt dieses Agents injiziert wird. **Rollen ohne Schreib-Tools sollten das ausschalten** (bei `clarify()` / `judge()` ist es per Default `False`) |
-| `delegate_only` | `bool` | `False` | Nur koordinieren, nicht anfassen. Bei `True` montiert `Runtime` `delegate_guard` und **nicht** `whitelist_guard` |
+| `agents` | `dict[str, Any] \| None` | `None` | Tabelle der Subagent-Definitionen, Werte sind `AgentDefinition` |
+| `mcp_servers` | `dict[str, Any]` | `{}` | MCP-Server-Tabelle. `HumanChannel.mcp_servers()` füllt direkt hier hinein |
+| `hooks` | `dict[str, Any] \| None` | `None` | Zusätzliche Hooks, `Runtime` merged sie per `merge_hooks` mit seinen eigenen |
+| `compact` | `CompactPolicy \| None` | `None` | Wenn gesetzt, wird es von `Runtime` nicht zwangsweise auf `no_summary` gestellt |
+| `env` | `dict[str, str]` | `{}` | Umgebungsvariablen für den Subprozess. `compact.env()` wird darauf per update angewandt |
+| `glance` | `bool` | `False` | Erlaubt dem Koordinator, selbst „nur mal schauen"-`Bash` laufen zu lassen. Was durchgelassen wird, entscheidet [`is_ephemeral`](#is-ephemeral), das Ergebnis wird von der `EphemeralPolicy` als veraltet markiert |
+| `workbench` | `bool` | `True` | Ob der Workbench-Index in den System-Prompt dieses Agents injiziert wird. **Rollen ohne Schreib-Tools schalten das ab** (`clarify()` / `judge()` haben per Default `False`) |
+| `delegate_only` | `bool` | `False` | Nur koordinieren, nicht selbst Hand anlegen. Bei `True` montiert `Runtime` den `delegate_guard` und **montiert keinen** `whitelist_guard` |
 
-!!! warning "`disallowed_tools` gilt auf session-Ebene und sperrt auch subagents"
-    Originaltext der gemessenen Fehlermeldung: `"Bash is disabled for this session, in subagents as well as here"`.
-    Wer also `disallowed_tools=["Bash"]` benutzt, damit der Coordinator nicht selbst Hand anlegt, verhindert auch, dass die entsandten Worker Befehle ausführen —
-    und der ganze Run ist hin.
+!!! warning "`disallowed_tools` ist session-weit und sperrt Subagents mit"
+    Wortlaut des gemessenen Fehlers: `"Bash is disabled for this session, in subagents as well as here"`.
+    Das heißt: Wer den Koordinator vom Selbermachen abhalten will und dafür `disallowed_tools=["Bash"]` verwendet, nimmt auch dem
+    ausgesandten Worker die Möglichkeit, Befehle auszuführen — der ganze Run ist hin.
 
-    Für „nur koordinieren, nicht anfassen": `delegate_only=True` + keine `allowed_tools`, dann fängt
-    [`delegate_guard`](#delegate-guard) anhand der `agent_id` nur den Main Thread ab.
+    Für „nur koordinieren, nicht selbst Hand anlegen" nimmt man `delegate_only=True` + nichts in `allowed_tools` und lässt
+    [`delegate_guard`](#delegate-guard) anhand der `agent_id` nur den Haupt-Thread blocken.
 
 ### `build_options()` {#build-options}
 
@@ -1023,43 +965,43 @@ def build_options(
 ) -> ClaudeAgentOptions
 ```
 
-Kompiliert eine `AgentSpec` in `ClaudeAgentOptions` des SDK. `Runtime._attempt` ruft intern genau das auf;
+Kompiliert eine `AgentSpec` zu den `ClaudeAgentOptions` des SDK. Genau das ruft `Runtime._attempt` intern auf;
 wer das SDK selbst steuert (ohne `Runtime`), steigt ebenfalls hier ein.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `spec` | `AgentSpec` | Pflicht, Positionsparameter | Die zu kompilierende Deklaration |
-| `cwd` | `str \| Path \| None` | `None` | Nur bei ungleich `None` wird `cwd` geschrieben |
-| `session_store` | `SessionStore \| None` | `None` | Nur bei ungleich `None` werden `session_store` und `session_store_flush` geschrieben |
-| `resume` | `str \| None` | `None` | Welche session fortgesetzt wird |
-| `fork` | `bool` | `False` | Landet als `fork_session`. **Steckt innerhalb von `if resume:`** |
-| `resume_at` | `str \| None` | `None` | Landet als `resume_session_at`. **Steckt ebenfalls innerhalb von `if resume:`** |
+| `spec` | `AgentSpec` | Pflicht, Positionsargument | Die zu kompilierende Deklaration |
+| `cwd` | `str \| Path \| None` | `None` | Nur wenn nicht `None`, wird `cwd` geschrieben |
+| `session_store` | `SessionStore \| None` | `None` | Nur wenn nicht `None`, werden `session_store` und `session_store_flush` geschrieben |
+| `resume` | `str \| None` | `None` | Welche Session fortgesetzt wird |
+| `fork` | `bool` | `False` | Wird zu `fork_session`. **Steckt in `if resume:`** |
+| `resume_at` | `str \| None` | `None` | Wird zu `resume_session_at`. **Steckt ebenfalls in `if resume:`** |
 | `use_plugin` | `bool` | `True` | `True` und `PLUGIN_DIR` existiert → `plugins=[{"type": "local", "path": ...}]` |
 | `portable` | `bool` | `True` | `True` → `setting_sources=[]`; `False` → `["project"]` |
-| `add_dirs` | `list[str] \| None` | `None` | Zusätzlich freigegebene Verzeichnisse. **Pflicht, wenn die Workbench außerhalb des Workspace liegt** |
-| `flush` | `str` | `"eager"` | Landet als `session_store_flush` |
-| `prelude` | `str` | `""` | Ein Abschnitt, der hinter `instructions` angehängt wird (der Workbench-Index läuft hierüber) |
+| `add_dirs` | `list[str] \| None` | `None` | Zusätzlich freigegebene Verzeichnisse. **Pflicht, wenn die Workbench außerhalb des Arbeitsbereichs liegt** |
+| `flush` | `str` | `"eager"` | Wird zu `session_store_flush` |
+| `prelude` | `str` | `""` | Abschnitt, der hinter `instructions` angehängt wird (der Workbench-Index läuft hier durch) |
 
-Die Zuordnung:
+Zuordnung:
 
-| Erzeugter Options-Key | Wert |
+| Erzeugter Options-Schlüssel | Wert |
 |---|---|
 | `system_prompt` | `{"type": "preset", "preset": "claude_code", "append": spec.instructions [+ "\n\n" + prelude]}` |
 | `allowed_tools` / `disallowed_tools` / `permission_mode` | Direkt aus `spec` |
 | `setting_sources` | `[]` (portabel) oder `["project"]` |
-| `plugins` | Nur vorhanden, wenn das Verzeichnis `plugin/` im Repo-Root existiert |
-| `cwd` / `add_dirs` | Nur bei nicht-leer geschrieben |
-| `session_store` / `session_store_flush` | Nur wenn `session_store` ungleich `None` |
-| `model` `effort` `max_turns` `max_budget_usd` `agents` `mcp_servers` `hooks` | Jeweils nur bei nicht-leer geschrieben |
+| `plugins` | Nur vorhanden, wenn das Verzeichnis `plugin/` in der Repo-Wurzel existiert |
+| `cwd` / `add_dirs` | Nur geschrieben, wenn nicht leer |
+| `session_store` / `session_store_flush` | Nur geschrieben, wenn `session_store` nicht `None` ist |
+| `model` `effort` `max_turns` `max_budget_usd` `agents` `mcp_servers` `hooks` | Jeweils nur geschrieben, wenn nicht leer |
 | `env` | `dict(spec.env)`, danach `update(spec.compact.env())` |
 | `resume` / `fork_session` / `resume_session_at` | **Nur wirksam, wenn `resume` wahr ist** |
 
-`PLUGIN_DIR` ist `plugin/` im Repo-Root (relativ zu `flower/core/agent.py` drei Ebenen höher). Nach einer pip-Installation existiert dieses Verzeichnis nicht zwangsläufig,
-der Code prüft das per `is_dir()`.
+`PLUGIN_DIR` ist das `plugin/` in der Repo-Wurzel (relativ zu `flower/core/agent.py` drei Ebenen nach oben). Nach einer pip-Installation existiert dieses Verzeichnis nicht zwingend,
+der Code prüft es mit `is_dir()`.
 
-!!! warning "`fork=True` ohne `resume` ist stillschweigend wirkungslos"
-    `fork_session` und `resume_session_at` stecken beide innerhalb von `if resume:` — ohne `resume` greifen sie überhaupt nicht,
-    **und es gibt keinen Fehler**. Genauso wirkt `Runtime.run(resume_at=...)` nur, wenn `resume` gesetzt ist,
+!!! warning "`fork=True` ist ohne `resume` still wirkungslos"
+    `fork_session` und `resume_session_at` stecken beide in `if resume:` — ohne `resume` wirken sie überhaupt nicht,
+    **und es gibt auch keinen Fehler**. Ebenso greift `Runtime.run(resume_at=...)` nur, wenn `resume` gegeben ist,
     und **`Workflow` übergibt `resume_at` nie**: Wer auf eine Nachricht zurückrollen will, muss `Runtime.run` direkt aufrufen.
 
 ### `CompactPolicy` {#compactpolicy}
@@ -1073,17 +1015,17 @@ class CompactPolicy:
     def env(self) -> dict[str, str]: ...
 ```
 
-Das Schaltpult für Auto-[Compact](glossary.md#压缩), das Ergebnis ist ein Satz Umgebungsvariablen für den Subprozess.
-Der Compact-Algorithmus selbst steckt im Harness-Binary und ist nicht änderbar; änderbar ist nur, „ob ausgelöst wird".
+Das Schaltbrett für den Auto-[Compact](glossary.md#压缩), Ergebnis ist ein Satz Umgebungsvariablen für den Subprozess.
+Der Compact-Algorithmus selbst steckt im Harness-Binary und ist nicht änderbar, änderbar ist nur, „ob er auslöst".
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `mode` | `str` | `"auto"` | `"auto"` = nichts setzen, Schwelle = Fenster − 33k; `"no_summary"` → `DISABLE_AUTO_COMPACT=1`; `"off"` → `DISABLE_COMPACT=1` (schaltet auch `/compact` ab). **Andere Werte werfen `ValueError`**, es wird nicht stillschweigend ignoriert |
-| `window` | `int \| None` | `None` | Ungleich `None` → `CLAUDE_CODE_AUTO_COMPACT_WINDOW=<str(window)>`. Die CLI begrenzt auf 100k–1M, Werte unter 100k werden auf 100k angehoben |
+| `mode` | `str` | `"auto"` | `"auto"` = nichts setzen, Schwelle = Fenster − 33k; `"no_summary"` → `DISABLE_AUTO_COMPACT=1`; `"off"` → `DISABLE_COMPACT=1` (schaltet auch `/compact` ab). **Andere Werte werfen `ValueError`**, sie werden nicht still ignoriert |
+| `window` | `int \| None` | `None` | Nicht `None` → `CLAUDE_CODE_AUTO_COMPACT_WINDOW=<str(window)>`. Die CLI-Seite begrenzt auf 100k–1M, weniger als 100k wird auf 100k angehoben |
 
 | Methode | Signatur | Beschreibung |
 |---|---|---|
-| `env` | `() -> dict[str, str]` | Erzeugt die Umgebungsvariablen. **Ein unzulässiges `mode` wirft hier den `ValueError`, nicht beim Konstruieren** — aufgerufen wird sie von `build_options`, der Fehler zeigt sich also in `Runtime.run` |
+| `env` | `() -> dict[str, str]` | Erzeugt die Umgebungsvariablen. **Ein unzulässiger `mode` wirft hier den `ValueError`, nicht bei der Konstruktion** — aufgerufen wird sie von `build_options`, der Fehler taucht also in `Runtime.run` auf |
 
 ### `HandoffPolicy` {#handoffpolicy}
 
@@ -1101,24 +1043,24 @@ class HandoffPolicy:
     def warn_at(self) -> int: ...   # max(1_000, at - 20_000)
 ```
 
-Das Policy-Objekt für „bei fast vollem Kontext ein [Handoff-Dokument](glossary.md#交接书) schreiben und eine neue session starten" statt zu compacten.
+Das Policy-Objekt für „bei vollem Kontext ein [Handoff-Dokument](glossary.md#交接书) schreiben und eine neue Session starten" statt zu komprimieren.
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `enabled` | `bool` | `True` | Ausgeschaltet fällt man auf Auto-Compact zurück |
-| `window` | `int` | `default_window()` | Wie groß das Kontextfenster des Modells angenommen wird |
-| `headroom` | `int` | `50_000` | Wie viel Reserve bleibt. Begründung: Auto-Compact löst bei Fenster −33k aus, der Handoff muss davor kommen, und „den Handoff schreiben" kostet selbst noch eine Runde |
-| `max_generations` | `int` | `8` | Wie viele Generationen ein Step höchstens durchläuft. **Das ist eine Bremse gegen Entgleisen, keine Kapazitätsplanung** |
+| `enabled` | `bool` | `True` | Abgeschaltet fällt man auf Auto-Compact zurück |
+| `window` | `int` | `default_window()` | Wie groß man das Kontextfenster des Modells annimmt |
+| `headroom` | `int` | `50_000` | Wie viel Reserve bleibt. Grund: Auto-Compact löst bei Fenster −33k aus, der Handoff muss davor stattfinden, und das „Schreiben des Handoffs" braucht selbst noch eine Runde |
+| `max_generations` | `int` | `8` | Wie viele Generationen ein Schritt maximal durchläuft. **Das ist eine Bremse gegen Entgleisen, keine Kapazitätsplanung** |
 
 | Property | Typ | Beschreibung |
 |---|---|---|
-| `at` | `@property -> int` | Handoff-Schwelle `max(10_000, window - headroom)`. **Mit Untergrenze 10k** — darunter lässt sich nicht einmal mehr der Handoff schreiben |
+| `at` | `@property -> int` | Handoff-Schwelle `max(10_000, window - headroom)`. **Untergrenze 10k** — darunter lässt sich nicht einmal mehr ein Handoff schreiben |
 | `warn_at` | `@property -> int` | Position der Annäherungswarnung `max(1_000, at - 20_000)`, pro Generation nur einmal gesendet |
 
-!!! warning "Ein zu klein konfiguriertes `window` führt zu endlosen Handoffs und verbrennt Geld"
-    Liegt `at` unter dem **Startboden** dieser Rolle (beim Coordinator gemessen rund 34k), überschreitet jede neue session schon beim ersten Wort die Linie; und
-    **Handoffs verbrauchen kein Retry-Kontingent** (`attempt -= 1`), also dreht sich das endlos leer. Die einzige Bremse ist `max_generations=8`,
-    beim Anschlagen wird der `error` durch eine Diagnose ersetzt, die empfiehlt, `window` zu erhöhen oder die Handoffs abzuschalten.
+!!! warning "Ein zu kleines `window` führt zu endlosen Handoffs und verbrennt Geld"
+    Liegt `at` unter dem **Startboden** der jeweiligen Rolle (beim Koordinator gemessen etwa 34k), überschreitet jede neue Session schon beim ersten Wort die Grenze; und
+    **ein Handoff verbraucht kein Retry-Kontingent** (`attempt -= 1`), also dreht sich das Ganze endlos leer. Die einzige Bremse ist `max_generations=8`,
+    beim Anschlagen wird `error` durch eine Diagnose ersetzt, die empfiehlt, `window` zu erhöhen oder den Handoff abzuschalten.
 
 ### `default_window()` {#default-window}
 
@@ -1126,16 +1068,16 @@ Das Policy-Objekt für „bei fast vollem Kontext ein [Handoff-Dokument](glossar
 def default_window() -> int
 ```
 
-Rät das Kontextfenster anhand des **Modellnamen-Strings** in der Umgebungsvariable `ANTHROPIC_MODEL` oder `ANTHROPIC_DEFAULT_OPUS_MODEL`:
+Schätzt das Kontextfenster anhand des **Modellnamen-Strings** in den Umgebungsvariablen `ANTHROPIC_MODEL` oder `ANTHROPIC_DEFAULT_OPUS_MODEL`:
 
 | Bedingung | Rückgabe |
 |---|---|
 | Der Name enthält ein eigenständiges Wort `1m` (Regex `(?:^\|[^a-z0-9])1m(?:[^a-z0-9]\|$)`) | `1_000_000` |
 | Der Name enthält `haiku` | `200_000` |
-| Sonst (**einschließlich: beide Variablen nicht gesetzt**) | `1_000_000` |
+| Sonst (**inklusive: keine der beiden Variablen gesetzt**) | `1_000_000` |
 
-**Der Default ist der aggressive Wert.** Zu groß geschätzt ist kein harter Fehler: Die API antwortet mit `prompt is too long`, `Runtime` erkennt dieses Signal
-(intern `is_overflow`) und macht auf der Stelle einen Handoff — nur ist der Handoff dieser Generation dann die degradierte Fassung.
+**Der Default ist aggressiv.** Zu groß geschätzt ist kein harter Fehler: Die API weist mit `prompt is too long` zurück, `Runtime` erkennt dieses Signal
+(intern `is_overflow`) und macht auf der Stelle einen Handoff — aber der Handoff dieser Generation ist die degradierte Fassung.
 
 ---
 
@@ -1145,9 +1087,9 @@ Quelle: [`brief.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/
 [`handoff.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/handoff.py) ·
 [`goal.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/goal.py)
 
-Vier Dataclasses, allesamt „eine Antwort des Modells in feste Abschnitte parsen und dann auf Platte schreiben". Die gemeinsame Form:
-`parse()` parst, `missing()` / `complete()` prüfen auf Vollständigkeit, `to_markdown()` ist für Menschen,
-`prompt_block()` für nachgelagerte Modelle, `write()` / `load()` schreiben und lesen zurück.
+Vier Dataclasses, alle nach dem Muster „eine Antwort des Modells in fest definierte Abschnitte parsen und auf Platte schreiben". Gemeinsame Form:
+`parse()` parst, `missing()` / `complete()` prüft auf Vollständigkeit, `to_markdown()` ist für Menschen,
+`prompt_block()` für nachgelagerte Modelle, `write()` / `load()` schreibt auf Platte und liest zurück.
 
 ### `Brief` {#brief}
 
@@ -1161,8 +1103,8 @@ class Brief:
     path: Path | None = field(default=None, compare=False)
 ```
 
-Der [Brief](glossary.md#需求确认书), **genau vier Abschnitte**, feste Reihenfolge
-`goal` → `accept` → `bounds` → `unknowns`, die chinesischen Abschnittsnamen sind 「目标」「验收标准」「边界」「未知与假设」.
+Das [Brief](glossary.md#需求确认书), **genau vier Abschnitte**, feste Reihenfolge
+`goal` → `accept` → `bounds` → `unknowns`, die chinesischen Abschnittsnamen lauten 「目标」「验收标准」「边界」「未知与假设」.
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
@@ -1170,26 +1112,26 @@ Der [Brief](glossary.md#需求确认书), **genau vier Abschnitte**, feste Reihe
 | `accept` | `str` | `""` | Abnahmekriterien |
 | `bounds` | `str` | `""` | Grenzen |
 | `unknowns` | `str` | `""` | Unbekanntes und Annahmen |
-| `path` | `Path \| None` | `None` | Ablageort. `compare=False`, geht nicht in den Gleichheitsvergleich ein |
+| `path` | `Path \| None` | `None` | Ablageort auf der Platte. `compare=False`, geht nicht in den Gleichheitsvergleich ein |
 
 | Methode | Signatur | Beschreibung |
 |---|---|---|
 | `missing` | `() -> list[str]` | Die **chinesischen Namen** der fehlenden Abschnitte, direkt anzeigbar |
 | `complete` | `() -> bool` | `not missing()` |
-| `parse` | `@classmethod (text: str) -> Brief` | Parst die vier Abschnitte aus der Modellantwort. **Zuerst werden Fenced-Code-Blöcke abgestreift**, nicht Geparstes bleibt leer |
-| `to_markdown` | `() -> str` | Vollständiges Dokument mit Kopf-Metadaten, leere Abschnitte werden als `"(未填)"` geschrieben |
-| `prompt_block` | `() -> str` | Kompaktfassung für nachgelagerte Modelle, **nur nicht-leere Abschnitte**, ohne Metadaten |
-| `write` | `(path: str \| Path) -> Path` | Legt Elternverzeichnisse an, schreibt, setzt `self.path` auf den aufgelösten Pfad und gibt ihn zurück |
-| `load` | `@classmethod (path: str \| Path) -> Brief \| None` | Gibt `None` zurück, wenn die Datei nicht existiert oder ein `OSError` auftritt. **Setzt den Platzhalter `"(未填)"` wieder auf einen leeren String zurück** |
+| `parse` | `@classmethod (text: str) -> Brief` | Parst die vier Abschnitte aus der Modellantwort. **Entfernt zuerst umzäunte Codeblöcke**, nicht Erkanntes bleibt leer |
+| `to_markdown` | `() -> str` | Vollständiges Dokument mit Metadaten im Kopf, leere Abschnitte bekommen `"(未填)"` |
+| `prompt_block` | `() -> str` | Kompakte Fassung für nachgelagerte Modelle, **nur nicht leere Abschnitte**, ohne Metadaten |
+| `write` | `(path: str \| Path) -> Path` | Legt das Elternverzeichnis an, schreibt, setzt `self.path` auf den aufgelösten Pfad und gibt ihn zurück |
+| `load` | `@classmethod (path: str \| Path) -> Brief \| None` | Gibt `None` zurück, wenn die Datei nicht existiert oder ein `OSError` auftritt. **Stellt Platzhalter `"(未填)"` wieder als leeren String her** |
 
-Parsing-Regeln (Sammelstelle der Fallstricke):
+Parse-Regeln (hier ballen sich die Fehlerquellen):
 
-- Beim Abstreifen der Fences wird **ab einem unabgeschlossenen ``` oder `~~~` alles Folgende verworfen** — gemessen fügt der Clarifier den kompletten Code in die Antwort ein.
-  Wird die Modellausgabe abgeschnitten, lassen sich alle folgenden Abschnitte nicht mehr parsen, `complete()` ist also `False`, und das Gate schickt es zurück.
-- Der Überschriften-Regex toleriert `## 目标` / `**目标**` / `目标:` / `3. 边界` und auch, dass direkt hinter der Überschrift der Fließtext folgt.
-- Die Aliastabelle wird nach Länge absteigend kompiliert, sonst würde „未知" zuerst „未知与假设" schlucken.
-- Bei mehrfach vorkommenden gleichnamigen Abschnitten wird **der erste mit Inhalt genommen**.
-- Wer den Brief von Hand bearbeitet und dabei den Platzhaltertext `"(未填)"` aus `to_markdown()` übernimmt, hat diesen Abschnitt weiterhin als fehlend markiert.
+- Beim Entfernen der Umzäunung wird **ab einem nicht geschlossenen ``` oder `~~~` alles Folgende verworfen** — gemessen: der Clarifier klebt ganzen Code in die Antwort.
+  Ist die Modellausgabe abgeschnitten, lassen sich die folgenden Abschnitte gar nicht parsen, also ist `complete()` gleich `False` und das Gate schickt es zurück.
+- Die Überschriften-Regex toleriert `## 目标` / `**目标**` / `目标:` / `3. 边界` und auch, dass direkt hinter der Überschrift der Fließtext beginnt.
+- Die Alias-Tabelle wird nach Länge absteigend kompiliert, sonst schluckt „未知" zuerst „未知与假设".
+- Kommt derselbe Abschnittsname mehrfach vor, wird **der erste mit Inhalt genommen**.
+- Wer das Brief von Hand bearbeitet und dabei den Platzhaltertext `"(未填)"` aus `to_markdown()` mitkopiert, hat diesen Abschnitt weiterhin als fehlend.
 
 ### `Handoff` {#handoff}
 
@@ -1209,32 +1151,32 @@ Das beim [Handoff](glossary.md#换代) geschriebene [Handoff-Dokument](glossary.
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `doing` | `str` | `""` | Woran gearbeitet wird. **Pflicht** |
+| `doing` | `str` | `""` | Woran gerade gearbeitet wird. **Pflicht** |
 | `decided` | `str` | `""` | Was entschieden wurde |
-| `deadends` | `str` | `""` | Sackgassen |
+| `deadends` | `str` | `""` | Wege, die nicht funktionieren |
 | `next` | `str` | `""` | Nächster Schritt. **Pflicht** |
 | `scene` | `str` | `""` | Lage vor Ort |
-| `step` | `str` | `""` | Nur für den Dokumentkopf, **geht nicht ins Parsing ein** |
-| `path` | `Path \| None` | `None` | Ablageort |
+| `step` | `str` | `""` | Nur für den Dokumentkopf, **geht nicht ins Parsen ein** |
+| `path` | `Path \| None` | `None` | Ablageort auf der Platte |
 
-**Pflicht sind nur die beiden Abschnitte `doing` und `next`** — würde man „Sackgassen" hart als nicht-leer verlangen, zwänge man das Modell zum Erfinden.
+**Pflicht sind nur die zwei Abschnitte `doing` und `next`** — hart zu fordern, dass „Wege, die nicht funktionieren" nicht leer ist, würde das Modell zum Erfinden zwingen.
 
 | Member | Signatur | Beschreibung |
 |---|---|---|
 | `missing` | `() -> list[str]` | **Prüft nur die beiden Pflichtabschnitte** |
 | `complete` | `() -> bool` | `not missing()` |
-| `degraded` | `@property -> bool` | Ob der Text die Degradierungsmarke `[降级:交接没写成]` trägt |
-| `parse` | `@classmethod (text: str, *, step: str = "") -> Handoff` | Nutzt den Abschnitts-Parser von `Brief` wieder |
-| `to_markdown` | `() -> str` | Leere Abschnitte werden als `"(空)"` geschrieben |
+| `degraded` | `@property -> bool` | Ob der Text die Degradierungsmarkierung `[降级:交接没写成]` trägt |
+| `parse` | `@classmethod (text: str, *, step: str = "") -> Handoff` | Nutzt den Abschnittsparser von `Brief` mit |
+| `to_markdown` | `() -> str` | Leere Abschnitte bekommen `"(空)"` |
 | `prompt_block` | `() -> str` | **Der Kopf sagt dem Übernehmenden ausdrücklich, dass er übernimmt**, damit er nicht rückwärts nach Hintergrund fragt |
 | `write` | `(path) -> Path` | Wie `Brief.write` |
 | `load` | `@classmethod (path) -> Handoff \| None` | Wie `Brief.load` |
 
-Drei im selben Modul **nicht exportierte, aber semantisch entscheidende** Member: `is_overflow(*texts)` matcht `prompt is too long`,
+Drei **nicht exportierte, aber semantisch entscheidende** Member im selben Modul: `is_overflow(*texts)` matcht `prompt is too long`,
 `context length exceeded`, `maximum context length`, `too many total text bytes`,
-`input length and max_tokens exceed` usw. und verwandelt einen „harten Fehler" in „sofort Handoff"; `HANDOFF_PROMPT` ist der Prompt, mit dem
-**die laufende session selbst** ihren Handoff schreibt (enthält die beiden Platzhalter `{used}` und `{window}`, **es ist keine neue Rolle** —
-nur sie selbst hat diesen Kontext); `degraded(step, prompt, *, why="")` setzt mechanisch eine Fassung zusammen, wenn der Handoff nicht zustande kommt,
+`input length and max_tokens exceed` und andere und verwandelt einen „harten Fehler" in ein „sofort Handoff"; `HANDOFF_PROMPT` ist der Prompt, mit dem
+**die aktuelle Session selbst** ihren Handoff schreibt (enthält die beiden Platzhalter `{used}` und `{window}`, **das ist keine neue Rolle** —
+nur sie selbst hat diesen Kontext); `degraded(step, prompt, *, why="")` setzt mechanisch einen Handoff zusammen, wenn keiner geschrieben werden konnte,
 und stopft in `scene` die ersten **1200** Zeichen der ursprünglichen Aufgabe.
 
 ### `Goal` {#goal}
@@ -1247,23 +1189,23 @@ class Goal:
     path: Path | None = None
 ```
 
-Ziel + Prüfliste im [Goal Guard](glossary.md#目标看守).
+Das Ziel plus Prüfliste im [Goal Guard](glossary.md#目标看守).
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
 | `statement` | `str` | `""` | Zielformulierung |
 | `checks` | `list[str]` | `[]` | Prüfliste, ein Punkt pro Zeile |
-| `path` | `Path \| None` | `None` | Ablageort |
+| `path` | `Path \| None` | `None` | Ablageort auf der Platte |
 
 | Member | Signatur | Beschreibung |
 |---|---|---|
-| `unverifiable` | `@property -> list[str]` | Die Einträge in `checks`, die mit `[此环境无法验证:…]` markiert sind. **Schon im Moment der Zielsetzung dazu verurteilt, nie bestanden zu werden** |
-| `missing` | `() -> list[str]` | Verlangt `statement` nicht leer **und** `checks` nicht leer |
+| `unverifiable` | `@property -> list[str]` | Die Einträge in `checks`, die mit `[此环境无法验证:…]` markiert sind. **Schon im Moment der Zielsetzung steht fest, dass sie nie bestehen werden** |
+| `missing` | `() -> list[str]` | Verlangt, dass `statement` nicht leer ist **und** `checks` nicht leer ist |
 | `complete` | `() -> bool` | `not missing()` |
-| `parse` | `@classmethod (text: str) -> Goal` | `checks` je ein Punkt pro Zeile, Aufzählungszeichen `-` / `*` / `1.` werden automatisch entfernt |
+| `parse` | `@classmethod (text: str) -> Goal` | `checks` ein Punkt pro Zeile, Marker `-` / `*` / `1.` werden automatisch entfernt |
 | `to_markdown` | `() -> str` | Bei leerer Liste wird `"(空)"` geschrieben |
-| `prompt_block` | `() -> str` | Kompaktfassung für nachgelagerte Modelle |
-| `write` / `load` | Wie `Brief` | Schreiben und Zurücklesen |
+| `prompt_block` | `() -> str` | Kompakte Fassung für nachgelagerte Modelle |
+| `write` / `load` | Wie bei `Brief` | Auf Platte schreiben und zurücklesen |
 | `amend` | `(extra: str) -> Goal` | **Anhängen statt Überschreiben**: hinter `statement` wird `"\n\n(已修改)" + extra` gesetzt, Rückgabe ist `self` |
 
 ### `Verdict` {#verdict}
@@ -1276,11 +1218,11 @@ class Verdict:
     failed: list[str] = field(default_factory=list)
 ```
 
-Das Ergebnis einer Beurteilungsrunde des [Judge](glossary.md#判定者), **genau drei Abschnitte**: Ergebnis / Begründung / Nicht bestanden.
+Das Ergebnis einer Beurteilungsrunde des [Judge](glossary.md#判定者), **genau drei Abschnitte**: 结论 / 理由 / 未通过.
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `state` | `str` | `""` | `"achieved"` / `"not_yet"` / `"unreachable"`, bei fehlgeschlagenem Parsing `""` |
+| `state` | `str` | `""` | `"achieved"` / `"not_yet"` / `"unreachable"`, `""` wenn nichts geparst werden konnte |
 | `reason` | `str` | `""` | Begründung |
 | `failed` | `list[str]` | `[]` | Die nicht bestandenen Listenpunkte |
 
@@ -1290,41 +1232,37 @@ Das Ergebnis einer Beurteilungsrunde des [Judge](glossary.md#判定者), **genau
 | `unreachable` | `@property -> bool` | `state == "unreachable"` |
 | `ok` | `@property -> bool` | Ob überhaupt ein Ergebnis geparst wurde. **`ok=False` muss als „nicht erreicht" behandelt werden, niemals als erreicht** |
 | `parse` | `@classmethod (text) -> Verdict` | Siehe unten |
-| `feedback` | `() -> str` | Der Rückläufer an den Worker: nur „woran es fehlt", keine Lösung |
+| `feedback` | `() -> str` | Der Rücklauf an den Worker: nur „woran es fehlt", keine Lösung |
 
-Die Erkennungsreihenfolge von `parse`:
+Erkennungsreihenfolge von `parse`:
 
 1. Zuerst über die Überschriftenabschnitte 「结论」/「判定」 holen.
-2. Ohne Überschriftenabschnitt: nach `strip()` des ganzen Textes `fullmatch(r"1|true")` → erreicht; `fullmatch(r"0|false")` → nicht erreicht.
-3. Sonst im Ergebnistext anhand der Statuswortliste (**längere Wörter zuerst**) das erste Treffer­wort suchen.
-   **「无法验证 / 没法验证 / 验证不了 / 无法判定 / unverifiable」 fallen allesamt unter `unreachable`** —
-   damit sind wir gemessen auf die Nase gefallen: Zielplattform macOS, Lauf in einem Linux-Container, der Judge sah sich die Verzweigung im Quellcode an und wertete es als bestanden.
-4. Immer noch nichts → ein isoliertes `\b1\b` suchen → erreicht, `\b0\b` → nicht erreicht.
+2. Gibt es keine Überschriftenabschnitte, wird der ganze Text nach strip mit `fullmatch(r"1|true")` → erreicht; `fullmatch(r"0|false")` → noch nicht.
+3. Sonst im Ergebnistext anhand der Statuswortliste (**längere Wörter zuerst**) das erste Treffer-Wort suchen.
+   **「无法验证 / 没法验证 / 验证不了 / 无法判定 / unverifiable」 fallen alle unter `unreachable`** —
+   in der Praxis reingefallen: Zielplattform macOS, gelaufen im Linux-Container, der Judge sah sich den Quellcode-Zweig an und wertete es als bestanden.
+4. Weiterhin nichts → ein isoliertes `\b1\b` suchen → erreicht, `\b0\b` → noch nicht.
 5. Nichts davon trifft → `state=""`, `ok=False`.
 
-`unreachable` und `not_yet` **sind zwei verschiedene Ergebnisse**: Ersteres geht den Weg „anhalten und den Menschen fragen", nicht „noch eine Runde".
+`unreachable` und `not_yet` **sind zwei verschiedene Schlüsse**: Ersteres geht den Weg „anhalten und den Menschen fragen", nicht „noch eine Runde".
 
 ---
 
-## Hook-Schicht {#hook}
+## hook-Ebene {#hook}
 
 Quelle: [`flower/core/guard.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/guard.py)
 
-Diese Schicht ist flowers **Durchsetzungsgrenze**: welche Tools der Main Thread nicht anfassen darf, wie
-überlange Ergebnisse getrimmt werden, welche Rolle in ein eigenes worktree geht —
-alles wird von SDK-Hooks erzwungen, **nicht von Prompts**. Der Grund ist direkt: ein Prompt ist eine Empfehlung,
-das Modell kann sie ignorieren. Gemessen: selbst wenn im System-Prompt ausdrücklich „kein worktree benutzen" steht,
-greift die Injektion von `isolate_guard` trotzdem (das Modell übergibt `None`, gelandet ist `'worktree'`).
+Diese Ebene ist die **Ausführungsgrenze** von flower: welche Tools der Main Thread nicht anfassen darf, wie überlange Ergebnisse gekürzt werden, welche Rolle in ein eigenes worktree geht —
+alles wird per SDK-hook erzwungen, **nicht über den prompt**. Der Grund ist schlicht: ein prompt ist ein Vorschlag, das Modell kann ihn ignorieren. Gemessen: selbst wenn im System-prompt ausdrücklich steht „kein worktree benutzen", greift die Injektion von `isolate_guard` trotzdem (das Modell übergibt `None`, gelandet ist `'worktree'`).
 
-Neun Exporte: fünf Guard-Factories, die einen `HookMatcher` zurückgeben (`whitelist_guard` kann `None` liefern), ein Assembler, ein Merger, zwei Isolations-Markierungsfunktionen.
-Sie müssen nicht manuell eingehängt werden — [`Runtime`](#runtime) verdrahtet sie anhand der `AgentSpec` automatisch. Manuelles Einhängen braucht man nur, wenn man das SDK selbst steuert
-(also ohne `Runtime`).
+Neun Exporte: fünf guard-Fabriken, die einen `HookMatcher` zurückgeben (`whitelist_guard` kann `None` liefern), ein Zusammenbauer, ein Merger, zwei Isolations-Markierungsfunktionen.
+Man muss sie nicht von Hand einhängen — [`Runtime`](#runtime) montiert sie anhand der `AgentSpec` automatisch. Von Hand einhängen ist nur nötig, wenn man das SDK selbst treibt (ohne `Runtime`).
 
-**Die Main-Thread-Erkennung läuft überall über eine Funktion**: `_is_main_thread(data) = not data.get("agent_id")` —
-in den Tool-Lifecycle-Hook-Daten eines subagent steckt `agent_id`, beim [Main Thread](glossary.md#主线程) nicht.
-Alle Guards, die „nur den Main Thread abfangen", hängen an dieser einen Bedingung.
+**Die Erkennung des Main Threads läuft einheitlich über eine Funktion**: `_is_main_thread(data) = not data.get("agent_id")` —
+in den tool-lifecycle-hook-Daten eines subagent steckt `agent_id`, beim [Main Thread](glossary.md#主线程) nicht.
+Alle guards, die „nur den Main Thread abfangen", hängen an dieser einen Bedingung.
 
-Tool-Gruppen-Konstanten (auf Modulebene, nicht exportiert, bestimmen aber die Default-Matcher):
+Tool-Gruppen-Konstanten (Modulebene, nicht exportiert, bestimmen aber die Default-matcher):
 
 ```python
 HANDS_ON   = "Bash|Write|Edit|NotebookEdit"
@@ -1332,18 +1270,18 @@ WRITE_ONLY = "Write|Edit|NotebookEdit"
 BULKY      = "Bash|Read|Grep|Glob|WebFetch|WebSearch"
 ```
 
-### Kurzreferenz: Welcher Guard hängt an welchem SDK-Event {#hook-速查表}
+### Schnellübersicht: welcher guard hängt an welchem SDK-Event {#hook-速查表}
 
-| Funktion | SDK-Hook-Event | matcher | Was abgefangen wird | Rückgabe | Wer installiert |
+| Funktion | SDK-hook-Event | matcher | Abgefangen wird | Rückgabe | Wer installiert es |
 |---|---|---|---|---|---|
-| `whitelist_guard` | `PreToolUse` | die aus `Bash\|Write\|Edit\|NotebookEdit`, die **nicht in `allowed_tools`** stehen | **nur der Main Thread** ruft ein verbotenes Tool auf | `permissionDecision: "deny"` + Begründung | `Runtime._attempt`, **nur wenn `spec.delegate_only is False`** |
-| `delegate_guard` | `PreToolUse` | `Bash\|Write\|Edit\|NotebookEdit` (per `tools=` änderbar) | **nur der Main Thread** greift selbst zu; bei `allow_glance=True` wird `Bash` durchgelassen, wenn `is_ephemeral()` zutrifft | `deny` + „schick einen subagent" | `workbench_hooks(delegate_only=True)`, **nur wenn `Runtime` eine Workbench hat** |
+| `whitelist_guard` | `PreToolUse` | diejenigen aus `Bash\|Write\|Edit\|NotebookEdit`, die **nicht in `allowed_tools`** stehen | **nur der Main Thread** ruft ein verbotenes Tool auf | `permissionDecision: "deny"` + Begründung | `Runtime._attempt`, **nur wenn `spec.delegate_only is False`** |
+| `delegate_guard` | `PreToolUse` | `Bash\|Write\|Edit\|NotebookEdit` (über `tools=` änderbar) | **nur der Main Thread** legt selbst Hand an; bei `allow_glance=True` wird `Bash` durchgelassen, wenn `is_ephemeral()` zutrifft | `deny` + „schick einen subagent" | `workbench_hooks(delegate_only=True)`, **nur wenn `Runtime` einen Workbench hat** |
 | `isolate_guard` | `PreToolUse` | `Agent` | `tool_input` hat weder `cwd` noch `isolation`, und `subagent_type` wurde mit `isolated()` markiert | `permissionDecision: "allow"` + `updatedInput` (injiziert `isolation="worktree"`) | `workbench_hooks`, **nur wenn in `agents` eine markierte Rolle steckt** |
-| `index_guard` | `PostToolUse` | `Write\|Edit` | `tool_input.file_path` liegt innerhalb von `workbench.root` | `{}` (der Seiteneffekt ist `workbench.refresh()`) | `workbench_hooks`, immer installiert |
-| `spill_guard` | `PostToolUse` | `Bash\|Read\|Grep\|Glob\|WebFetch\|WebSearch` | **String-Felder** in `tool_response` mit ≥ `threshold` Zeichen; das Lesen des Spill-Verzeichnisses selbst wird durchgelassen | `updatedToolOutput` (Spill + einzeiliger Zeiger + erste 400 Zeichen) | `workbench_hooks`, **nur wenn `spill_threshold` truthy ist** |
+| `index_guard` | `PostToolUse` | `Write\|Edit` | `tool_input.file_path` liegt innerhalb von `workbench.root` | `{}` (Seiteneffekt ist `workbench.refresh()`) | `workbench_hooks`, immer |
+| `spill_guard` | `PostToolUse` | `Bash\|Read\|Grep\|Glob\|WebFetch\|WebSearch` | **String-Felder** in `tool_response` mit ≥ `threshold` Zeichen; das Lesen des spill-Verzeichnisses selbst wird durchgelassen | `updatedToolOutput` (spill + eine Zeiger-Zeile + die ersten 400 Zeichen) | `workbench_hooks`, **nur wenn `spill_threshold` truthy ist** |
 
-**Die entscheidende Folgerung aus dieser Tabelle**: bei `Runtime(workbench=False)` wird `workbench_hooks` komplett nicht installiert;
-und bei einem Koordinator mit `delegate_only=True` wird auch `whitelist_guard` übersprungen — **der Main Thread hat dann keine einzige Mauer**.
+**Die zentrale Folgerung aus dieser Tabelle**: bei `Runtime(workbench=False)` wird `workbench_hooks` komplett nicht installiert;
+und bei einem Coordinator mit `delegate_only=True` wird auch `whitelist_guard` übersprungen — **der Main Thread hat dann keine einzige Mauer**.
 Siehe die Warnung unter [Runtime](#runtime).
 
 ### `whitelist_guard()` {#whitelist-guard}
@@ -1352,27 +1290,22 @@ Siehe die Warnung unter [Runtime](#runtime).
 def whitelist_guard(allowed: list[str] | None, *, role: str = "这个角色") -> HookMatcher | None
 ```
 
-**Macht `allowed_tools` für die vier zugreifenden Tools tatsächlich exklusiv.**
+**Macht `allowed_tools` für die vier handanlegenden Tools tatsächlich exklusiv.**
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `allowed` | `list[str] \| None` | Pflicht, Positionsargument | Üblicherweise direkt `spec.allowed_tools` |
-| `role` | `str` | `"这个角色"` | Die Selbstbezeichnung im Ablehnungstext. `Runtime` übergibt `spec.name` |
+| `allowed` | `list[str] \| None` | Pflicht, positional | üblicherweise direkt `spec.allowed_tools` |
+| `role` | `str` | `"这个角色"` | Selbstbezeichnung im Ablehnungstext. `Runtime` übergibt `spec.name` |
 
-- **Hängt an `PreToolUse`**, der matcher ist `"|".join(banned)`, `banned` = die aus `Bash` `Write` `Edit` `NotebookEdit`,
-  die nicht in `allowed` stehen.
-- Bei Treffer sofort `permissionDecision: "deny"`, Text sinngemäß: „XX hat kein YY. **Das ist Absicht, keine vergessene Konfiguration.**
-  Schreib das Ergebnis in den Text deiner Antwort, das Framework holt es von dort — versuch nicht, es mit anderen Schreibweisen zu umgehen."
-- **Fängt nur den Main Thread dieser Session ab**, subagents gehen durch — deren Tools bestimmt `AgentDefinition.tools`.
-- Gibt **`None`** zurück, wenn es nichts abzufangen gibt (etwa bei einer Rolle mit vollem Tool-Satz wie `worker()`); der Aufrufer entscheidet danach, ob er installiert.
+- **Hängt an `PreToolUse`**, matcher ist `"|".join(banned)`, `banned` = diejenigen aus `Bash` `Write` `Edit` `NotebookEdit`, die nicht in `allowed` stehen.
+- Treffer heißt `permissionDecision: "deny"`, Text sinngemäß: „XX hat kein YY. **Das ist Absicht, keine vergessene Konfiguration.** Schreib das Ergebnis in den Fließtext deiner Antwort, das Framework holt es dort ab — versuch nicht, es über eine andere Schreibweise zu umgehen."
+- **Fängt nur den Main Thread dieser session ab**, subagents gehen durch — deren Tools bestimmt `AgentDefinition.tools`.
+- Gibt **`None`** zurück, wenn es nichts abzufangen gibt (etwa bei einer Rolle wie `worker()` mit vollem Tool-Satz); der Aufrufer entscheidet danach, ob er installiert.
 
-**Warum es existieren muss**: `allowed_tools` ist eine **Liste genehmigungsfreier Tools, keine exklusive Whitelist**. Zwei gemessene Belege —
-der Judge, der das Ziel gesetzt hat, hat 11-mal `Bash` ausgeführt; in der Probe für $0.1 konnte ein Agent mit
-`allowed_tools=["Read"]` trotzdem `Write`/`Bash` aufrufen.
-Dass `clarify()` / `judge()` also „keine Schreib-Tools haben", **liegt an diesem Hook**, nicht an der Whitelist selbst.
+**Warum es das geben muss**: `allowed_tools` ist eine **Freigabeliste ohne Nachfrage, keine exklusive Whitelist**. Zwei gemessene Belege — der Judge im Ziel-Setzen-Lauf hat 11-mal `Bash` ausgeführt; in der $0.1-Sonde konnte ein agent mit `allowed_tools=["Read"]` trotzdem `Write`/`Bash` aufrufen.
+Dass `clarify()` / `judge()` „keine Schreibtools haben", **liegt also an diesem hook**, nicht an der Whitelist selbst.
 
-Der Vorteil: er wird aus `allowed_tools` abgeleitet, deshalb behält `judge(can_run=True)` automatisch `Bash` und fängt
-`Write`/`Edit` weiterhin ab — kein zusätzlicher Schalter nötig.
+Der Vorteil: er leitet sich aus `allowed_tools` ab, deshalb behält `judge(can_run=True)` automatisch `Bash` und blockt weiterhin `Write`/`Edit` — kein zusätzlicher Schalter nötig.
 
 ### `delegate_guard()` {#delegate-guard}
 
@@ -1380,24 +1313,21 @@ Der Vorteil: er wird aus `allowed_tools` abgeleitet, deshalb behält `judge(can_
 def delegate_guard(*, tools: str = HANDS_ON, allow_glance: bool = False) -> HookMatcher
 ```
 
-**Der Main Thread greift selbst zu → Ablehnung, mit Wegbeschreibung.**
+**Main Thread legt selbst Hand an → Ablehnung, mit Wegweiser.**
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
 | `tools` | `str` | `"Bash\|Write\|Edit\|NotebookEdit"` | matcher. Ein Regex-String, keine Liste |
-| `allow_glance` | `bool` | `False` | Bei `True` durchgelassen, wenn `tool_name == "Bash"` und [`is_ephemeral(command)`](#is-ephemeral) zutrifft |
+| `allow_glance` | `bool` | `False` | bei `True` wird durchgelassen, wenn `tool_name == "Bash"` und [`is_ephemeral(command)`](#is-ephemeral) wahr ist |
 
-- **Hängt an `PreToolUse`**, der matcher ist genau `tools`.
-- Ruft der Main Thread eines dieser vier Tools auf → deny, und die Begründung **sagt, wie es weitergeht**: mit dem `Agent`-Tool einen subagent schicken,
-  im Auftrag Ziel und Abnahmekriterien klar schreiben, und verlangen, dass er lange Ergebnisse nach `.flower/artifacts/` schreibt
-  und in der Antwort nur Pfad und Ergebnis liefert.
+- **Hängt an `PreToolUse`**, matcher ist genau `tools`.
+- Ruft der Main Thread eines dieser vier Tools auf → deny, und die Begründung **sagt, was als Nächstes zu tun ist**: mit dem `Agent`-Tool einen subagent schicken, in der Aufgabe Ziel und Abnahmekriterien klar benennen und verlangen, dass lange Ergebnisse nach `.flower/artifacts/` geschrieben werden und die Antwort nur Pfad und Schlussfolgerung enthält.
 - subagents gehen ausnahmslos durch.
 
-Der Unterschied zu `whitelist_guard` ist die **Formulierung**: beide fangen dieselbe Tool-Gruppe ab, aber dieser hier sagt „delegiere", was besser passt.
-Deshalb bekommt eine Rolle mit `delegate_only=True` nur diesen einen; beide zu installieren gibt dem Modell zwei widersprüchliche Anweisungen.
+Der Unterschied zu `whitelist_guard` ist die **Formulierung**: beide fangen dieselben Tools ab, aber dieser hier sagt „delegier das", was hier passender ist.
+Deshalb bekommt eine Rolle mit `delegate_only=True` nur diesen einen; beide zusammen würden dem Modell zwei widersprüchliche Anweisungen liefern.
 
-Das Durchlass-Kriterium bei `allow_glance=True` und die Frage „wird das Ergebnis später getrimmt" sind **dieselbe Funktion** ([`is_ephemeral`](#is-ephemeral)) —
-die durchgelassene Menge muss gleich der ablaufenden Menge sein; ändert man eine Seite, muss man die andere mitändern.
+Das Durchlasskriterium von `allow_glance=True` und die Frage „wird das Ergebnis später gekürzt" sind **dieselbe Funktion** ([`is_ephemeral`](#is-ephemeral)) — die durchgelassene Menge muss der veralteten Menge entsprechen; ändert man die eine Seite, muss man die andere mitändern.
 
 ### `spill_guard()` {#spill-guard}
 
@@ -1411,23 +1341,19 @@ def spill_guard(
 ) -> HookMatcher
 ```
 
-Tool-Ergebnisse über dem Schwellwert werden **sofort [gespillt](glossary.md#落盘)**, im Kontext bleibt nur ein einzeiliger Zeiger — nicht erst
-compact machen, wenn der Kontext voll ist.
+Tool-Ergebnisse über dem Schwellwert werden **sofort ge[spillt](glossary.md#落盘)**, im Kontext bleibt nur eine Zeiger-Zeile — nicht erst compacten, wenn der Kontext voll ist.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `workbench` | `Workbench` | Pflicht, Positionsargument | Das Spill-Verzeichnis ist `<workbench.root>/spill/` |
-| `threshold` | `int` | `4000` | Ab wie vielen Zeichen gespillt wird |
+| `workbench` | `Workbench` | Pflicht, positional | spill-Verzeichnis ist `<workbench.root>/spill/` |
+| `threshold` | `int` | `4000` | ab wie vielen Zeichen gespillt wird |
 | `tools` | `str` | `"Bash\|Read\|Grep\|Glob\|WebFetch\|WebSearch"` | matcher |
 | `main_only` | `bool` | `False` | `False` (Default) = auch Ergebnisse von subagents werden gespillt |
 
-- **Hängt an `PostToolUse`**, gibt
-  `{"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": <getrimmt>}}` zurück.
-- Der Spill-Dateiname sind die ersten 16 Stellen des `sha256` des Inhalts + `.txt`; im Kontext steht stattdessen ein einzeiliger Zeiger + die **ersten 400 Zeichen**.
-- `updatedToolOutput` **muss die Ausgabestruktur des Original-Tools behalten**, deshalb werden nur die zu langen **String-Felder** im dict ersetzt;
-  **Listen werden nie angefasst** (darin können Bild-Blöcke stecken). Eine falsche Struktur wird verworfen (Original bleibt, kein Fehler).
-- **Das Lesen der Spill-Datei selbst muss durchgelassen werden** — sonst ist „lies sie mit `Read`" eine leere Aussage: der zurückgelesene Volltext würde wieder gespillt, Endlosschleife.
-  Gemessen aufgetreten; das Modell hat fünf Schreibweisen durchprobiert, um daran vorbeizukommen.
+- **Hängt an `PostToolUse`**, liefert `{"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedToolOutput": <gekürzt>}}`.
+- Der spill-Dateiname sind die ersten 16 Stellen des `sha256` des Inhalts + `.txt`; im Kontext steht stattdessen eine Zeiger-Zeile + die **ersten 400 Zeichen**.
+- `updatedToolOutput` **muss die Ausgabestruktur des Originaltools beibehalten**, deshalb werden nur die zu langen **String-Felder** im dict ersetzt; **Listen werden nie angefasst** (darin können Bildblöcke stecken). Eine falsche Struktur wird abgelehnt (Original bleibt, kein Fehler).
+- **Das Lesen der spill-Datei selbst muss durchgelassen werden** — sonst ist „lies sie mit `Read`" eine leere Aussage: der zurückgelesene Volltext würde erneut gespillt, Endlosschleife. Gemessen aufgetreten; das Modell hat fünf Schreibweisen durchprobiert, um es zu umgehen.
 
 ### `index_guard()` {#index-guard}
 
@@ -1435,14 +1361,13 @@ compact machen, wenn der Kontext voll ist.
 def index_guard(workbench: Workbench) -> HookMatcher
 ```
 
-Wird etwas in die [Workbench](glossary.md#工作台) geschrieben, wird `INDEX.md` aktualisiert, damit der nächste Agent von Beginn an weiß, dass es existiert.
+Wird etwas in den [Workbench](glossary.md#工作台) geschrieben, wird `INDEX.md` aufgefrischt; der nächste agent weiß gleich zu Beginn, dass es das gibt.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `workbench` | `Workbench` | Pflicht, Positionsargument | Prüfbereich und Refresh-Ziel |
+| `workbench` | `Workbench` | Pflicht, positional | Prüfbereich und Auffrischungsziel |
 
-**Hängt an `PostToolUse`**, matcher `"Write|Edit"`. Liegt `tool_input["file_path"]` nach dem resolve innerhalb von
-`workbench.root`, wird `workbench.refresh()` gerufen. **Gibt immer `{}` zurück** — es ändert nichts, es hat nur einen Seiteneffekt.
+**Hängt an `PostToolUse`**, matcher `"Write|Edit"`. Liegt `tool_input["file_path"]` nach resolve innerhalb von `workbench.root`, wird `workbench.refresh()` aufgerufen. **Gibt immer `{}` zurück** — er ändert nichts, er hat nur einen Seiteneffekt.
 
 ### `isolate_guard()` {#isolate-guard}
 
@@ -1450,24 +1375,19 @@ Wird etwas in die [Workbench](glossary.md#工作台) geschrieben, wird `INDEX.md
 def isolate_guard(agents: dict[str, AgentDefinition], *, on_inject: Any = None) -> HookMatcher
 ```
 
-Weist subagents rollenweise ein eigenes git worktree zu und realisiert damit [Isolation](glossary.md#隔离).
+Weist subagents je nach Rolle ein eigenes git-worktree zu und realisiert damit die [Isolation](glossary.md#隔离).
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `agents` | `dict[str, AgentDefinition]` | Pflicht, Positionsargument | Rollentabelle, um zu prüfen, ob `subagent_type` markiert ist |
-| `on_inject` | `Any` | `None` | Optionaler Callback, gerufen als `on_inject(subagent_type, description)` |
+| `agents` | `dict[str, AgentDefinition]` | Pflicht, positional | Rollentabelle, um nachzusehen, ob `subagent_type` markiert ist |
+| `on_inject` | `Any` | `None` | optionaler callback, aufgerufen als `on_inject(subagent_type, description)` |
 
-**Hängt an `PreToolUse`**, matcher `"Agent"`. Injiziert wird nur, wenn drei Bedingungen gleichzeitig gelten: `tool_name == "Agent"`,
-`tool_input` hat **weder `cwd` noch `isolation`**, und die zu `subagent_type` gehörende Rolle wurde mit `isolated()` markiert.
-Dann kommt `permissionDecision: "allow"` + `updatedInput` (mit `isolation` auf `"worktree"`) zurück.
+**Hängt an `PreToolUse`**, matcher `"Agent"`. Injiziert wird nur, wenn drei Bedingungen gleichzeitig gelten: `tool_name == "Agent"`, `tool_input` hat **weder `cwd` noch `isolation`**, und die zu `subagent_type` gehörende Rolle wurde mit `isolated()` markiert. Dann kommt `permissionDecision: "allow"` + `updatedInput` zurück (`isolation` wird auf `"worktree"` gesetzt).
 
-`isolation` und `cwd` sind im `Agent`-Tool **exklusiv** — hat das Modell selbst ein `cwd` angegeben, wird das respektiert.
-„Isolation oder nicht" ist eine **Eigenschaft der Rolle**, kein globaler Schalter und keine Entscheidung pro Delegation; einer Rolle, die keine Isolation braucht, wird kein einziges Byte hinzugefügt.
+`isolation` und `cwd` schließen sich im `Agent`-Tool **gegenseitig aus** — hat das Modell selbst ein `cwd` angegeben, wird das respektiert.
+„Isolieren oder nicht" ist eine **Eigenschaft der Rolle**, kein globaler Schalter und keine Entscheidung pro Delegation; einer Rolle, die keine Isolation braucht, wird kein einziges Byte hinzugefügt.
 
-**Wer Isolation einschaltet, muss die [Workbench](glossary.md#工作台) aus dem Repo herausziehen.** Ein isolierter Agent kann nicht in das gemeinsame checkout schreiben,
-also muss die Workbench per `home=` außerhalb des Repos liegen. `starter_flow(isolate=True)` nimmt
-`<ws>.parent/.flower-<ws.name>`, `Runtime(workbench=True)` nimmt `<run_dir>/workbench` —
-beide liegen außerhalb des Repos, **sind aber nicht dasselbe Verzeichnis**, nicht vermischen.
+**Wer Isolation einschaltet, muss den [Workbench](glossary.md#工作台) aus dem Repo herausziehen.** Ein isolierter agent kann nicht in den geteilten checkout schreiben, also muss der Workbench per `home=` außerhalb des Repos liegen. `starter_flow(isolate=True)` nimmt `<ws>.parent/.flower-<ws.name>`, `Runtime(workbench=True)` nimmt `<run_dir>/workbench` — beide liegen außerhalb des Repos, **sind aber nicht dasselbe Verzeichnis**; nicht mischen.
 
 ### `isolated()` / `wants_isolation()` {#isolated}
 
@@ -1476,18 +1396,17 @@ def isolated(agent: AgentDefinition, flag: bool = True) -> AgentDefinition
 def wants_isolation(agent: AgentDefinition | None) -> bool
 ```
 
-Markiert eine subagent-Definition als „braucht eigenen Arbeitsbereich" und liest diese Markierung wieder aus.
+Markiert eine subagent-Definition als „braucht eigenen Arbeitsbereich" und liest die Markierung wieder aus.
 
 | Funktion | Parameter | Default | Beschreibung |
 |---|---|---|---|
-| `isolated` | `agent: AgentDefinition` | Pflicht | Die zu markierende Definition. **Zurück kommt dasselbe Objekt** |
-| | `flag: bool` | `True` | Positionsargument. `False` = Markierung entfernen |
-| `wants_isolation` | `agent: AgentDefinition \| None` | Pflicht | `None` ist erlaubt, gibt `False` zurück |
+| `isolated` | `agent: AgentDefinition` | Pflicht | die zu markierende Definition. **Zurück kommt dasselbe Objekt** |
+| | `flag: bool` | `True` | positional. `False` = Markierung entfernen |
+| `wants_isolation` | `agent: AgentDefinition \| None` | Pflicht | akzeptiert auch `None`, gibt dann `False` zurück |
 
-Die Markierung ist ein per `object.__setattr__` gesetztes Python-Attribut `_flower_isolate`, **kein dataclass-Feld** —
-das SDK serialisiert mit `asdict()` und kennt nur deklarierte Felder, deshalb sickert die Markierung nicht zur CLI durch (gemessen).
+Die Markierung ist ein per `object.__setattr__` gesetztes Python-Attribut `_flower_isolate`, **kein dataclass-Feld** — das SDK serialisiert mit `asdict()` und kennt nur deklarierte Felder, die Markierung leckt also nicht zur CLI durch (gemessen).
 
-**Der Preis**: ein `dataclasses.replace()` auf `AgentDefinition` verliert die Markierung, die Isolation fällt stillschweigend weg.
+**Der Preis**: ein `dataclasses.replace()` auf `AgentDefinition` verliert diese Markierung, die Isolation fällt still aus.
 
 `worker(isolate=True)` geht intern genau über `isolated()`.
 
@@ -1504,23 +1423,21 @@ def workbench_hooks(
 ) -> dict[str, list[HookMatcher]]
 ```
 
-Installiert in einem Zug die Hooks, die die Workbench braucht. Genau das ruft `Runtime._attempt`.
+Installiert in einem Zug die hooks, die ein Workbench braucht. `Runtime._attempt` ruft genau das auf.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `workbench` | `Workbench` | Pflicht, Positionsargument | Wird an `index_guard` und `spill_guard` übergeben |
-| `delegate_only` | `bool` | `True` | Nur bei `True` wird `delegate_guard` installiert |
-| `spill_threshold` | `int \| None` | `4000` | Nur wenn truthy wird `spill_guard` installiert |
-| `agents` | `dict[str, AgentDefinition] \| None` | `None` | Nur wenn **irgendeine** davon mit `isolated()` markiert ist, wird `isolate_guard` angehängt |
-| `allow_glance` | `bool` | `False` | Wird an `delegate_guard(allow_glance=)` durchgereicht |
+| `workbench` | `Workbench` | Pflicht, positional | wird an `index_guard` und `spill_guard` weitergereicht |
+| `delegate_only` | `bool` | `True` | nur bei `True` wird `delegate_guard` installiert |
+| `spill_threshold` | `int \| None` | `4000` | nur wenn truthy wird `spill_guard` installiert |
+| `agents` | `dict[str, AgentDefinition] \| None` | `None` | ist **irgendeine** davon mit `isolated()` markiert, kommt `isolate_guard` dazu |
+| `allow_glance` | `bool` | `False` | wird an `delegate_guard(allow_glance=)` durchgereicht |
 
 Ergebnis:
 
-- `PreToolUse`: `delegate_only=True` → `[delegate_guard(allow_glance=allow_glance)]`;
-  gibt es eine markierte Rolle → `isolate_guard(agents)` angehängt.
-- `PostToolUse`: immer `[index_guard(workbench)]`; ist `spill_threshold` truthy →
-  `spill_guard(workbench, threshold=spill_threshold)` angehängt.
-- **Event-Keys mit leerer Liste werden entfernt**, es wird keine leere Liste zurückgegeben.
+- `PreToolUse`: `delegate_only=True` → `[delegate_guard(allow_glance=allow_glance)]`; gibt es markierte Rollen → zusätzlich `isolate_guard(agents)`.
+- `PostToolUse`: immer `[index_guard(workbench)]`; ist `spill_threshold` truthy → zusätzlich `spill_guard(workbench, threshold=spill_threshold)`.
+- **Event-Schlüssel mit leerer Liste werden entfernt**, es wird keine leere list zurückgegeben.
 
 ### `merge_hooks()` {#merge-hooks}
 
@@ -1528,14 +1445,13 @@ Ergebnis:
 def merge_hooks(*groups: dict[str, list[Any]] | None) -> dict[str, list[Any]]
 ```
 
-**Hängt** mehrere Hook-Konfigurationen pro Event-Name aneinander.
+Fügt mehrere hook-Konfigurationen pro Event-Name **aneinander**.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `*groups` | `dict[str, list[Any]] \| None` | Variadisch | Beliebig viele Gruppen. `None`-Gruppen werden übersprungen |
+| `*groups` | `dict[str, list[Any]] \| None` | variadisch | beliebig viele Gruppen. `None`-Gruppen werden übersprungen |
 
-Nutzt `extend`, **ohne Deduplizierung** — derselbe Guard zweimal übergeben heißt zweimal installiert. `Runtime` benutzt es, um `spec.hooks`,
-`workbench_hooks(...)` und `whitelist_guard` zusammenzuführen.
+Nutzt `extend` und **dedupliziert nicht** — derselbe guard zweimal übergeben wird zweimal installiert. `Runtime` fügt damit `spec.hooks`, `workbench_hooks(...)` und `whitelist_guard` zusammen.
 
 ---
 
@@ -1554,45 +1470,41 @@ class Workbench:
     home: Path | None = None
 ```
 
-Das Arbeitsverzeichnis für Spills: drei Unterverzeichnisse + ein Index. Der Index wird **in den System-Prompt injiziert**, damit der Agent
-in jeder Runde weiß, was er zur Hand hat.
+Das Arbeitsverzeichnis fürs Spillen: drei Unterverzeichnisse + ein Index. Der Index wird **in den System-prompt injiziert**, der agent weiß also in jeder Runde, was er zur Hand hat.
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `workspace` | `Path` | Pflicht, Positionsargument | Arbeitsbereich. `__post_init__` macht ein resolve |
+| `workspace` | `Path` | Pflicht, positional | Arbeitsbereich. `__post_init__` macht resolve |
 | `dirname` | `str` | `".flower"` | Name des Workbench-Verzeichnisses, relativ zu `workspace` |
-| `max_index_entries` | `int` | `40` | **Betrifft nur `prompt_block()`**: wie viele Einträge pro Kategorie in dem in den System-Prompt injizierten Abschnitt maximal aufgeführt werden; der Rest wird zu einer Zeile „… und N weitere" zusammengefasst. `INDEX.md` selbst ist unbeschränkt und listet alles |
-| `home` | `Path \| None` | `None` | Wenn gesetzt, wird das als `root` benutzt und **`dirname` ignoriert**. Nicht-`None` wird ebenfalls resolved |
+| `max_index_entries` | `int` | `40` | **betrifft nur `prompt_block()`**: wie viele Einträge pro Kategorie in dem in den System-prompt injizierten Abschnitt maximal aufgelistet werden; der Rest wird zu einer Zeile „… weitere N" zusammengefasst. `INDEX.md` selbst ist nicht begrenzt und listet alles |
+| `home` | `Path \| None` | `None` | wenn gesetzt, ist das der `root`, **`dirname` wird ignoriert**. Wird bei nicht-`None` ebenfalls resolved |
 
 | Member | Signatur | Beschreibung |
 |---|---|---|
-| `root` | `@property -> Path` | Wenn `home` gesetzt, dieses, sonst `workspace / dirname` |
-| `external` | `@property -> bool` | Ob `root` **außerhalb** von `workspace` liegt. Im Isolationsmodus sollte das `True` sein |
+| `root` | `@property -> Path` | `home`, falls gesetzt, sonst `workspace / dirname` |
+| `external` | `@property -> bool` | ob `root` **außerhalb** von `workspace` liegt. Im Isolationsmodus sollte das `True` sein |
 | `scripts` | `@property -> Path` | `root / "scripts"`, Skripte, die ein zweites Mal laufen sollen |
 | `artifacts` | `@property -> Path` | `root / "artifacts"`, lange Ergebnisse über 2000 Zeichen |
-| `notes` | `@property -> Path` | `root / "notes"`, wichtige Entscheidungen, eine Datei pro Entscheidung |
+| `notes` | `@property -> Path` | `root / "notes"`, zentrale Entscheidungen, eine Datei pro Entscheidung |
 | `index_path` | `@property -> Path` | `root / "INDEX.md"` |
-| `show` | `(p: Path) -> str` | Der Pfad, den das Modell sieht: innerhalb des Arbeitsbereichs relativ, außerhalb absolut |
+| `show` | `(p: Path) -> str` | der Pfad, den das Modell sieht: relativ innerhalb des Arbeitsbereichs, absolut außerhalb |
 | `ensure` | `() -> Workbench` | mkdir für die drei Verzeichnisse, gibt `self` zurück (verkettbar: `Workbench(ws).ensure()`) |
 | `scan` | `(d: Path) -> list[tuple[str, str, int]]` | `(Anzeigepfad, Beschreibung, Bytes)`. Rekursiv per `rglob("*")`, Dateien mit `.` am Anfang werden übersprungen |
-| `refresh` | `() -> str` | Schreibt `INDEX.md` neu und gibt den Inhalt zurück |
-| `prompt_block` | `() -> str` | **Der in den System-Prompt injizierte Abschnitt.** Absichtlich kurz gehalten — er ist in jeder Runde dabei |
+| `refresh` | `() -> str` | schreibt `INDEX.md` neu und gibt den Inhalt zurück |
+| `prompt_block` | `() -> str` | **der Abschnitt, der in den System-prompt injiziert wird**. Bewusst kurz gehalten — er ist in jeder Runde dabei |
 
-Format der Skript-Selbstbeschreibung: ein `# desc: ein Satz` innerhalb der ersten 8 Zeilen (auch `//` und `--` werden als Kommentarzeichen erkannt),
-mit Rückfall auf den ersten nichtleeren Kommentar oder die erste Zeile des docstring (auf 100 Zeichen gekürzt).
+Selbstbeschreibungsformat der Skripte: `# desc: ein Satz` innerhalb der ersten 8 Zeilen (auch `//` und `--` als Kommentarzeichen), Rückfall auf den ersten nicht-leeren Kommentar oder die erste Zeile des docstring (auf 100 Zeichen gekürzt).
 
 Die drei Regeln, die `prompt_block()` injiziert:
 
-1. Skripte, die ein zweites Mal laufen sollen, gehen nach `scripts/`, erste Zeile `# desc:`.
-2. Ergebnisse über **2000 Zeichen** gehen nach `artifacts/`, im Dialog nur Pfad und Ergebnis.
-3. Wichtige Entscheidungen gehen nach `notes/`, eine Datei pro Entscheidung.
+1. Skripte, die ein zweites Mal laufen sollen, kommen nach `scripts/`, erste Zeile `# desc:`.
+2. Ergebnisse über **2000 Zeichen** kommen nach `artifacts/`, im Dialog stehen nur Pfad und Schlussfolgerung.
+3. Zentrale Entscheidungen kommen nach `notes/`, eine Datei pro Entscheidung.
 
-Bei `external=True` fügt `prompt_block()` zusätzlich den Satz „greif per absolutem Pfad darauf zu" ein.
+Bei `external=True` ergänzt `prompt_block()` zusätzlich den Satz „greif mit absolutem Pfad darauf zu".
 
-**Den Index erben subagents nicht.** Er läuft über das Session-weite `system_prompt.append`, und ein subagent hat seinen eigenen
-System-Prompt (gemessen $0.2461). Deshalb müssen die zwei Punkte „lange Ergebnisse nach `artifacts/`" und „wo die Workbench liegt" vom
-[Koordinator](glossary.md#协调者) im [Task Brief](glossary.md#任务书) weitergegeben werden — **das ist der einzige Kanal**, keine Redundanz.
-In `WORKER_RULES` steht das **absichtlich nicht**: den echten Pfad erzeugt `Workbench`, fest verdrahtet wäre er falsch.
+**Den Index erben subagents nicht.** Er läuft über das session-weite `system_prompt.append`, subagents haben aber ihren eigenen System-prompt (gemessen $0.2461). Die beiden Punkte „lange Ergebnisse nach `artifacts/`" und „wo der Workbench liegt" muss der [Coordinator](glossary.md#协调者) deshalb im [Task Brief](glossary.md#任务书) weitergeben — **das ist der einzige Kanal**, keine Redundanz.
+In `WORKER_RULES` steht das **absichtlich nicht**: der echte Pfad wird von `Workbench` erzeugt, fest verdrahtet wäre er falsch.
 
 ---
 
@@ -1603,10 +1515,9 @@ Quelle: [`sqlite.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/stor
 [`prune.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/stores/prune.py)
 
 Drei Vererbungsstufen: `SqliteSessionStore` ← `TrimmingSessionStore` ← `PruningSessionStore`.
-`Runtime` benutzt **immer die äußerste**, die Strategien aller drei Stufen werden über Konstruktorparameter gesteuert.
+`Runtime` benutzt **immer die äußerste**, die Strategien aller drei Schichten werden über Konstruktorparameter gesteuert.
 
-Jede Stufe macht eine Sache: persistieren, nach Volumen und Wert [trimmen](glossary.md#裁剪), nach „ist das ein Fehler" [prunen](glossary.md#剪除).
-Trim und Prune passieren beide im Moment von **`load()`** (also wenn resume die Historie zurück ins Modell füttert), an den Rohdaten in SQLite ändert sich kein Byte.
+Jede Schicht macht eine Sache: Persistieren, [Trimmen](glossary.md#裁剪) nach Größe und Wert, [Prunen](glossary.md#剪除) nach „ist das ein Fehler". Trimmen und Prunen passieren beide im Moment von **`load()`** (also wenn resume die Historie zurück ins Modell füttert); an den Rohdaten in SQLite ändert sich kein Byte.
 
 ### `SqliteSessionStore` {#sqlitesessionstore}
 
@@ -1616,27 +1527,26 @@ class SqliteSessionStore(SessionStore):
 ```
 
 Implementiert das `SessionStore`-Protokoll des SDK, drei Tabellen `entries` / `meta` / `summaries`.
-Der store key ist `project_key/session_id[/subpath]` — **die transcripts von sub-Agents werden per subpath unterschieden**.
+Der store key ist `project_key/session_id[/subpath]` — **die transcripts von sub-agents werden über subpath unterschieden**.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `path` | `str \| Path` | Pflicht, Positionsargument | Die Datenbankdatei. Die Verbindung nutzt `check_same_thread=False` |
+| `path` | `str \| Path` | Pflicht, positional | Datenbankdatei. Verbindung mit `check_same_thread=False` |
 
 | Methode | Signatur | Beschreibung |
 |---|---|---|
-| `append` | `async (key, entries) -> None` | Idempotente Dedup per uuid (zuerst schon Persistiertes weg, dann Duplikate innerhalb des Batches). Beim Replay eines ganzen Batches wird **die mtime nicht vorgerückt und keine fold summary wiederholt**; nur das Haupt-transcript (`subpath is None`) nimmt an der summary teil |
-| `projects` | `() -> list[str]` | Die tatsächlich in der DB vorhandenen `project_key`. **Das SDK leitet ihn aus dem cwd ab; vor einer Abfrage damit bestätigen, nicht raten** |
-| `has_session` | `(project_key: str, session_id: str) -> bool` | **Synchron, liest kein payload**, fragt nur eine meta-Zeile ab. Für „Kontinuität am selben Pfad" — der resume einer nicht existierenden Session fliegt erst auf, wenn der Subprozess hochgekommen ist |
-| `last_context` | `(project_key: str, session_id: str, *, scan: int = 60) -> int` | Wie groß der Kontext war, den das Modell in der letzten Runde tatsächlich gesehen hat; nicht gefunden → `0`. Scannt nur die letzten `scan` Einträge rückwärts; `input + cache_read + cache_creation` werden alle drei gezählt (nur `input_tokens` unterschätzt massiv) |
-| `load` | `async (key) -> list[SessionStoreEntry] \| None` | Nach seq sortiert; keine Zeilen → `None` |
-| `list_sessions` | `async (project_key) -> list[SessionStoreListEntry]` | Nur Haupt-transcripts |
-| `list_session_summaries` | `async (project_key) -> list[SessionSummaryEntry]` | Listet die Session-Zusammenfassungen |
-| `delete` | `async (key) -> None` | Beim Löschen eines Haupt-transcripts werden **die der sub-Agents kaskadierend mitgelöscht**, um Waisen zu vermeiden |
-| `list_subkeys` | `async (key) -> list[str]` | Listet die sub-transcripts dieser Session |
+| `append` | `async (key, entries) -> None` | idempotente Deduplizierung nach uuid (erst bereits Gespeichertes, dann Dubletten innerhalb des Batches). Beim Replay eines ganzen Batches **wird mtime nicht vorangetrieben und keine summary doppelt gefaltet**; nur das Haupt-transcript (`subpath is None`) nimmt an der summary teil |
+| `projects` | `() -> list[str]` | die tatsächlich in der DB vorhandenen `project_key`. **Das SDK leitet ihn aus cwd ab; vor einer Abfrage damit prüfen, nicht raten** |
+| `has_session` | `(project_key: str, session_id: str) -> bool` | **synchron, liest kein payload**, fragt nur eine meta-Zeile ab. Für die „Continuity am selben Pfad" — der resume einer nicht existierenden session fliegt sonst erst auf, wenn der Subprozess hochgekommen ist |
+| `last_context` | `(project_key: str, session_id: str, *, scan: int = 60) -> int` | wie groß der Kontext war, den das Modell in der letzten Runde tatsächlich gesehen hat; nichts gefunden → `0`. Scannt nur die letzten `scan` Einträge rückwärts; `input + cache_read + cache_creation` zählen alle drei (nur `input_tokens` unterschätzt massiv) |
+| `load` | `async (key) -> list[SessionStoreEntry] \| None` | sortiert nach seq; keine Zeilen → `None` |
+| `list_sessions` | `async (project_key) -> list[SessionStoreListEntry]` | nur Haupt-transcripts |
+| `list_session_summaries` | `async (project_key) -> list[SessionSummaryEntry]` | listet die session-Zusammenfassungen |
+| `delete` | `async (key) -> None` | beim Löschen eines Haupt-transcripts werden **die der sub-agents kaskadierend mitgelöscht**, um Waisen zu vermeiden |
+| `list_subkeys` | `async (key) -> list[str]` | listet die sub-transcripts dieser session |
 | `close` | `() -> None` | Verbindung schließen |
 
-Das interne `_next_mtime` garantiert **strenge Monotonie** — `list_sessions` und die summary-sidecar teilen sich diese Uhr,
-sonst fehlurteilt der staleness-Fastpath des SDK.
+Das interne `_next_mtime` garantiert **strenge Monotonie** — `list_sessions` und die summary-sidecar teilen sich diese Uhr, sonst urteilt der staleness-Schnellpfad des SDK falsch.
 
 ### `TrimPolicy` {#trimpolicy}
 
@@ -1651,18 +1561,17 @@ class TrimPolicy:
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `keep_recent` | `int` | `20` | Die letzten N `tool_result` behalten den Originaltext |
-| `min_chars` | `int` | `2000` | Kurze Ergebnisse sind das Trimmen nicht wert |
-| `spill_dirname` | `str` | `".flower/spill"` | **Relativ zu `workspace`, muss innerhalb des Arbeitsbereichs liegen** — sonst kommt das `Read` des Agents nicht daran |
-| `enabled` | `bool` | `True` | Bei `Runtime(trim=False)` steht hier `False` |
+| `keep_recent` | `int` | `20` | die letzten N `tool_result` behalten den Originaltext |
+| `min_chars` | `int` | `2000` | kurze Ergebnisse lohnen das Trimmen nicht |
+| `spill_dirname` | `str` | `".flower/spill"` | **relativ zu `workspace`, muss innerhalb des Arbeitsbereichs liegen** — sonst kommt das `Read` des agent nicht heran |
+| `enabled` | `bool` | `True` | bei `Runtime(trim=False)` steht hier `False` |
 
 | Methode | Signatur | Beschreibung |
 |---|---|---|
-| `placeholder` | `(path: str, n: int) -> str` | Erzeugt die Zeigerzeile, die den Text ersetzt |
+| `placeholder` | `(path: str, n: int) -> str` | erzeugt die Zeiger-Zeile, die den Fließtext ersetzt |
 
-**Die zwei Spill-Verzeichnisse sind nicht dasselbe.** `spill_guard` landet in `<workbench.root>/spill/` (darf außerhalb des Arbeitsbereichs liegen);
-`TrimPolicy.spill_dirname` landet in `<workspace>/.flower/spill/` (**muss innerhalb des Arbeitsbereichs liegen**).
-Die zwei entsprechen „sofort trimmen" und „beim resume trimmen"; die unterschiedlichen Verzeichnisse sind Absicht, nicht zu einem zusammenlegen.
+**Die beiden spill-Verzeichnisse sind nicht dasselbe.** `spill_guard` landet in `<workbench.root>/spill/` (darf außerhalb des Arbeitsbereichs liegen); `TrimPolicy.spill_dirname` landet in `<workspace>/.flower/spill/` (**muss innerhalb des Arbeitsbereichs liegen**).
+Die beiden entsprechen „sofort kürzen" und „beim resume kürzen"; die Trennung ist Absicht, nicht zusammenlegen.
 
 ### `EphemeralPolicy` {#ephemeralpolicy}
 
@@ -1675,21 +1584,20 @@ class EphemeralPolicy:
     text: str = "[{cmd} 的结果已过期(第 {age} 轮前),当前状态可能已变。需要请重新执行]"
 ```
 
-Die Ablaufstrategie für Ergebnisse von [Ephemeral Commands](glossary.md#一次性命令).
+Die Verfallsstrategie für Ergebnisse von [ephemeral commands](glossary.md#一次性命令).
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `enabled` | `bool` | `True` | Abgeschaltet passiert überhaupt keine Ablaufmarkierung |
-| `keep_recent` | `int` | `6` | Die letzten N sind befreit. **Deutlich kleiner als die 20 von `TrimPolicy`** |
-| `max_chars` | `int` | `2000` | Darüber wird übersprungen und `TrimPolicy` archiviert es |
-| `text` | `str` | siehe Signatur | Ersatztext, mit den zwei Platzhaltern `{cmd}` und `{age}` |
+| `enabled` | `bool` | `True` | ausgeschaltet wird gar nicht als veraltet markiert |
+| `keep_recent` | `int` | `6` | die letzten N sind ausgenommen. **Deutlich kleiner als die 20 der `TrimPolicy`** |
+| `max_chars` | `int` | `2000` | darüber wird übersprungen und der `TrimPolicy` zur Archivierung überlassen |
+| `text` | `str` | siehe Signatur | Ersatztext, zwei Platzhalter `{cmd}` und `{age}` |
 
 | Methode | Signatur | Beschreibung |
 |---|---|---|
-| `placeholder` | `(cmd: str, age: int) -> str` | Erzeugt den Ersatztext über `text` |
+| `placeholder` | `(cmd: str, age: int) -> str` | erzeugt den Ersatztext aus `text` |
 
-**Wirkt nur auf Ergebnisse des `Bash`-Tools**, und das Kommando muss auf die Whitelist der Ephemeral Commands passen. **`Read` gehört nicht dazu** —
-Dateiinhalte veralten nicht so, dass sie mit der Zeit in die Irre führen. Abgelaufener Inhalt wird **nicht gespillt**, sondern direkt verworfen.
+**Wirkt nur auf Ergebnisse des `Bash`-Tools**, und das Kommando muss der Whitelist der ephemeral commands entsprechen. **`Read` gehört nicht dazu** — Dateiinhalte veralten nicht in einem Maß, das in die Irre führt. Veralteter Inhalt wird **nicht gespillt**, sondern direkt weggeworfen.
 
 ### `is_ephemeral()` {#is-ephemeral}
 
@@ -1697,34 +1605,26 @@ Dateiinhalte veralten nicht so, dass sie mit der Zeit in die Irre führen. Abgel
 def is_ephemeral(cmd: str) -> bool
 ```
 
-Entscheidet, ob ein Bash-Kommando ein [Ephemeral Command](glossary.md#一次性命令) ist.
-**Die Durchlassprüfung von `delegate_guard` und die Ablaufprüfung des Trimmens nutzen dieselbe Funktion** — die Menge der Kommandos, die der Koordinator selbst ausführen darf,
-muss gleich der Menge sein, deren Ergebnisse als abgelaufen markiert werden. Durchlassen ohne Trimmen: ein abgelaufenes `git status` belegt dauerhaft Kontext und führt zusätzlich in die Irre;
-Trimmen ohne Durchlassen: der Koordinator schickt für ein `ls` einen subagent los, 4.3k Startkosten für ein paar Dutzend Zeichen.
+Entscheidet, ob ein Bash-Kommando ein [ephemeral command](glossary.md#一次性命令) ist.
+**Die Durchlassentscheidung von `delegate_guard` und die Verfallsentscheidung beim Trimmen teilen sich diese eine Funktion** — die Menge der Kommandos, die der Coordinator selbst ausführen darf, muss der Menge entsprechen, deren Ergebnisse als veraltet markiert werden. Durchlassen ohne Trimmen: ein veraltetes `git status` besetzt dauerhaft Kontext und führt zusätzlich in die Irre; Trimmen ohne Durchlassen: der Coordinator schickt für ein `ls` einen subagent, 4.3k Startkosten für ein paar Dutzend Zeichen.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `cmd` | `str` | Pflicht, Positionsargument | Die vollständige Kommandozeile |
+| `cmd` | `str` | Pflicht, positional | die vollständige Kommandozeile |
 
 Prüfreihenfolge:
 
-1. Leer / nur Whitespace → `False`.
-2. Kommandosubstitution (`$(`, Backticks, `<(`, `>(`) oder eine „ändert Zustand"-Schreibweise trifft zu → `False`.
-3. Nach Entfernen sicherer Redirects (`2>&1`, `&> /dev/null` und Ähnliches) enthält es weiterhin `>` oder `<` → `False`.
-4. Nach Entfernen von `&&` / `||` / `;` / `|` bleibt ein einzelnes `&` übrig (Hintergrundausführung) → `False`.
-5. An `&&` / `||` / `;` / `|` aufteilen, **jedes Segment muss die Whitelist treffen**.
+1. leer / nur Whitespace → `False`.
+2. Kommandosubstitution (`$(`, Backticks, `<(`, `>(`) oder eine zustandsändernde Schreibweise trifft zu → `False`.
+3. nach Abzug sicherer Umleitungen (`2>&1`, `&> /dev/null` u. ä.) immer noch `>` oder `<` enthalten → `False`.
+4. nach Abzug von `&&` / `||` / `;` / `|` bleibt ein einzelnes `&` übrig (Hintergrundausführung) → `False`.
+5. an `&&` / `||` / `;` / `|` zerlegen, **jedes Segment muss die Whitelist treffen**.
 
-Whitelist-Verben, grob nach Kategorie: lesende `git`-Unterkommandos (`status` `diff` `log` `show` `branch` `rev-parse` usw.),
-Verzeichnis- und Systeminfos (`ls` `pwd` `df` `du` `date` `whoami` `env` usw.), Prozesse und Container
-(`ps` `top` `lsof` `docker ps` `kubectl get` usw.), Dateien ansehen (`cat` `head` `tail` `wc` `stat` `find` `tree`),
-Pfade nachschlagen (`which` `whereis` `command -v` `type`), Textverarbeitung (`grep` `rg` `sort` `uniq` `awk` `sed` `jq` `diff` usw.).
+Die Verbgruppen der Whitelist: nur lesende `git`-Subkommandos (`status` `diff` `log` `show` `branch` `rev-parse` usw.), Verzeichnis- und Systeminfos (`ls` `pwd` `df` `du` `date` `whoami` `env` usw.), Prozesse und Container (`ps` `top` `lsof` `docker ps` `kubectl get` usw.), Dateien ansehen (`cat` `head` `tail` `wc` `stat` `find` `tree`), Pfade suchen (`which` `whereis` `command -v` `type`), Textverarbeitung (`grep` `rg` `sort` `uniq` `awk` `sed` `jq` `diff` usw.).
 
-Auch wenn das Verb auf der Whitelist steht, werden diese Schreibweisen abgefangen: `xargs`, `exec`, `eval`, `source`, `tee`,
-`find -delete` / `-ok` / `-fprint`, `sed -i`, `sort -o`, `system(` und `print >` in `awk`,
-`git branch -D/-d/-m`, `git * --force/--hard/--prune`.
+Auch wenn das Verb auf der Whitelist steht, werden diese Schreibweisen abgefangen: `xargs`, `exec`, `eval`, `source`, `tee`, `find -delete` / `-ok` / `-fprint`, `sed -i`, `sort -o`, `system(` und `print >` innerhalb von `awk`, `git branch -D/-d/-m`, `git * --force/--hard/--prune`.
 
-Die erste Version hat pauschal alle zusammengesetzten Kommandos abgelehnt, was **glance in der Messung komplett wirkungslos machte**
-(alle drei Versuche des Koordinators wurden abgefangen), deshalb wurde auf segmentweise Prüfung umgestellt.
+Die erste Version hat pauschal alle zusammengesetzten Kommandos abgelehnt, **damit fiel glance in der Messung komplett aus** (alle drei Versuche des Coordinators wurden geblockt), deshalb die segmentweise Prüfung.
 
 ### `TrimmingSessionStore` {#trimmingsessionstore}
 
@@ -1741,25 +1641,23 @@ class TrimmingSessionStore(SqliteSessionStore):
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `path` | `str \| Path` | Pflicht | Die Datenbankdatei |
-| `workspace` | `str \| Path` | Pflicht | Basis für das Spill-Verzeichnis |
-| `policy` | `TrimPolicy \| None` | `None` | Ohne Angabe das Default `TrimPolicy()` |
-| `ephemeral` | `EphemeralPolicy \| None` | `None` | Ohne Angabe das Default `EphemeralPolicy()` |
+| `path` | `str \| Path` | Pflicht | Datenbankdatei |
+| `workspace` | `str \| Path` | Pflicht | Bezugspunkt für das spill-Verzeichnis |
+| `policy` | `TrimPolicy \| None` | `None` | ohne Angabe wird `TrimPolicy()` benutzt |
+| `ephemeral` | `EphemeralPolicy \| None` | `None` | ohne Angabe wird `EphemeralPolicy()` benutzt |
 
 Öffentliche Attribute: `workspace`, `policy`, `ephemeral`, `last_report: dict[str, int]`.
 
-Die Reihenfolge in `load()`: `super().load()` → `last_report` leeren → bei `ephemeral.enabled` `expire()` →
-bei `policy.enabled` `trim()`. **Bei `enabled=False` fällt der jeweilige Schritt komplett weg.**
+Reihenfolge in `load()`: `super().load()` → `last_report` leeren → bei `ephemeral.enabled` `expire()` → bei `policy.enabled` `trim()`. **Bei `enabled=False` entfällt der jeweilige Schritt komplett.**
 
 | Methode | Beschreibung |
 |---|---|
-| `expire(entries)` | Ersetzt bei abgelaufenen zeitkritischen `Bash`-Ergebnissen **nur den Text, der Block bleibt**. Das Kommando wird im `tool_use` der vorangehenden assistant-Nachricht gesucht; `isCompactSummary` / `isMeta` werden übersprungen; alles über `max_chars` wird übersprungen (das übernimmt `trim`); die letzten `keep_recent` sind befreit. Schreibt `last_report["expired"]` |
-| `trim(entries)` | Der Text von `tool_result` mit `>= min_chars` wird nach `<workspace>/<spill_dirname>/<sha256 erste 16 Stellen>.txt` gespillt, der Blockinhalt wird durch einen Zeiger ersetzt; die letzten `keep_recent` sind befreit. Schreibt `cleared` / `kept` / `chars_saved` in `last_report` |
+| `expire(entries)` | ersetzt bei veralteten zeitkritischen `Bash`-Ergebnissen **nur den Fließtext, der Block bleibt**. Das Kommando wird im `tool_use` der vorangehenden assistant-Nachricht gesucht; `isCompactSummary` / `isMeta` werden übersprungen; alles über `max_chars` wird übersprungen (übernimmt `trim`); die letzten `keep_recent` sind ausgenommen. Schreibt `last_report["expired"]` |
+| `trim(entries)` | `tool_result`-Fließtexte `>= min_chars` werden nach `<workspace>/<spill_dirname>/<sha256 erste 16 Stellen>.txt` gespillt, der Blockinhalt wird durch einen Zeiger ersetzt; die letzten `keep_recent` sind ausgenommen. Schreibt `cleared` / `kept` / `chars_saved` in `last_report` |
 
-**Getrimmt wird nur reiner Text**: `image`- / `document`-Blöcke bleiben unverändert.
+**Getrimmt wird nur reiner Text**: `image`- / `document`-Blöcke bleiben unverändert stehen.
 
-**Zwei strukturelle rote Linien**: der `tool_result`-**Block selbst muss bleiben**, nur der content darf ersetzt werden (fehlt einer, heißt es
-„Missing Tool Result Block"); `isCompactSummary`-Einträge dürfen nicht angefasst werden.
+**Zwei strukturelle rote Linien**: der `tool_result`-**Block selbst muss bleiben**, nur der content darf ersetzt werden (fehlt einer, gibt es „Missing Tool Result Block"); `isCompactSummary`-Einträge dürfen nicht angefasst werden.
 
 ### `trim_report()` {#trim-report}
 
@@ -1767,14 +1665,14 @@ bei `policy.enabled` `trim()`. **Bei `enabled=False` fällt der jeweilige Schrit
 def trim_report(store: TrimmingSessionStore) -> str
 ```
 
-Rendert `store.last_report` in eine chinesische Zeile für das UI-Log.
+Rendert `store.last_report` zu einer chinesischen Zeile fürs UI-Log.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `store` | `TrimmingSessionStore` | Pflicht, Positionsargument | Nimmt auch die Unterklasse `PruningSessionStore` |
+| `store` | `TrimmingSessionStore` | Pflicht, positional | akzeptiert auch die Subklasse `PruningSessionStore` |
 
-Drei Ausgaben: keine Aktion → `"未裁剪"`; nur Ablauf → `"N 个时效性结果标记为过期"`;
-sonst `"裁掉 N 个工具结果(保留最近 M 个),省下 ~X tokens"`, mit X = `chars_saved // 4`.
+Drei Ausgaben: nichts passiert → `"未裁剪"`; nur Verfall → `"N 个时效性结果标记为过期"`;
+sonst `"裁掉 N 个工具结果(保留最近 M 个),省下 ~X tokens"`, wobei X = `chars_saved // 4`.
 
 ### `PrunePolicy` {#prunepolicy}
 
@@ -1784,20 +1682,24 @@ class PrunePolicy:
     drop_api_errors: bool = True
     neutralize_interrupts: bool = True
     interrupt_text: str = "[上一轮在此处被中断,该工具结果未产生]"
+    heal_orphans: bool = True
+    orphan_text: str = "[这一步被打断了,没有结果。需要的话重做。]"
     keep_denials: int = 1
 ```
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `drop_api_errors` | `bool` | `True` | Entfernt synthetische API-Fehlermeldungen (Reste abgerissener Verbindungen) |
-| `neutralize_interrupts` | `bool` | `True` | Ersetzt von einem Abbruch übrig gebliebene `tool_result` durch einen neutralen Hinweis |
-| `interrupt_text` | `str` | siehe Signatur | Der Text des neutralen Hinweises |
-| `keep_denials` | `int` | `1` | Die letzten N abgelehnten Tool-Aufrufe behalten |
+| `drop_api_errors` | `bool` | `True` | entfernt synthetische API-Fehlermeldungen (Reste abgerissener Verbindungen) |
+| `neutralize_interrupts` | `bool` | `True` | ersetzt beim Abbruch übrig gebliebene `tool_result` durch einen neutralen Hinweis |
+| `interrupt_text` | `str` | siehe Signatur | Text des neutralen Hinweises |
+| `heal_orphans` | `bool` | `True` | ergänzt für verwaiste Aufrufe („`tool_use` ohne `tool_result`") ein synthetisches Ergebnis |
+| `orphan_text` | `str` | siehe Signatur | Fließtext des ergänzten `tool_result` |
+| `keep_denials` | `int` | `1` | behält die letzten N abgelehnten Tool-Aufrufe |
 
-Der Grund für `keep_denials`: ein abgelehnter Aufruf wurde nie ausgeführt, im Ergebnis steckt keine Information, aber er belegt nicht wenig Platz (gemessen einmal 273 Zeichen =
-93 Zeichen Ablehnungstext + 180 Zeichen **Originaltext des toten Kommandos**). Wichtiger noch: **er führt in die Irre** — gemessen hat der Koordinator, nachdem er ein paar
-„Bash nicht direkt benutzen" gelesen hatte, selbst das durchgelassene `git status` nicht mehr versucht und erlernte Hilflosigkeit ausgebildet.
-**Default ist 1 und nicht 0**: die jüngste Ablehnung verhindert, dass das Modell in derselben Runde dasselbe abgefangene Kommando immer wieder probiert.
+`heal_orphans` behebt, dass **nach einem Abbruch jeder resume mit 400 fehlschlägt**: der Abbruch trennt an einer Nachrichtengrenze, hinter dem gerade fliegenden `tool_use` steht dann womöglich überhaupt kein `tool_result`, die API verlangt aber Paare — diese kaputte Historie bleibt im transcript liegen und wirft danach **jeden einzelnen** resume zurück. `heal_orphans()` fügt nach der assistant-Nachricht mit dem Waisen einen `user`-Eintrag ein, der das fehlende Ergebnis nachliefert, und biegt die `parentUuid`, die vorher auf jene assistant-Nachricht zeigten, auf den eingefügten Eintrag um, damit die Kette zusammenhängend bleibt (`prune.py:95-147`). **Ergänzen statt löschen**: Waisen zu löschen erfordert ein Umhängen der Eltern-Kind-Kette der assistant-Nachricht, in derselben Nachricht können auch normale Blöcke, Text und thinking stecken — das reißt leicht etwas mit (`prune.py:195-204`).
+
+Die Begründung für `keep_denials`: ein abgelehnter Aufruf wurde nie ausgeführt, im Ergebnis steckt keine Information, aber er belegt einiges an Platz (gemessen einmal 273 Zeichen = 93 Zeichen Ablehnungstext + 180 Zeichen **Originaltext des toten Kommandos**). Wichtiger noch: **er führt in die Irre** — gemessen hat der Coordinator, nachdem er ein paar „nicht direkt Bash verwenden" gelesen hatte, selbst das durchgelassene `git status` nicht mehr versucht; erlernte Hilflosigkeit.
+**Default 1 statt 0**: die jüngste Ablehnung hindert das Modell daran, in derselben Runde dasselbe geblockte Kommando immer wieder zu versuchen.
 
 ### `PruningSessionStore` {#pruningsessionstore}
 
@@ -1817,39 +1719,32 @@ class PruningSessionStore(TrimmingSessionStore):
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `path` | `str \| Path` | Pflicht | Die Datenbankdatei |
-| `workspace` | `str \| Path` | Pflicht | Basis für das Spill-Verzeichnis |
+| `path` | `str \| Path` | Pflicht | Datenbankdatei |
+| `workspace` | `str \| Path` | Pflicht | Bezugspunkt für das spill-Verzeichnis |
 | `policy` | `TrimPolicy \| None` | `None` | Trim-Strategie |
 | `prune` | `PrunePolicy \| None` | `None` | Prune-Strategie |
-| `ephemeral` | `EphemeralPolicy \| None` | `None` | Ablaufstrategie |
+| `ephemeral` | `EphemeralPolicy \| None` | `None` | Verfallsstrategie |
 
-Öffentliche Attribute über die der Elternklasse hinaus: `prune_policy`, `pruned`, `denials_dropped`.
+Gegenüber der Elternklasse drei zusätzliche öffentliche Attribute: `prune_policy`, `pruned`, `denials_dropped`.
 
-`load()` = `super().load()` (erst `expire` + `trim`) → `self.prune(entries)`. `prune` macht drei Dinge:
+`load()` = `super().load()` (zuerst `expire` + `trim`) → `self.prune(entries)`. `prune` macht drei Dinge:
 
-1. **Entfernt zu alte abgelehnte Aufrufe**: erkannt über die strukturelle Markierung `toolDenialKind == "permission-rule"` der harness
-   (zuverlässiger als das Matchen von Ablehnungstexten), die letzten `keep_denials` bleiben, bei den übrigen werden `tool_use` **und** `tool_result`
-   gemeinsam entfernt. Stecken in einer assistant-Nachricht mehrere `tool_use`, wird **nur der getroffene entfernt**, sonst wird es
-   „Missing Tool Result Block"; Text- und thinking-Blöcke bleiben.
-2. **Entfernt synthetische API-Fehlermeldungen.** In SQLite bleiben sie unverändert, sie werden nur nicht zurückgefüttert.
-3. **Ersetzt vom Abbruch übrig gebliebene `tool_result` durch einen neutralen Hinweis** — nur der Text wird ersetzt, der Eintrag bleibt.
+1. **Zu alte abgelehnte Aufrufe entfernen**: erkannt über die strukturelle Markierung `toolDenialKind == "permission-rule"` der harness (zuverlässiger als das Matchen von Ablehnungstexten), die letzten `keep_denials` bleiben, bei den übrigen werden `tool_use` **und** `tool_result` gemeinsam entfernt. Stecken mehrere `tool_use` in derselben assistant-Nachricht, **wird nur der getroffene entfernt**, sonst entsteht ein „Missing Tool Result Block"; Text- und thinking-Blöcke bleiben.
+2. **Synthetische API-Fehlermeldungen entfernen.** In SQLite bleiben sie unverändert erhalten, sie werden nur nicht zurückgefüttert.
+3. **Beim Abbruch übrig gebliebene `tool_result` durch einen neutralen Hinweis ersetzen** — nur der Fließtext, der Eintrag bleibt.
 
-**Die einzige strukturelle rote Linie**: das transcript ist eine `parentUuid`-Einfachkette; entfernt man einen Eintrag, müssen seine Kinder an den nächsten überlebenden Vorfahren angehängt werden.
-Das `entries` des internen `relink` **muss die vollständige Liste sein (inklusive der zu entfernenden)**, das Filtern macht es selbst —
-filtert der Aufrufer vorher und übergibt erst danach, reißt die Kette genau dort und die ganze vorangehende Historie ist weg (**bereits reingetreten: solange die entfernten Einträge am Ende liegen, fällt es nicht auf,
-in der Mitte fliegt es auf**).
+**Die einzige strukturelle rote Linie**: das transcript ist eine einfach verkettete `parentUuid`-Liste; entfernt man einen Eintrag, müssen seine Kinder an den nächsten überlebenden Vorfahren gehängt werden.
+Das interne `relink` **braucht in `entries` die vollständige Liste (inklusive der zu entfernenden)**, das Filtern erledigt es selbst — filtert der Aufrufer vorher und übergibt erst dann, reißt die Kette genau dort und die gesamte vorherige Historie ist weg (**schon passiert: fällt nicht auf, wenn die entfernten Einträge am Ende stehen, fliegt aber in der Mitte auf**).
 
-**Die Parameterreihenfolge weicht von der Elternklasse ab**: die Elternklasse hat `(path, workspace, policy, ephemeral)`, die Unterklasse
-`(path, workspace, policy, prune, ephemeral)` — **das vierte Positionsargument ist von `ephemeral` zu `prune` geworden**,
-positionsbasiert übergeben verschiebt sich das stillschweigend. Grundsätzlich per keyword übergeben.
+**Die Parameterreihenfolge weicht von der Elternklasse ab**: die Elternklasse hat `(path, workspace, policy, ephemeral)`, die Subklasse `(path, workspace, policy, prune, ephemeral)` — **der vierte positionale Parameter wird von `ephemeral` zu `prune`**, positional übergeben verrutscht das still. Grundsätzlich mit Keyword übergeben.
 
 ---
 
-## Resilience {#韧性}
+## Resilienz {#韧性}
 
 Quelle: [`flower/core/resilience.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/resilience.py)
 
-Bei Netzausfall hängend warten statt mit Fehler aussteigen. Vier Exporte: eine Strategie-dataclass + drei einzeln nutzbare Probe-Funktionen.
+Bei Netzausfall hängen bleiben und warten, statt mit Fehler auszusteigen. Vier Exporte: eine Strategie-dataclass + drei einzeln nutzbare Prüffunktionen.
 
 ### `Resilience` {#resilience}
 
@@ -1869,21 +1764,21 @@ class Resilience:
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `enabled` | `bool` | `True` | Abgeschaltet wird bei keinem Fehler erneut versucht |
-| `max_attempts` | `int` | `6` | **inklusive des ersten Versuchs** |
+| `enabled` | `bool` | `True` | ausgeschaltet wird kein Fehler wiederholt |
+| `max_attempts` | `int` | `6` | **einschließlich des ersten Versuchs** |
 | `base_delay` | `float` | `4.0` | Backoff-Basis, Sekunden |
 | `max_delay` | `float` | `120.0` | Backoff-Obergrenze, Sekunden |
-| `probe_timeout` | `float` | `5.0` | Timeout einer einzelnen Probe |
-| `probe_interval` | `float` | `15.0` | Wartezeit zwischen zwei Proben |
-| `max_offline_wait` | `float` | `3600.0` | Wie lange maximal hängend gewartet wird, Default 1 Stunde |
-| `retry_unknown` | `bool` | `True` | Ob nicht klassifizierbare Fehler wiederholt werden |
-| `resume_prompt` | `str` | siehe Signatur | Was beim Weiterlaufen gesagt wird. **Enthält absichtlich keine Fehlerdetails** — das Modell muss wissen „du wurdest unterbrochen, mach weiter", nicht ob es `ENOTFOUND` oder 503 war |
+| `probe_timeout` | `float` | `5.0` | Timeout einer einzelnen Sonde |
+| `probe_interval` | `float` | `15.0` | Wartezeit zwischen zwei Sonden |
+| `max_offline_wait` | `float` | `3600.0` | maximale Wartezeit im Hängen, Default 1 Stunde |
+| `retry_unknown` | `bool` | `True` | ob nicht klassifizierbare Fehler wiederholt werden |
+| `resume_prompt` | `str` | siehe Signatur | was beim Weiterlaufen gesagt wird. **Enthält absichtlich keinerlei Fehlerdetails** — das Modell muss wissen „wurde unterbrochen, mach weiter", nicht ob es `ENOTFOUND` oder 503 war |
 
 | Methode | Signatur | Beschreibung |
 |---|---|---|
-| `delay_for` | `(attempt: int) -> float` | `min(base_delay * 2**(attempt-1), max_delay)`, danach mal `0.75 + random()*0.5` (±25 % Jitter) |
+| `delay_for` | `(attempt: int) -> float` | `min(base_delay * 2**(attempt-1), max_delay)`, multipliziert mit `0.75 + random()*0.5` (±25% Jitter) |
 | `should_retry` | `(kind: str) -> bool` | `kind == "transient"`, oder `kind == "unknown"` und `retry_unknown` |
-| `wait_online` | `async (notify=None) -> bool` | Hängend warten, bis das Netz zurück ist. Kommt es zurück → `True`, über `max_offline_wait` → `False`. `notify` ist ein `(str) -> None`-Callback, der **beim ersten Nichterreichen** und **bei der Wiederherstellung** je einmal feuert |
+| `wait_online` | `async (notify=None) -> bool` | hängt und wartet, bis das Netz wieder da ist. Zurück → `True`, über `max_offline_wait` → `False`. `notify` ist ein `(str) -> None`-callback, wird **beim ersten Unerreichbar** und **bei der Wiederherstellung** je einmal gefeuert |
 
 ### `classify()` {#classify}
 
@@ -1891,13 +1786,13 @@ class Resilience:
 def classify(text: str | None) -> str
 ```
 
-Teilt Fehlertexte in die drei Klassen `"transient"` / `"fatal"` / `"unknown"` ein.
+Teilt einen Fehlertext in die drei Klassen `"transient"` / `"fatal"` / `"unknown"` ein.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `text` | `str \| None` | Pflicht, Positionsargument | Der Originaltext der Fehlermeldung. Leer → `"unknown"` |
+| `text` | `str \| None` | Pflicht, positional | Originaltext der Fehlermeldung. Leer → `"unknown"` |
 
-**Erst fatal prüfen, dann transient** — Texte wie 401 enthalten häufig das Wort `connection`, in umgekehrter Reihenfolge wartet man sich zu Tode.
+**Erst fatal prüfen, dann transient** — Texte wie bei 401 enthalten oft das Wort `connection`; in umgekehrter Reihenfolge wartet man sich zu Tode.
 
 | Klasse | Was trifft |
 |---|---|
@@ -1910,10 +1805,10 @@ Teilt Fehlertexte in die drei Klassen `"transient"` / `"fatal"` / `"unknown"` ei
 def endpoint() -> tuple[str, int]
 ```
 
-Host und Port, die geprobt werden; folgt `ANTHROPIC_BASE_URL`, Default `https://api.anthropic.com`;
-Port Default `80` (http) oder `443`.
+Host und Port, die gesondet werden; richtet sich nach `ANTHROPIC_BASE_URL`, Default `https://api.anthropic.com`;
+Port default `80` (http) oder `443`.
 
-**Bei einem selbst gehosteten Gateway muss man genau dieses proben** — dass `api.anthropic.com` erreichbar ist, sagt nichts über das Gateway.
+**Bei einem selbst betriebenen Gateway muss genau dieses gesondet werden** — dass `api.anthropic.com` erreichbar ist, sagt nichts über das Gateway aus.
 
 ### `reachable()` {#reachable}
 
@@ -1923,11 +1818,11 @@ async def reachable(host: str, port: int, timeout: float = 5.0) -> bool
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `host` | `str` | Pflicht, Positionsargument | Hostname |
-| `port` | `int` | Pflicht, Positionsargument | Port |
+| `host` | `str` | Pflicht, positional | Hostname |
+| `port` | `int` | Pflicht, positional | Port |
 | `timeout` | `float` | `5.0` | Sekunden |
 
-**Macht nur DNS (`getaddrinfo`) + TCP-Handshake**, kein HTTP, keine Credentials, **kostet nichts**. Jede Exception gilt als nicht erreichbar.
+**Macht nur DNS (`getaddrinfo`) + TCP-Handshake**, schickt kein HTTP, führt keine Credentials mit, **kostet nichts**. Jede Exception gilt als unerreichbar.
 
 ---
 
@@ -1936,9 +1831,8 @@ async def reachable(host: str, port: int, timeout: float = 5.0) -> bool
 Quellcode: [`events.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/events.py) ·
 [`human.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/core/human.py)
 
-Ein [Event](glossary.md#事件) ist die stabile Struktur, auf die der SDK-Message-Stream flachgeklopft wird.
-**Die [Interaktionsschicht](glossary.md#交互层) kennt nur `Event` und importiert keinen einzigen SDK-Typ** —
-das ist die Grenze, dank der ein UI-Wechsel den Kern nicht anfasst. Siehe [Interaktionsschicht austauschen](../guide/interaction.md).
+Ein [Event](glossary.md#事件) ist die stabile Struktur, zu der der SDK-Nachrichtenstrom flachgeklopft wird.
+**Die [Interaktionsschicht](glossary.md#交互层) kennt nur `Event` und importiert keinen einzigen SDK-Typ** — das ist die Grenze, die es erlaubt, die UI zu tauschen, ohne den Kern anzufassen. Siehe [Interaktionsschicht tauschen](../guide/interaction.md).
 
 ### `Event` {#event}
 
@@ -1958,47 +1852,47 @@ class Event:
 |---|---|---|---|
 | `kind` | `EventKind` | Pflicht | siehe Tabelle unten |
 | `text` | `str` | `""` | Fließtext |
-| `tool` | `str` | `""` | Tool-Name, nur bei `tool_call` gesetzt |
+| `tool` | `str` | `""` | Werkzeugname, nur bei `tool_call` |
 | `payload` | `dict[str, Any]` | `{}` | strukturierte Zusatzinformation |
 | `raw` | `Any` | `None` | das rohe SDK-Objekt, für den Fall, dass man tiefer graben will |
 
 `__str__`: bei `tool_call` ist es `f"[{tool}] {text}"`, sonst `text`, und bei leerem `text` `f"<{kind}>"`.
-`print(ev)` ist damit direkt lesbar.
+`print(ev)` ist also direkt lesbar.
 
 `EventKind` hat insgesamt **15** Werte:
 
-| kind | Sender | Beschreibung |
+| kind | Wer sendet | Beschreibung |
 |---|---|---|
 | `text` | `normalize` | Assistant-Fließtext |
-| `thinking` | `normalize` | Thinking-Block |
-| `tool_call` | `normalize` | Tool-Aufruf. `text` ist eine Zusammenfassung aus `file_path` / `command` / `pattern`, auf 200 Zeichen gekürzt |
-| `tool_result` | `normalize` | Tool-Ergebnis. `text` auf 500 Zeichen gekürzt, `payload` enthält `tool_use_id` / `is_error` |
-| `task` | `normalize` | die drei Task-Messages, `text` ist der Klassenname der Message |
-| `system` | `normalize` | alle übrigen System-Messages, `text` ist der Subtype |
+| `thinking` | `normalize` | Denkblock |
+| `tool_call` | `normalize` | Werkzeugaufruf. `text` ist eine Zusammenfassung aus `file_path` / `command` / `pattern`, auf 200 Zeichen gekürzt |
+| `tool_result` | `normalize` | Werkzeugergebnis. `text` auf 500 Zeichen gekürzt, `payload` enthält `tool_use_id` / `is_error` |
+| `task` | `normalize` | drei Arten von Task-Nachrichten. `text` ist **leer**, der Klassenname steckt in `payload["kind"]` |
+| `system` | `normalize` | übrige Systemnachrichten, `text` ist der Subtype |
 | `reset` | `normalize` | `compact_boundary` / `microcompact_boundary` / `ConversationResetMessage` |
 | `result` | `normalize` | `ResultMessage`, `payload` enthält `session_id` / `cost_usd` / `num_turns` / `is_error` |
 | `error` | `normalize` | synthetische API-Fehlermeldung, `payload` enthält `{"synthetic": True}` |
-| `prompt` | `normalize` | `UserMessage`. **Der Text ist Eingabe, nicht Modellausgabe**, landet also nicht in `StepResult.text` |
+| `prompt` | `normalize` | `UserMessage`. **Der Text ist Eingabe, nicht Modellausgabe**, geht also nicht in `StepResult.text` |
 | `unknown` | `normalize` | nicht erkannt |
 | `retry` | `Runtime` | Retry-Benachrichtigung |
 | `step` | `Workflow.run` | payload: `{"index", "total", "resumed", "woke"}` |
 | `handoff` | `Runtime` | im payload `phase` ∈ `{"near", "writing", "done"}` |
-| `ask` | `HumanChannel` | Frage, **trägt auch „was der Mensch von sich aus sagt"** |
+| `ask` | `HumanChannel` | Frage, **transportiert außerdem "was der Mensch von sich aus sagt"** |
 
-**Die letzten vier werden nicht von `normalize()` erzeugt.**
+**Die letzten vier entstehen nicht in `normalize()`.**
 
-Das `payload` aller Assistant-/User-Events enthält:
+Im `payload` aller Assistant-/User-Events steckt:
 
-| Key | Typ | Beschreibung |
+| Schlüssel | Typ | Beschreibung |
 |---|---|---|
 | `subagent` | `bool` | `bool(parent_tool_use_id)` |
 | `parent_tool_use_id` | `str` | nur vorhanden, wenn `subagent` wahr ist |
 | `context` | `int` | `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`. **Das ist die einzige Quelle für das [Handoff](glossary.md#换代)-Kriterium** und zugleich die Zahl, die man bei einem long-horizon Run am dringendsten sehen sollte |
 
-**Der kind `ask` trägt gleichzeitig „Frage" und „was der Mensch von sich aus sagt".** Bei letzterem gilt
-`payload["kind"] == "mail"`, und **es gibt kein `options` / `remaining`**. Das UI muss zuerst
-`payload.get("kind")` prüfen und dann entscheiden, wie es rendert, sonst hängt es einen Satz als
-unbeantwortete Frage auf.
+**Der kind `ask` transportiert gleichzeitig "Frage" und "was der Mensch von sich aus sagt".** Bei Letzterem ist
+`payload["kind"] == "mail"`, und **es gibt kein `options` / `remaining`**. Die UI muss also erst
+`payload.get("kind")` prüfen und dann entscheiden, wie sie rendert, sonst hängt ein bloßer Satz als
+unbeantwortete Frage fest.
 
 ### `normalize()` {#normalize}
 
@@ -2006,17 +1900,17 @@ unbeantwortete Frage auf.
 def normalize(message: Any) -> list[Event]
 ```
 
-Klopft eine SDK-Message auf 0 bis N `Event` flach.
+Klopft eine SDK-Nachricht zu 0 bis N `Event`s flach.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `message` | `Any` | Pflicht, positional | beliebiges SDK-Message-Objekt |
+| `message` | `Any` | Pflicht, positional | beliebiges SDK-Nachrichtenobjekt |
 
-Die wesentlichen Zweige:
+Die entscheidenden Zweige:
 
 - **Synthetische API-Fehlermeldung** (`isApiErrorMessage=True` oder `model == "<synthetic>"`) → ein einzelnes
-  `Event("error", payload={"synthetic": True})`. **Das ist Absicht** — sonst landet der Verbindungsabbruch-Text
-  als Fließtext in `StepResult.text` und wird an den nächsten Step weitergegeben.
+  `Event("error", payload={"synthetic": True})`. **Das ist Absicht** — sonst landet der Abbruchtext als
+  Fließtext in `StepResult.text` und wird an den nächsten Schritt weitergereicht.
 - `AssistantMessage` → `kind="text"`; `UserMessage` → `kind="prompt"`.
 - `ToolUseBlock` → `Event("tool_call", text=<Zusammenfassung>, tool=block.name, payload={"id", "input"})`.
 - `ToolResultBlock` → `Event("tool_result", text=content[:500], payload={"tool_use_id", "is_error"})`.
@@ -2040,17 +1934,17 @@ Eine Frage an den Menschen.
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `id` | `str` | Pflicht | wird beim Antworten zur Zuordnung benutzt |
-| `question` | `str` | Pflicht | Text der Frage |
-| `options` | `list[str]` | `[]` | Auswahlmöglichkeiten. Der Mensch kann auch nichts auswählen und selbst tippen |
+| `id` | `str` | Pflicht | dient beim Antworten der Zuordnung |
+| `question` | `str` | Pflicht | Fragetext |
+| `options` | `list[str]` | `[]` | Auswahlmöglichkeiten. Der Mensch darf auch nichts auswählen und selbst tippen |
 | `asked_at` | `float` | `time.time()` | Zeitpunkt der Frage |
 | `state` | `str` | `"asked"` | `asked` → `answered` / `timeout` / `declined` / `over_budget` / `invalid` |
-| `answer` | `str` | `""` | Text der Antwort |
+| `answer` | `str` | `""` | Antworttext |
 
 | Member | Signatur | Beschreibung |
 |---|---|---|
-| `waited_s` | `@property -> float` | wie lange schon gewartet wurde |
-| `event` | `(remaining: int = 0) -> Event` | erzeugt `Event("ask", text=question, payload={"id", "options", "state", "answer", "remaining", "asked_at"}, raw=self)` |
+| `waited_s` | `@property -> float` | wie lange schon gewartet wird |
+| `event` | `(remaining: int = 0) -> Event` | liefert `Event("ask", text=question, payload={"id", "options", "state", "answer", "remaining", "asked_at"}, raw=self)` |
 
 ### `HumanChannel` {#humanchannel}
 
@@ -2068,52 +1962,49 @@ HumanChannel(
 )
 ```
 
-Ein **In-Process-MCP-Server** (zwei Tools) plus eine Gruppe von Methoden für das UI. Das Modell sieht nur
+Ein **In-Process-MCP-Server** (zwei Werkzeuge) plus eine Reihe von Methoden für die UI. Das Modell sieht nur
 `mcp__human__ask` und `mcp__human__inbox`. Alle Konstruktorparameter sind keyword-only.
 
 | Parameter | Typ | Default | Beschreibung |
 |---|---|---|---|
-| `on_event` | `Callable[[Event], None] \| None` | `None` | Ausgang des **Push**-Modus. Ist er gesetzt, verdrahtet `Workflow.run` nichts mehr |
-| `max_asks` | `int \| None` | `None` | **unbegrenzt**. Eine Zahl ist ein hartes Kontingent, `0` = Fragen verboten (vollautomatisch / CI). Bei Überschreitung **weist das Tool direkt ab, ohne zu blockieren** |
-| `timeout_s` | `float \| None` | `1800.0` | 30 Minuten. `None` = ewig warten; **`<= 0` = nicht warten, alle Fragen laufen sofort ins Leere** |
-| `log_path` | `str \| Path \| None` | `None` | Fragen und Antworten werden **angehängt** auf Platte geschrieben, ohne Kontext zu belegen |
-| `amend_path` | `str \| Path \| None` | `None` | Was der Mensch mitten im Run sagt, wird an diese Datei angehängt (üblicherweise der Brief). **Ohne Persistierung überlebt es die Step-Grenze nicht** — der nächste Step ist eine neue Session und liest nur den eingefrorenen Stand |
-| `over_budget_text` | `str` | Modulkonstante | was dem Modell bei Kontingentüberschreitung zurückgegeben wird |
-| `timeout_text` | `str` | Modulkonstante | was dem Modell bei Timeout zurückgegeben wird |
-| `declined_text` | `str` | Modulkonstante | was dem Modell zurückgegeben wird, wenn übersprungen wurde |
+| `on_event` | `Callable[[Event], None] \| None` | `None` | der Ausgang im **Push**-Modus. Wird er gesetzt, verdrahtet `Workflow.run` nichts mehr |
+| `max_asks` | `int \| None` | `None` | **unbegrenzt viele Fragen**. Eine Zahl ist ein hartes Kontingent, `0` = keine Fragen erlaubt (vollautomatisch / CI). Bei Überschreitung **weist das Werkzeug direkt ab, ohne zu blockieren** |
+| `timeout_s` | `float \| None` | `1800.0` | 30 Minuten. `None` = ewig warten; **`<= 0` = gar nicht warten, alle Fragen laufen sofort ins Leere** |
+| `log_path` | `str \| Path \| None` | `None` | Fragen und Antworten werden **angehängt** auf Platte geschrieben, belegen also keinen Kontext |
+| `amend_path` | `str \| Path \| None` | `None` | Was der Mensch während des Runs sagt, wird an diese Datei angehängt (üblicherweise der Brief). **Ohne Persistierung überlebt es die Schrittgrenze nicht** — der nächste Schritt ist eine neue Session und liest nur das eingefrorene Dokument |
+| `over_budget_text` | `str` | Modulkonstante | Text, der bei Überschreitung an das Modell zurückgeht |
+| `timeout_text` | `str` | Modulkonstante | Text, der bei Timeout an das Modell zurückgeht |
+| `declined_text` | `str` | Modulkonstante | Text, der beim Überspringen an das Modell zurückgeht |
 
-Öffentliche Attribute: die acht gleichnamigen Konstruktorparameter, dazu `asks: list[Ask]`, `mail: list[Mail]`
-und `ui_errors: list[str]` (**Exceptions aus UI-Callbacks werden hier gesammelt und brechen den Run nicht ab**).
+Öffentliche Attribute: die acht gleichnamigen Konstruktorparameter, dazu `asks: list[Ask]`, `mail: list[Mail]`,
+`ui_errors: list[str]` (**hier landen Exceptions aus UI-Callbacks, ohne den Run abzubrechen**).
 
 | Member | Signatur | Beschreibung |
 |---|---|---|
 | `tool_name` | `@property -> str` | `"mcp__human__ask"` |
 | `inbox_name` | `@property -> str` | `"mcp__human__inbox"` |
-| `mcp_servers` | `() -> dict[str, Any]` | direkt an `AgentSpec.mcp_servers` weitergeben. **Der Key muss mit dem Server-Namen übereinstimmen**, deshalb liefert die Methode beides zusammen |
-| `ask` | `async (question: str, options: list[str] \| None = None) -> Ask` | hängt und wartet auf den Menschen. **Wirft außer `CancelledError` niemals eine Exception** — dass niemand antwortet, ist auch eine Antwort; unterschieden wird über `ask.state` |
+| `mcp_servers` | `() -> dict[str, Any]` | direkt an `AgentSpec.mcp_servers` weiterreichen. **Der Schlüsselname muss mit dem Servernamen übereinstimmen**, deshalb liefert die Methode beides zusammen |
+| `ask` | `async (question: str, options: list[str] \| None = None) -> Ask` | wartet auf den Menschen. **Wirft außer `CancelledError` nie eine Exception** — dass niemand antwortet, ist auch eine Antwort, unterschieden über `ask.state` |
 | `send` | `(text: str) -> Mail \| None` | der Mensch sagt von sich aus etwas. **Aus jedem Thread aufrufbar.** Unterbricht den Agent nicht; ruft intern automatisch `amend()` |
-| `amend` | `(text: str, *, label: str = "运行中补充") -> bool` | hängt an `amend_path` an. Rückgabe: ob wirklich geschrieben wurde (kein Pfad konfiguriert, leerer Text, `OSError` → alle `False`) |
-| `pending_mail` | `() -> list[Mail]` | noch nicht abgeholte Mail |
-| `remaining` | `@property -> int` | wie viele Fragen noch möglich sind. **Bei `max_asks=None` wird `-1` zurückgegeben**, nicht 0 und nicht unendlich |
-| `pending` | `() -> list[Ask]` | aktuell offene, auf Antwort wartende Fragen |
-| `next_ask` | `async (timeout: float \| None = None) -> Ask \| None` | für den **Pull**-Modus. Bei Timeout `None`, bei Cancel eine Exception |
-| `answer` | `(ask_id: str, text: str) -> bool` | antworten. `False` = diese Frage wartet nicht mehr (Timeout / schon beantwortet) |
-| `decline` | `(ask_id: str, reason: str = "") -> bool` | überspringen und das Modell selbst entscheiden lassen |
-| `transcript` | `() -> str` | Markdown des Frage-Antwort-Protokolls |
+| `amend` | `(text: str, *, label: str = "运行中补充") -> bool` | hängt an `amend_path` an. Rückgabe: ob tatsächlich geschrieben wurde (kein Pfad konfiguriert, leerer Text oder `OSError` ergeben `False`) |
+| `pending_mail` | `() -> list[Mail]` | noch nicht abgeholte Mails |
+| `remaining` | `@property -> int` | wie viele Fragen noch möglich sind. **Bei `max_asks=None` ist der Rückgabewert `-1`**, weder 0 noch unendlich |
+| `pending` | `() -> list[Ask]` | aktuell auf Antwort wartende Fragen |
+| `next_ask` | `async (timeout: float \| None = None) -> Ask \| None` | für den **Pull**-Modus. Bei Timeout `None`, bei Cancel wird geworfen |
+| `answer` | `(ask_id: str, text: str) -> bool` | antworten. `False` = diese Frage wartet nicht mehr (Timeout / bereits beantwortet) |
+| `decline` | `(ask_id: str, reason: str = "") -> bool` | überspringen, das Modell entscheidet selbst |
+| `transcript` | `() -> str` | das Frage-Antwort-Protokoll als Markdown |
 
-**Von den zwei Abholarten genau eine wählen**: **Push** — `HumanChannel(on_event=...)` konstruieren;
-**Pull** — `await channel.next_ask()`. `Workflow.run` verdrahtet nur dann automatisch, wenn
-`channel.on_event is None` ist; wer selbst etwas übergibt, wird also nicht überschrieben.
+**Eine der beiden Abholarten wählen**: **Push** — `HumanChannel(on_event=...)` konstruieren; **Pull** — `await channel.next_ask()`.
+`Workflow.run` verdrahtet nur automatisch, wenn `channel.on_event is None` ist; wer selbst etwas übergibt, wird also nicht überschrieben.
 
-**Threadübergreifend**: `answer` / `decline` / `send` gehen intern über `loop.call_soon_threadsafe`,
-der Aufruf aus einem Web-Backend oder einem TUI-Eingabethread ist der Normalfall.
+**Thread-übergreifend**: `answer` / `decline` / `send` laufen intern über `loop.call_soon_threadsafe`;
+ein Aufruf direkt aus dem Web-Backend oder dem TUI-Eingabethread ist der Normalfall.
 
-Die drei „0 / None"-Semantiken sind jeweils unterschiedlich, nicht verwechseln: `max_asks=None` = unbegrenzt,
-`max_asks=0` = Fragen verboten; `timeout_s=None` = ewig warten, `timeout_s<=0` = sofortiger Timeout;
-`remaining` ist bei `max_asks=None` gleich `-1`.
+Die drei "0 / None"-Bedeutungen sind jeweils verschieden, nicht verwechseln: `max_asks=None` = unbegrenzt, `max_asks=0` = keine Fragen erlaubt;
+`timeout_s=None` = ewig warten, `timeout_s<=0` = sofortiger Timeout; `remaining` ist bei `max_asks=None` gleich `-1`.
 
-`Mail` wird nicht exportiert, erscheint aber in Rückgabewerten: eine Dataclass mit den Feldern
-`id` / `text` / `sent_at` / `taken`.
+`Mail` wird nicht exportiert, taucht aber in Rückgabewerten auf: ein Dataclass mit den Feldern `id` / `text` / `sent_at` / `taken`.
 
 ---
 
@@ -2132,44 +2023,41 @@ class Lineage:
     woke: int = 0
 ```
 
-Hält prozessübergreifend fest, welcher Step welche Session benutzt hat; die [Kontinuität](glossary.md#接续)
-findet darüber, wie weit der letzte Lauf gekommen ist. Die Datei ist `<run_dir>/lineage.json`.
+Hält prozessübergreifend fest, welcher Schritt welche Session verwendet hat; die [Continuity](glossary.md#接续) findet darüber, wie weit der letzte Lauf gekommen ist.
+Die Datei ist `<run_dir>/lineage.json`.
 
 | Feld | Typ | Default | Beschreibung |
 |---|---|---|---|
 | `path` | `Path` | Pflicht | Pfad der Lineage-Datei |
-| `workspace` | `Path` | Pflicht | Workspace. `__post_init__` resolved ihn |
-| `steps` | `dict[str, str]` | `{}` | Step-Name → `session_id` |
+| `workspace` | `Path` | Pflicht | Workspace. `__post_init__` löst ihn auf |
+| `steps` | `dict[str, str]` | `{}` | Schrittname → `session_id` |
 | `woke` | `int` | `0` | wie oft geweckt wurde |
 
 | Member | Signatur | Beschreibung |
 |---|---|---|
-| `open` | `@classmethod (run_dir: str \| Path, workspace: str \| Path) -> Lineage` | liest `<run_dir>/lineage.json`. **Existiert die Datei nicht, ist sie nicht lesbar oder passt das Feld `workspace` nicht, wird ausnahmslos ein leeres Objekt zurückgegeben, ohne Fehler** |
-| `remember` | `(step: str, session_id: str) -> None` | merkt sich das Mapping und **schreibt es sofort auf Platte**. Leerer Step oder leere sid → sofortiges Return |
-| `bump` | `() -> int` | Wake-Zähler +1, auf Platte schreiben, neuen Wert zurückgeben (beim ersten Lauf `1`) |
+| `open` | `@classmethod (run_dir: str \| Path, workspace: str \| Path) -> Lineage` | liest `<run_dir>/lineage.json`. **Existiert die Datei nicht, ist sie unlesbar oder passt das Feld `workspace` nicht, kommt ausnahmslos ein leeres Objekt zurück, kein Fehler** |
+| `remember` | `(step: str, session_id: str) -> None` | merkt sich die Zuordnung und **schreibt sofort auf Platte**. Leerer step oder leere sid: sofortiger Rücksprung |
+| `bump` | `() -> int` | Weckzähler +1, auf Platte schreiben, neuen Wert zurückgeben (beim ersten Lauf `1`) |
 | `archive` | `(into: str \| Path, *, extra: list[Path] \| None = None) -> Path` | **verschiebt** die Lineage-Datei plus `extra` nach `<into>/<YYYYmmdd-HHMMSS>/` und setzt `steps` / `woke` zurück. **Verschieben, nicht löschen** |
 
-Das Schreiben läuft über den atomaren Austausch `tmp.replace(path)`; `OSError` wird stillschweigend
-geschluckt — ein fehlgeschlagener Schreibvorgang darf diesen Run nicht mitnehmen.
+Das Schreiben läuft über atomares `tmp.replace(path)`; `OSError` wird still geschluckt — ein fehlgeschlagener Schreibvorgang darf den Run nicht mitreißen.
 
-**`workspace` ist die Absicherung**: Der `project_key` des SDK wird aus dem Workspace-Pfad abgeleitet;
-nach dem Wegkopieren des Verzeichnisses ist die alte `session_id` nicht mehr auffindbar. Passt der Pfad
-nicht, gilt der Eintrag also als nicht vorhanden.
+**`workspace` ist eine Wache**: Der `project_key` des SDK wird aus dem Workspace-Pfad abgeleitet; ist das Verzeichnis wegkopiert worden, findet man die alte `session_id` nicht mehr,
+also gilt ein nicht passender Pfad als nicht vorhanden.
 
-Wenn `Workflow.run` die Lineage lädt, prüft es jeden Eintrag einzeln mit `runtime.has_session(sid)`, ob er
-noch in der Datenbank liegt, und benutzt ihn nur, wenn er lebt — die Lineage-Datei kann `sessions.db`
-überleben.
+Wenn `Workflow.run` die Lineage lädt, prüft es jeden Eintrag einzeln mit `runtime.has_session(sid)` darauf, ob er noch in der Datenbank liegt, und benutzt nur die lebenden —
+die Lineage-Datei kann `sessions.db` überleben.
 
 ---
 
 ## Minimale lauffähige Beispiele {#示例}
 
-Alle fünf Abschnitte laufen direkt. Voraussetzung: `claude-agent-sdk` installiert, `ANTHROPIC_API_KEY` oder
-`ANTHROPIC_AUTH_TOKEN` verfügbar (sonst wirft schon `Runtime(...)` beim Konstruieren einen `RuntimeError`).
+Alle fünf Abschnitte laufen direkt. Voraussetzung: `claude-agent-sdk` installiert, `ANTHROPIC_API_KEY` oder `ANTHROPIC_AUTH_TOKEN` verfügbar
+(sonst wirft bereits `Runtime(...)` beim Konstruieren ein `RuntimeError`).
 
-### Ein Agent, ein Step {#示例-单-agent}
+### Ein Agent, ein Schritt {#示例-单-agent}
 
-Minimalgerüst: einen `AgentSpec` deklarieren, ein `Runtime` bauen, `await rt.run(...)`, `StepResult` lesen.
+Minimalgerüst: einen `AgentSpec` deklarieren, ein `Runtime` bauen, `await rt.run(...)`, `StepResult` auslesen.
 
 ```python
 import asyncio
@@ -2199,15 +2087,14 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Die Parameter von `Runtime` sind **ausnahmslos keyword-only**; bei `rt.run()` sind `spec` und `prompt`
-positional, alles Übrige keyword-only. `AgentSpec` hat als Default `allowed_tools=["Read", "Glob", "Grep"]`
-und `delegate_only=False`, also hängt `Runtime` automatisch [`whitelist_guard`](#whitelist-guard) an und
-blockt `Bash`/`Write`/`Edit`/`NotebookEdit` komplett.
+Die Parameter von `Runtime` sind **allesamt keyword-only**; bei `rt.run()` sind `spec` und `prompt` positional, der Rest keyword-only.
+`AgentSpec` hat als Default `allowed_tools=["Read", "Glob", "Grep"]` und `delegate_only=False`,
+also hängt `Runtime` automatisch [`whitelist_guard`](#whitelist-guard) davor und blockt `Bash`/`Write`/`Edit`/`NotebookEdit` komplett.
 
-### Koordinator + Worker {#示例-协调}
+### Coordinator + Worker {#示例-协调}
 
-Ein [Koordinator](glossary.md#协调者), der nicht selbst zupackt, mit einem [Worker](glossary.md#执行者),
-der die Arbeit macht. Das ist die erste Schicht, mit der flower Kontext spart.
+Ein [Coordinator](glossary.md#协调者), der nicht selbst Hand anlegt, mit einem [Worker](glossary.md#执行者), der arbeitet.
+Das ist die erste Ebene, auf der flower Kontext spart.
 
 ```python
 import asyncio
@@ -2231,7 +2118,7 @@ async def main() -> None:
     )
 
     # workbench=True ist Pflicht: delegate_guard hängt in workbench_hooks,
-    # ohne Workbench hält kein einzelner Hook das Bash/Write des Koordinators auf.
+    # ohne Workbench hält kein einziger Hook das Bash/Write des Coordinators auf.
     rt = Runtime(workspace=Path("."), run_dir="runs", workbench=True)
     try:
         r = await rt.run(boss, "统计 data/ 下每个 .txt 的行数和总字符数,告诉我哪个最大。",
@@ -2245,14 +2132,12 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Die ersten zwei Parameter von `worker()` sind positional: `description` (womit der Koordinator auswählt) und
-`prompt` (sein System-Prompt, an den anschließend automatisch `WORKER_RULES` angehängt wird). Bei
-`coordinator()` sind die ersten drei positional: `name`, `instructions`, `workers`.
+Die ersten beiden Parameter von `worker()` sind positional: `description` (damit der Coordinator auswählt) und `prompt` (dessen System-Prompt,
+an den `WORKER_RULES` automatisch angehängt werden). Bei `coordinator()` sind die ersten drei positional: `name`, `instructions`, `workers`.
 
 ### Einen eigenen Workflow schreiben {#示例-workflow}
 
-Zwei Steps, wobei der zweite das Ergebnis des ersten in seinen eigenen Prompt injiziert — billig, isoliert,
-ohne gemeinsame Session.
+Zwei Schritte, wobei der zweite das Ergebnis des ersten in seinen eigenen Prompt injiziert — billig, isoliert, keine geteilte Session.
 
 ```python
 import asyncio
@@ -2272,9 +2157,9 @@ async def main() -> None:
     wf = Workflow([
         # Neue Session: bekommt nur, was im Prompt steht
         Step("取词", terse, "读 seed.txt,只回文件里那个词。"),
-        # Neue Session + Ergebnis des vorherigen Steps in den Prompt injiziert (billig, gegen Verunreinigung)
+        # Neue Session + Ergebnis des vorigen Schritts im Prompt (billig, verhindert Verschmutzung)
         Step("造句", terse, lambda ctx: f"用「{ctx['取词']}」造一个五字短句,只回短句。"),
-        # Wer in derselben Session weiterreden will, schreibt resume_from="造句"; zum Forken zusätzlich fork=True
+        # Wer in derselben Session weiterreden will, schreibt resume_from="造句"; zum Verzweigen zusätzlich fork=True
     ])
 
     rt = Runtime(workspace=Path("."), run_dir="runs")
@@ -2285,21 +2170,21 @@ async def main() -> None:
 
     print(ctx["造句"])                 # ctx[step.name] = result.text (wenn kein reduce gesetzt ist)
     print(ctx["_sessions"])            # step name -> session_id
-    print(ctx.get("_failed_at"))       # bei on_fail="stop": in welchem Step es fehlgeschlagen ist
+    print(ctx.get("_failed_at"))       # bei on_fail="stop": in welchem Schritt es scheiterte
 
 
 asyncio.run(main())
 ```
 
-Die ersten drei Felder von `Step` (`name` / `spec` / `prompt`) sind positional, ebenso `steps` bei `Workflow`.
-`Workflow.run(runtime, *, on_event=None, on_step=None)` — `runtime` positional, die beiden Callbacks
-keyword-only. **Achtung: `continuous=True` ist der Default**: Beim zweiten Lauf mit demselben `run_dir` und
-demselben `workspace` reden auch Steps mit `resume_from=None` in derselben Session wie beim letzten Mal weiter.
+Die ersten drei Felder von `Step` (`name` / `spec` / `prompt`) sind positional, `steps` bei `Workflow` ebenfalls.
+`Workflow.run(runtime, *, on_event=None, on_step=None)` — `runtime` positional, die beiden Callbacks keyword-only.
+**Achtung: `continuous=True` ist der Default**: Läuft dieselbe Kombination aus `run_dir` und `workspace` ein zweites Mal,
+reden auch Schritte mit `resume_from=None` in der Session des letzten Laufs weiter.
 
-### Einen Zielwächter dazuhängen {#示例-目标}
+### Eine Goal Guard einziehen {#示例-目标}
 
-Zuerst lässt man den [Judge](glossary.md#判定者) Ziel und Prüfliste festschreiben, dann lässt man den
-Arbeits-Step ein Verdict akzeptieren — wer nicht durchkommt, läuft mit dem Feedback erneut, maximal drei Runden.
+Erst lässt man den [Judge](glossary.md#判定者) Ziel und Prüfliste festlegen, dann lässt man den arbeitenden Schritt das Verdict akzeptieren —
+wer durchfällt, macht mit dem Feedback eine neue Runde, höchstens drei.
 
 ```python
 import asyncio
@@ -2321,7 +2206,7 @@ async def main() -> None:
     }, channel=ch)
 
     work = Step("干活", spec=coord, prompt="把 hello.py 写出来,跑 `python hello.py` 要打印 hello。")
-    # rounds ist die **Gesamtzahl der Runden**: rounds=3 → retries=2 → maximal drei Arbeitsrunden
+    # rounds ist die **Gesamtzahl der Runden**: rounds=3 → retries=2 → höchstens drei Arbeitsrunden
     work = with_goal(work, ch, goal_path=goal_path, rounds=3, can_run=True)
 
     wf = Workflow(
@@ -2329,7 +2214,7 @@ async def main() -> None:
         channel=ch,
         workbench=wb,
         # Der Prompt von goal_step liest ctx["确认需求"] (Default von brief_key).
-        # Ohne clarify_step muss man selbst etwas hineingeben, sonst sieht es nur "(没有确认书)".
+        # Ohne clarify_step muss man selbst etwas hineingeben, sonst sieht er nur "(没有确认书)".
         context={"确认需求": "## 目标\n写一个打印 hello 的 python 脚本\n\n## 验收标准\n跑 `python hello.py` 输出 hello"},
     )
 
@@ -2340,22 +2225,21 @@ async def main() -> None:
         rt.close()
 
     print(ctx["_goal"])        # GOAL_KEY: Goal-Objekt
-    print(ctx["_verdict"])     # VERDICT_KEY: das letzte Verdict
+    print(ctx["_verdict"])     # VERDICT_KEY: letztes Verdict
     print(ctx["_goal_rounds"]) # ROUND_KEY: wie viele Runden gelaufen sind
-    print(ctx.get("_aborted")) # Grund des StepAbort (wenn unerreichbar und niemand antwortet)
+    print(ctx.get("_aborted")) # Grund des StepAbort (unerreichbar und niemand antwortet)
 
 
 asyncio.run(main())
 ```
 
-`with_goal` tauscht nur `gate` / `on_reject` / `retries` aus; alle übrigen Felder werden mit
-`dataclasses.replace` unverändert übernommen. Der Judge läuft in einer **eigenen Session**: `gate` ruft intern
-separat `rt.run(judger, ..., step_name=f"{label}#{轮次}")` auf, `resume` ist immer `None`.
+`with_goal` ersetzt nur `gate` / `on_reject` / `retries`, alle übrigen Felder werden per `dataclasses.replace` unverändert übernommen.
+Der Judge läuft in einer **eigenen Session**: `gate` ruft intern separat `rt.run(judger, ..., step_name=f"{label}#{轮次}")` auf,
+`resume` ist immer `None`.
 
 ### Die Interaktionsschicht austauschen {#示例-交互层}
 
-Um das Terminal gegen Web / TUI / HTTP zu tauschen, muss man nur zwei Dinge ändern: die Funktion, die `Event`
-rendert, und die Coroutine, die Fragen abholt.
+Um das Terminal gegen Web / TUI / HTTP zu tauschen, muss man genau zwei Dinge ändern: die Funktion, die `Event` rendert, und die Coroutine, die Fragen abholt.
 
 ```python
 import asyncio
@@ -2364,7 +2248,7 @@ from flower import Event, HumanChannel, Runtime, starter_flow
 
 
 def sink(ev: Event) -> None:
-    """Rendert Event in dein eigenes UI — das ist das Einzige, was ausgetauscht werden muss."""
+    """把 Event 渲染成你自己的 UI —— 这是唯一需要换的东西。"""
     if ev.kind == "step":
         print(f"\n=== {ev.text} ({ev.payload['index']}/{ev.payload['total']}) ===")
     elif ev.kind == "text" and not ev.payload.get("subagent"):
@@ -2377,11 +2261,11 @@ def sink(ev: Event) -> None:
         print(f"  ~ retry: {ev.text}")
     elif ev.kind == "ask" and ev.payload.get("kind") == "mail":
         print(f"  ~ 人主动说:{ev.text}")
-    # kind == "ask" und kein mail: übernimmt der answerer unten (Pull-Modus)
+    # kind == "ask" und kein mail: übernimmt der answerer weiter unten (Pull-Modus)
 
 
 async def answerer(ch: HumanChannel) -> None:
-    """Fragen im Pull-Modus abholen. Beim Wechsel auf Web-Backend / HTTP-Service ist diese Coroutine die einzige Stelle, die man ändert."""
+    """拉式取提问。换成 Web 后端 / HTTP 服务时,这个协程是唯一要改的地方。"""
     while True:
         ask = await ch.next_ask()          # ohne timeout wird endlos gewartet
         if ask is None:
@@ -2392,7 +2276,7 @@ async def answerer(ch: HumanChannel) -> None:
 
 async def main() -> None:
     wf = starter_flow("帮我做一个 X", workspace=".", run_dir="runs", timeout_s=60)
-    # Runtime benutzt die Workbench, die der Workflow selbst gebaut hat — keine zweite zusammenstückeln
+    # Runtime benutzt die Workbench, die der Workflow schon gebaut hat — keine zweite zusammenbasteln
     rt = Runtime(workspace=".", run_dir="runs", workbench=wf.workbench)
     task = asyncio.create_task(answerer(wf.channel))
     try:
@@ -2405,121 +2289,94 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Push und Pull: **eines von beiden wählen**. Push heißt `HumanChannel(on_event=...)` konstruieren, Pull heißt
-`await channel.next_ask()`. `Workflow.run` verdrahtet nur dann automatisch, wenn `channel.on_event is None`
-ist; wer selbst ein `on_event` übergibt, wird also nicht überschrieben.
+Push und Pull: **eines von beiden wählen**. Push heißt `HumanChannel(on_event=...)` konstruieren, Pull heißt `await channel.next_ask()`.
+`Workflow.run` verdrahtet nur automatisch, wenn `channel.on_event is None` ist; wer selbst ein `on_event` übergibt, wird also nicht überschrieben.
 `answer()` / `decline()` / `send()` / `interrupt()` **sind alle aus anderen Threads aufrufbar**.
 
 ---
 
-## Fallen und Fehlerquellen {#陷阱}
+## Fallstricke und häufige Fehler {#陷阱}
 
-Sortiert nach der Reihenfolge, in der man hineintritt, nicht nach Modul. Jeder Punkt hat eine gemessene
-Herkunft.
+Sortiert nach der Reihenfolge, in der man hineintritt, nicht nach Modul. Jeder Punkt hat eine gemessene Quelle.
 
 ### Aufbau {#陷阱-装配}
 
 1. **`Runtime(workbench=False)` + `coordinator()` = im Main Thread steht keine einzige Wand.**
-   `delegate_guard` wird nur mit Workbench installiert, und `whitelist_guard` wird durch
-   `delegate_only=True` übersprungen. Wer einen Koordinator einsetzt, schaltet die Workbench ein.
-   Details unter [Runtime](#runtime).
-2. **Es gibt zwei Orte für die Workbench, nicht verwechseln.** `Runtime(workbench=True)` landet in
-   `<run_dir>/workbench`; `Workbench(ws)` ist per Default `<ws>/.flower`. Wer `brief_path` selbst
-   zusammensetzt, schreibt es nach der zweiten Variante — sonst **wird der Brief in Verzeichnis A geschrieben,
-   der injizierte Index scannt Verzeichnis B, und es gibt keinen Fehler.**
-   Richtig: Der Workflow macht selbst `Workbench(...).ensure()`, hängt das an `Workflow.workbench` und gibt
-   **dasselbe Objekt** an `Runtime(workbench=wb)`.
-3. **`allowed_tools` ist keine exklusive Whitelist, sondern eine Liste ohne Genehmigungspflicht.** Das Modell
-   kann Tools, die nicht drinstehen, weiterhin aufrufen. Dass `clarify()` / `judge()` „keine Schreibtools"
-   haben, hängt am Hook [`whitelist_guard`](#whitelist-guard).
-   Und `coordinator()` hat als Default `permission_mode="acceptEdits"` — wer diesen Wert an
-   `clarify()` / `judge()` durchreicht, hat den Schutz weg.
-4. **`disallowed_tools` gilt sessionweit** und verbietet gleichnamige Tools auch in Subagents.
-5. **Der Workbench-Index erreicht keine Subagents.** „Lange Ausgaben nach `artifacts/` schreiben" muss der
-   Koordinator im Task Brief weitererzählen, das ist der einzige Kanal.
-6. **Ohne Credentials wirft `Runtime(...)` schon in der Konstruktionsphase einen `RuntimeError`**, nicht erst
-   bei `run()`.
-7. **`Runtime.run_id` muss pro Instanz eindeutig sein.** `manifest.json` dedupliziert über das Feld `run`;
-   kollidieren zwei ids, löscht der spätere Schreiber die Zeilen des anderen als „meine letzten Zeilen".
+   `delegate_guard` wird nur mit Workbench installiert, und `whitelist_guard` wird durch `delegate_only=True` übersprungen.
+   Wer einen Coordinator benutzt, schaltet die Workbench ein. Siehe [Runtime](#runtime).
+2. **Es gibt zwei Orte für die Workbench, nicht falsch zusammensetzen.** `Runtime(workbench=True)` landet in `<run_dir>/workbench`;
+   `Workbench(ws)` liegt per Default in `<ws>/.flower`. Wer `brief_path` selbst zusammenbaut, hält sich an das Zweite,
+   sonst **wird der Brief in Verzeichnis A geschrieben, während der injizierte Index Verzeichnis B scannt — ohne jede Fehlermeldung.**
+   Richtig: Der Workflow macht selbst `Workbench(...).ensure()`, hängt das an `Workflow.workbench`
+   und übergibt **dasselbe Objekt** an `Runtime(workbench=wb)`.
+3. **`allowed_tools` ist keine exklusive Whitelist, sondern eine Liste ohne Freigabepflicht.** Das Modell kann weiterhin Werkzeuge aufrufen, die nicht darin stehen.
+   Dass `clarify()` / `judge()` "keine Schreibwerkzeuge haben", beruht auf dem Hook [`whitelist_guard`](#whitelist-guard).
+   Und `coordinator()` hat per Default `permission_mode="acceptEdits"` — wer diesen Wert an
+   `clarify()` / `judge()` durchreicht, hat den Schutz verloren.
+4. **`disallowed_tools` gilt sessionweit** und sperrt gleichnamige Werkzeuge auch in Subagents.
+5. **Der Workbench-Index erreicht keine Subagents.** "Lange Ausgaben nach `artifacts/` schreiben" muss der Coordinator im Task Brief weitergeben,
+   das ist der einzige Kanal.
+6. **`Runtime(...)` wirft ohne Credentials schon in der Konstruktionsphase ein `RuntimeError`**, nicht erst bei `run()`.
+7. **`Runtime.run_id` muss pro Instanz eindeutig sein.** Die `manifest.json` dedupliziert über das Feld `run`; kollidieren zwei ids,
+   löscht der später Schreibende die Zeilen des anderen, weil er sie für "meine letzten" hält.
 
 ### Workflow {#陷阱-流程}
 
-8. **`Workflow.continuous=True` ist der Default**, `resume_from=None` heißt nicht „ganz neue Session".
-   Wer jedes Mal neu starten will, setzt explizit `continuous=False`. **Ein geänderter Step-Name kappt die
-   Lineage.**
-9. **`with_goal(rounds=N)` ist die Gesamtzahl der Runden, nicht die Zahl der Zusatzrunden**:
-   `retries = max(0, rounds - 1)`.
-10. **`on_fail="skip"` schreibt `ctx[step.name]` nicht** — ein nachgelagertes `lambda ctx: ctx["某步"]` läuft
-    in einen `KeyError`. Wer mit einem unvollständigen Ergebnis weitergehen will, nimmt `on_fail="continue"`.
-11. **Ein `resume_from` auf einen nicht gelaufenen oder fehlgeschlagenen Step wirft `ValueError`**, es wird
-    nicht stillschweigend übersprungen.
+8. **`Workflow.continuous=True` ist der Default**, `resume_from=None` bedeutet nicht "brandneue Session".
+   Wer jedes Mal neu anfangen will, setzt explizit `continuous=False`. **Einen Schrittnamen zu ändern, kappt die Lineage.**
+9. **`with_goal(rounds=N)` ist die Gesamtzahl der Runden, nicht die Zahl zusätzlicher Runden**: `retries = max(0, rounds - 1)`.
+10. **`on_fail="skip"` schreibt kein `ctx[step.name]`** — ein nachgelagertes `lambda ctx: ctx["某步"]` läuft in einen `KeyError`.
+    Wer mit unvollständigem Ergebnis weitergehen will, nimmt `on_fail="continue"`.
+11. **Zeigt `resume_from` auf einen nicht gelaufenen oder gescheiterten Schritt, wird ein `ValueError` geworfen**, es wird nicht still übersprungen.
 12. **`Step.reduce` muss synchron sein; `gate` / `when` / `on_reject` dürfen async sein.**
-13. **`fork=True` ohne `resume` ist stillschweigend wirkungslos.** `Workflow` übergibt nie ein `resume_at`;
-    ein Rollback auf Message-Ebene geht nur über den direkten Aufruf von `Runtime.run`.
-14. **Wer `Runtime` selbst steuert, muss `on_session` vor dem Gate abhängen**, sonst wird die Session des
-    Judge in die Lineage des Arbeits-Steps geschrieben. `Workflow` stellt das per `try/finally` sicher.
-15. **`step_name` bestimmt die Keys in Manifest und Lineage.** `Workflow` hängt `#retryN` / `#roundN` an, der
-    Judge hängt `#轮次` an — **Namen mit Suffix landen nicht in der prozessübergreifenden Lineage**, und genau
-    so ist „der Judge ist immer eine neue Session" unter anderem implementiert.
+13. **`fork=True` ohne `resume` ist still wirkungslos.** `Workflow` übergibt nie ein `resume_at`;
+    wer nach Nachrichten zurückrollen will, muss `Runtime.run` direkt aufrufen.
+14. **Wer `Runtime` selbst steuert, muss `on_session` vor dem gate abhängen**, sonst wird die Session des Judge in die Lineage
+    des Arbeitsschritts geschrieben. `Workflow` sichert das mit `try/finally` ab.
+15. **`step_name` bestimmt die Schlüssel im Manifest und in der Lineage.** `Workflow` hängt `#retryN` / `#roundN` an,
+    der Judge hängt `#轮次` an — **Namen mit Suffix gehen nicht in die prozessübergreifende Lineage**, und genau so wird unter anderem umgesetzt, dass "der Judge immer eine neue Session ist".
 
 ### Rollen {#陷阱-角色}
 
-16. **`clarify(max_turns=<kleine Zahl>)` macht „unbegrenzt viele Fragen" zu einer leeren Behauptung** — jede
-    Frage ist eine Runde.
+16. **`clarify(max_turns=<kleine Zahl>)` macht "unbegrenzt viele Fragen" zur leeren Behauptung** — jede Frage ist eine Runde.
 17. **`goal_step()` hat keinen Parameter `can_run`**, `can_run=True` geht nur über `**spec_kw`.
-    Ohne das bekommt der zielsetzende Judge kein `Bash`, und die Regel „schau dir erst genau an, in welcher
-    Umgebung du bist" aus `JUDGE_RULES` ist nicht ausführbar.
-18. **`judge(can_run=True)` erlaubt dem Judge, den Workspace zu verändern** — `whitelist_guard` leitet sich
-    aus `allowed_tools` ab, mit `Bash` wird also `Bash` durchgelassen (`Write`/`Edit` bleiben geblockt, aber
-    `Bash` selbst kann Dateien schreiben). Wer absolute Neutralität will, lässt es aus.
-19. **`worker(isolate=True)` verlangt, dass der Workspace ein Git-Repository ist**, sonst meldet das Tool
-    `Agent` direkt `"not in a git repository"` und degradiert nicht stillschweigend. Außerdem ist die
-    Isolation-Markierung ein Python-Attribut: **ein `dataclasses.replace()` auf `AgentDefinition` verliert
-    sie.**
-20. **Beim direkten Konstruieren von `AgentDefinition` sind die Parameter camelCase**: `maxTurns`,
-    `permissionMode`. `worker()` hat die Umwandlung schon für dich gemacht.
+    Ohne ihn bekommt der zielsetzende Judge kein `Bash`, und die Regel aus `JUDGE_RULES`, sich erst klar zu machen, in welcher Umgebung man ist, lässt sich nicht ausführen.
+18. **`judge(can_run=True)` erlaubt dem Judge, den Workspace zu verändern** — `whitelist_guard` leitet sich aus `allowed_tools` ab,
+    wer `Bash` gibt, lässt `Bash` durch (`Write`/`Edit` bleiben geblockt, aber `Bash` selbst kann Dateien schreiben). Wer absolute Neutralität will, lässt es aus.
+19. **`worker(isolate=True)` setzt voraus, dass der Workspace ein git-Repository ist**, sonst meldet das `Agent`-Werkzeug direkt
+    `"not in a git repository"` und degradiert nicht still. Außerdem ist die Isolationsmarkierung ein Python-Attribut:
+    **ein `dataclasses.replace()` auf `AgentDefinition` verliert sie.**
+20. **Konstruiert man `AgentDefinition` direkt, sind die Parameter in camelCase**: `maxTurns`, `permissionMode`.
+    `worker()` hat die Umsetzung bereits erledigt.
 
 ### Handoff und Kontext {#陷阱-换代}
 
-21. **Bei aktiviertem Handoff wird Auto-Compact zwangsweise abgeschaltet, ohne Auffangnetz.** Der Step, der
-    das Handoff-Dokument schreibt, braucht deshalb zwingend einen Degradationspfad. Wer Auto-Compact behalten
-    will, setzt `AgentSpec.compact` explizit.
-22. **Ein zu klein konfiguriertes `HandoffPolicy.window` verbrennt Geld mit endlosen Handoffs.** Die einzige
-    Bremse ist `max_generations=8`.
-    Am anderen Ende gilt: **`default_window()` gibt auch dann `1_000_000` zurück, wenn keine der beiden
-    Umgebungsvariablen gesetzt ist** — ein zu großer Wert wird von `is_overflow()` aufgefangen (es wird ein
-    degradiertes Handoff), das ist kein harter Fehler, aber das Handoff dieser Generation ist degradiert.
-23. **Ohne Workbench wird das Handoff-Dokument nicht auf Platte geschrieben.** Der Text geht trotzdem per
-    Prompt an den Nachfolger, aber der Mensch findet ihn hinterher nicht wieder.
+21. **Ist Handoff eingeschaltet, wird auto-compact zwangsweise abgeschaltet, ohne Auffangnetz.** Der Schritt, der das Handoff-Dokument schreibt, braucht also einen Degradationspfad.
+    Wer auto-compact behalten will, setzt `AgentSpec.compact` explizit.
+22. **Ein zu klein konfiguriertes `HandoffPolicy.window` führt zu endlosen Handoffs und verbrennt Geld.** Die einzige Bremse ist `max_generations=8`.
+    Am anderen Ende gibt **`default_window()` auch dann `1_000_000` zurück, wenn beide Umgebungsvariablen ungesetzt sind** —
+    ist der Wert zu groß geschätzt, fängt `is_overflow()` das ab (es wird ein degradiertes Handoff), das ist kein harter Fehler, aber das Handoff dieser Generation ist degradiert.
+23. **Ohne Workbench wird das Handoff nicht auf Platte geschrieben.** Das Dokument geht trotzdem per Prompt an den Nachfolger, aber der Mensch findet es hinterher nicht mehr.
 
-### Storage {#陷阱-存储}
+### Speicher {#陷阱-存储}
 
-24. **`Runtime(trim=False)` (der Default) heißt nicht „es wird nichts aufgeräumt".** Der Store ist immer ein
-    `PruningSessionStore`; `trim=False` schaltet nur das Trimmen großer Ergebnisse ab. **Reste von
-    Verbindungsabbrüchen entfernen, abgelehnte Aufrufe entfernen, Überreste von Unterbrechungen
-    neutralisieren und zeitlich abgelaufene Dinge verfallen lassen passiert weiterhin.**
-25. **Die zwei Spill-Verzeichnisse sind nicht dasselbe**: `spill_guard` landet in
-    `<workbench.root>/spill/`, `TrimPolicy.spill_dirname` in `<workspace>/.flower/spill/` (muss innerhalb des
-    Workspace liegen).
-26. **Der vierte positionale Parameter von `PruningSessionStore.__init__` ist `prune`, nicht `ephemeral`** —
-    anders als in der Basisklasse. Positionale Übergabe verrutscht stillschweigend.
+24. **`Runtime(trim=False)` (Default) heißt nicht "es wird nichts aufgeräumt".** Der Store ist immer ein `PruningSessionStore`,
+    `trim=False` schaltet nur das Kürzen großer Ergebnisse ab; **Abbruchreste entfernen, abgelehnte Aufrufe entfernen, Unterbrechungsreste neutralisieren und Zeitkritisches ablaufen lassen passieren weiterhin.**
+25. **Die beiden Spill-Verzeichnisse sind nicht dasselbe**: `spill_guard` landet in `<workbench.root>/spill/`,
+    `TrimPolicy.spill_dirname` in `<workspace>/.flower/spill/` (muss innerhalb des Workspace liegen).
+26. **Der vierte positionale Parameter von `PruningSessionStore.__init__` ist `prune`, nicht `ephemeral`**,
+    anders als in der Basisklasse. Positional übergeben verschiebt still alles um eins.
 
 ### Dokumente und Interaktion {#陷阱-文书}
 
-27. **Lässt sich aus einem `Verdict` keine Schlussfolgerung parsen, ist `state=""` und `ok=False`; das darf
-    niemals als erreicht gelten.**
-    Außerdem fallen „无法验证 / 没法验证 / 验证不了 / 无法判定 / unverifiable" alle unter `unreachable` und
-    lösen den Pfad „anhalten und den Menschen fragen" aus, nicht „noch eine Runde".
-28. **Trifft `Brief.parse` auf einen nicht geschlossenen Code-Fence, verwirft es alles danach** — bei
-    abgeschnittener Modellausgabe lassen sich die folgenden Abschnitte nicht mehr parsen, `complete()` ist
-    `False`, und das Gate schickt es zurück.
-29. **`Brief.load` behandelt `"(未填)"` als leer.** Wer beim manuellen Editieren des Briefs den
-    Platzhaltertext stehen lässt, dessen Abschnitt gilt weiterhin als fehlend.
-30. **Die drei „0 / None" in `HumanChannel` haben jeweils andere Semantik**: `max_asks=None` unbegrenzt,
-    `max_asks=0` Fragen verboten; `timeout_s=None` ewig warten, `timeout_s<=0` sofortiger Timeout;
-    `remaining` gibt bei `max_asks=None` **`-1`** zurück.
-31. **`Event("ask")` trägt gleichzeitig Fragen und was der Mensch von sich aus sagt**, letzteres mit
-    `payload["kind"] == "mail"`. Das UI muss das zuerst prüfen.
-32. **`Workflow.run` verdrahtet nur dann automatisch, wenn `channel.on_event is None` ist** — wer
-    `HumanChannel(on_event=...)` selbst konstruiert, bekommt Frage-Events nicht zusätzlich am `on_event`-
-    Ausgang des Workflows.
+27. **Lässt sich aus einem `Verdict` kein Schluss parsen, ist `state=""` und `ok=False` — das darf niemals als erreicht gewertet werden.**
+    Außerdem fallen "无法验证 / 没法验证 / 验证不了 / 无法判定 / unverifiable" alle unter `unreachable`
+    und lösen den Pfad "anhalten und den Menschen fragen" aus, nicht "noch eine Runde".
+28. **`Brief.parse` verwirft bei einem nicht geschlossenen Code-Fence den gesamten Inhalt danach** — wird die Modellausgabe abgeschnitten,
+    lassen sich alle folgenden Abschnitte nicht mehr parsen, `complete()` ist `False`, und das gate schickt es zurück.
+29. **`Brief.load` behandelt `"(未填)"` als leer.** Wer beim manuellen Editieren des Briefs den Platzhaltertext stehen lässt, dessen Abschnitt gilt weiterhin als fehlend.
+30. **Die drei "0 / None" im `HumanChannel` bedeuten jeweils Verschiedenes**: `max_asks=None` unbegrenzt, `max_asks=0` keine Fragen erlaubt;
+    `timeout_s=None` ewig warten, `timeout_s<=0` sofortiger Timeout; `remaining` gibt bei `max_asks=None` **`-1`** zurück.
+31. **`Event("ask")` transportiert zugleich Fragen und das, was der Mensch von sich aus sagt**, Letzteres mit `payload["kind"] == "mail"`. Die UI muss das zuerst prüfen.
+32. **`Workflow.run` verdrahtet nur, wenn `channel.on_event is None` ist** —
+    wer `HumanChannel(on_event=...)` selbst konstruiert, bekommt die Frage-Events nicht zusätzlich am `on_event`-Ausgang des Workflows.

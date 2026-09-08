@@ -1,36 +1,36 @@
 # Häufige Probleme und Fehlersuche
 
-Wenn etwas schiefgeht, weiß man nicht, welches Modul kaputt ist — man weiß nur, was man gesehen hat.
-Deshalb ist diese Seite nach **dem, was du beobachtest** gruppiert, nicht nach Subsystemen.
+Wenn etwas kaputtgeht, weiß niemand, welches Modul kaputt ist — man weiß nur, was man gesehen hat.
+Deshalb ist diese Seite nach **beobachtetem Symptom** gruppiert, nicht nach Subsystem.
 
-Jeder Eintrag hat dieselbe Struktur: **Symptom** (was du tatsächlich siehst) → **Ursache** → **Was tun**.
+Jeder Eintrag hat denselben Aufbau: **Symptom** (was du tatsächlich siehst) → **Ursache** → **Was tun**.
 
-Fünf der Einträge sind **bekannte Fehler**, kein beabsichtigtes Design. Diese Einträge sagen direkt, dass
-es ein Bug ist, verlinken das Issue und nennen einen Workaround — sie werden nicht als Absicht verkauft.
+Fünf davon sind **bekannte Defekte**, kein Design. Diese Einträge sagen direkt, dass es ein Bug ist,
+verlinken das Issue und nennen den Workaround — sie werden nicht als Absicht verkauft.
 
-## Installiert nicht / startet nicht {#装不上}
+## Installation schlägt fehl / startet nicht {#装不上}
 
-Den vollständigen Installationsablauf findest du in [install.md](../getting-started/install.md#一句话安装).
-Dieser Abschnitt sammelt nur die Fälle „installiert, aber das Kommando läuft nicht".
+Der vollständige Installationsablauf steht in [install.md](../getting-started/install.md#一句话安装).
+Dieser Abschnitt sammelt nur die Fälle „installiert, aber der Befehl läuft nicht".
 
-### Python-Version unter 3.10 {#python-版本}
+### Python-Version niedriger als 3.10 {#python-版本}
 
-**Symptom**: Während der Installation tauchen Syntaxfehler auf, oder pip sagt direkt, es findet keine
+**Symptom**: Während der Installation tauchen Syntaxfehler auf, oder pip sagt direkt, es finde keine
 passende Version.
 
 **Ursache**: flower verlangt Python ≥ 3.10. Die einzige Laufzeitabhängigkeit ist `claude-agent-sdk`,
-die nativen Binaries stecken in dessen Wheel — wenn die Installation scheitert, liegt es meistens an der
-Interpreter-Version, nicht am Netz.
+das native Binary steckt in dessen Wheel — eine fehlgeschlagene Installation liegt also meist am
+Interpreter, nicht am Netzwerk.
 
-**Was tun**: Zuerst prüfen, in welchen Interpreter installiert werden soll.
+**Was tun**: Erst klären, in welchen Interpreter installiert werden soll.
 
 ```bash
 python3 --version
 ```
 
-Unter 3.10 einen anderen nehmen und erneut installieren. Das systemeigene `python3` ist oft nicht das,
-worauf `python` in deinem Terminal zeigt; einmal vorher die Version zu prüfen ist billiger als hinterher
-zu suchen (siehe [install.md](../getting-started/install.md#装之前确认-python)).
+Unter 3.10 einen anderen nehmen und neu installieren. Das mitgelieferte `python3` des Systems ist oft
+nicht das, worauf `python` in deinem Terminal zeigt; die Version einmal vorher zu prüfen ist billiger
+als hinterher zu suchen (siehe [install.md](../getting-started/install.md#装之前确认-python)).
 
 ### Installiert, aber `flower: command not found` {#command-not-found}
 
@@ -40,31 +40,31 @@ zu suchen (siehe [install.md](../getting-started/install.md#装之前确认-pyth
 zsh: command not found: flower
 ```
 
-**Ursache**: Das Paket ist installiert, aber das Verzeichnis mit dem erzeugten ausführbaren Skript liegt
-nicht im `PATH`. Das ist etwas anderes als „nicht installiert" — wenn `python3 -c "import flower"` nicht
-fehlschlägt, ist das Paket in Ordnung.
+**Ursache**: Das Paket ist installiert, aber das Verzeichnis mit dem erzeugten ausführbaren Skript
+liegt nicht im `PATH`. Das ist etwas anderes als „nicht installiert" — wenn
+`python3 -c "import flower"` fehlerfrei läuft, ist das Paket in Ordnung.
 
-**Was tun**: Der Shebang des `flower`-Skripts ist ein absoluter Pfad, also reicht ein Symlink in ein
-Verzeichnis, das bereits im `PATH` liegt; es muss nichts gesourct werden.
+**Was tun**: Die Shebang des `flower`-Skripts ist ein absoluter Pfad, ein Symlink in ein Verzeichnis,
+das bereits im `PATH` liegt, reicht also; es muss nichts gesourct werden.
 
 ```bash
 ln -sf "$PWD/.venv/bin/flower" ~/.local/bin/flower
 ```
 
-### macOS: PATH wie von `install.sh` angewiesen gesetzt, trotzdem command not found {#macos-path}
+### macOS: PATH nach dem Hinweis von `install.sh` gesetzt, trotzdem command not found {#macos-path}
 
 !!! warning "Bekanntes Problem ([issue #16](https://github.com/ChenyuHeee/flower/issues/16))"
 
-    Dieser Hinweis versagt ausgerechnet auf der Maschine, die ihn braucht.
+    Dieser Ratschlag versagt ausgerechnet auf der Maschine, die ihn braucht.
 
-**Symptom**: Auf macOS `install.sh` durchlaufen lassen, wie im letzten Hinweis `~/.local/bin` in den
-`PATH` aufgenommen, Terminal neu geöffnet — `flower` ist immer noch command not found.
+**Symptom**: Auf macOS `install.sh` durchlaufen lassen, dem letzten Hinweis folgend `~/.local/bin` in
+den `PATH` aufgenommen, Terminal neu geöffnet — `flower` ist weiterhin command not found.
 
-**Ursache**: Auf dem pip-Fallback-Pfad installiert macOS' pip die ausführbaren Skripte nach
-`~/Library/Python/3.X/bin`, während `install.sh` dazu auffordert, `~/.local/bin` hinzuzufügen. Die beiden
-Verzeichnisse passen nicht zusammen, der Hinweis hilft also nicht, auch wenn man ihn befolgt.
+**Ursache**: Auf dem pip-Fallback-Pfad installiert das pip von macOS die ausführbaren Skripte nach
+`~/Library/Python/3.X/bin`, während `install.sh` dazu auffordert, `~/.local/bin` hinzuzufügen. Die
+beiden Verzeichnisse passen nicht zusammen, der Hinweis hilft also nicht.
 
-??? note "In welcher Reihenfolge `install.sh` den Installationsweg wählt, und der Wortlaut jenes Hinweises"
+??? note "In welcher Reihenfolge `install.sh` den Installationsweg wählt, und der Wortlaut dieses Hinweises"
 
     Die Priorität hat vier Stufen, nicht zwei (`install.sh:35-56`):
 
@@ -75,7 +75,7 @@ Verzeichnisse passen nicht zusammen, der Hinweis hilft also nicht, auch wenn man
     4. Bootstrap scheitert  → "$PY" -m pip install --user --upgrade    ← hier liegt das Problem
     ```
 
-    Der Wortlaut des PATH-Hinweises am Ende (`install.sh:62-68`, wird nur ausgegeben, wenn
+    Der Wortlaut des abschließenden PATH-Hinweises (`install.sh:62-68`, wird nur ausgegeben, wenn
     `command -v flower` nichts findet):
 
     ```text
@@ -84,9 +84,9 @@ Verzeichnisse passen nicht zusammen, der Hinweis hilft also nicht, auch wenn man
         export PATH="$HOME/.local/bin:$PATH"
     ```
 
-    `BINDIR` ist fest auf `$HOME/.local/bin` gesetzt (`install.sh:63`). Für Weg 1 und 3 ist das richtig
-    — dorthin installiert uv; **nur der pip-Fallback in Weg 4 passt auf macOS nicht**. Die Falle tritt
-    also nur auf Maschinen auf, auf denen die ersten drei Wege alle nicht durchkommen.
+    `BINDIR` ist fest auf `$HOME/.local/bin` verdrahtet (`install.sh:63`). Für Weg 1 und 3 stimmt das
+    — dort installiert uv; **nur Weg 4, der pip-Fallback, passt auf macOS nicht**. Die Falle tritt
+    also nur auf Maschinen auf, auf denen die ersten drei Wege nicht durchkommen.
 
 **Was tun**: Nicht raten, den Interpreter fragen.
 
@@ -94,7 +94,7 @@ Verzeichnisse passen nicht zusammen, der Hinweis hilft also nicht, auch wenn man
 python3 -c "import sysconfig; print(sysconfig.get_path('scripts', scheme='posix_user'))"
 ```
 
-Das ausgegebene Verzeichnis in den `PATH` aufnehmen, oder von dort einen Symlink nach `~/.local/bin` legen:
+Das ausgegebene Verzeichnis in den `PATH` aufnehmen, oder von dort nach `~/.local/bin` symlinken:
 
 ```bash
 ln -sf "$(python3 -c "import sysconfig; print(sysconfig.get_path('scripts', scheme='posix_user'))")/flower" ~/.local/bin/flower
@@ -102,32 +102,32 @@ ln -sf "$(python3 -c "import sysconfig; print(sysconfig.get_path('scripts', sche
 
 ### uv / pipx / pip installieren nicht dasselbe flower {#三种装法}
 
-**Symptom**: `flower` läuft, aber Änderungen am Quellcode wirken nicht; oder nach dem Upgrade ist es
-immer noch die alte Version; oder zwei Terminals auf derselben Maschine verhalten sich unterschiedlich.
+**Symptom**: `flower` läuft, aber Änderungen am Quellcode wirken nicht; oder nach dem Upgrade läuft
+weiterhin die alte Version; oder zwei Terminals auf derselben Maschine verhalten sich unterschiedlich.
 
-**Ursache**: Die drei Installationswege legen Paket und ausführbares Skript an verschiedenen Orten ab;
-was im `PATH` zuerst trifft, läuft.
+**Ursache**: Die drei Installationswege legen Paket und ausführbares Skript an verschiedenen Orten
+ab; was im `PATH` zuerst getroffen wird, läuft.
 
 ??? note "Wo die drei Installationswege landen"
 
     | Installationsweg | Ausführbares Skript | Wann |
     |---|---|---|
-    | `python3 -m venv .venv` + `pip install -e .` | `.venv/bin/flower` | Quellcode ändern. Änderungen wirken sofort |
-    | `uv tool install` / `pipx install` | `~/.local/bin/flower` | Nur benutzen, nicht ändern, isolierte Umgebung gewünscht |
+    | `python3 -m venv .venv` + `pip install -e .` | `.venv/bin/flower` | Quellcode ändern. Wirkt sofort |
+    | `uv tool install` / `pipx install` | `~/.local/bin/flower` | Nur benutzen, isolierte Umgebung gewünscht |
     | `pip install --user` | Linux `~/.local/bin`, macOS `~/Library/Python/3.X/bin` | Fallback. Verzeichnis siehe voriger Eintrag |
 
-**Was tun**: Zuerst feststellen, welches gerade läuft, dann entscheiden, welches man ändert.
+**Was tun**: Erst feststellen, welches gerade läuft, dann entscheiden, welches geändert wird.
 
 ```bash
 which -a flower                      # listet alle gleichnamigen im PATH
-head -1 "$(which flower)"            # der Shebang zeigt auf den Interpreter — dort liegt das Paket
+head -1 "$(which flower)"            # worauf die Shebang zeigt, dort liegt auch das Paket
 ```
 
-Wer den Quellcode ändern will, nimmt venv + `-e .` und lässt es nicht neben einer `uv`- / `pipx`-Installation
-koexistieren — bei Koexistenz kostet die Fehlersuche weit mehr als eine Neuinstallation
+Für Quellcode-Änderungen venv + `-e .` benutzen und nicht parallel zu einer `uv`- / `pipx`-Installation
+betreiben — Koexistenz kostet bei der Fehlersuche deutlich mehr als eine Neuinstallation
 (siehe [install.md](../getting-started/install.md#从源码装)).
 
-## Credentials und Gateways {#凭证}
+## Credentials und Gateway {#凭证}
 
 ### `缺少凭证:需要 ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN` {#缺少凭证}
 
@@ -137,49 +137,50 @@ koexistieren — bei Koexistenz kostet die Fehlersuche weit mehr als eine Neuins
 缺少凭证:需要 ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN
 ```
 
-**Ursache**: flower schottet mit `setting_sources=[]` die Konfiguration des Hostsystems ab, die
-Credentials müssen mitgebracht werden. Die vollständige Suchreihenfolge steht in
+**Ursache**: flower schottet mit `setting_sources=[]` die Host-Konfiguration ab, Credentials müssen
+selbst mitgebracht werden. Die vollständige Suchreihenfolge steht in
 [config.md](config.md#凭证查找优先级).
 
-**Was tun**: In die `.env` im Repository-Root schreiben oder in die Prozessumgebung.
+**Was tun**: In die `.env` im Repository-Root schreiben, oder in die Prozessumgebung.
 
 ```bash
 cp .env.example .env        # ANTHROPIC_AUTH_TOKEN oder ANTHROPIC_API_KEY eintragen
 ```
 
-`.env` ist bereits gitignored. Die Variante für Container steht in [deploy.md](deploy.md#凭证).
+`.env` ist bereits per gitignore ausgeschlossen. Die Variante im Container steht in
+[deploy.md](deploy.md#凭证).
 
 ### Es sagt „flower liest `~/.claude/settings.json` nicht" — dieser Satz ist falsch {#settings-json}
 
-**Symptom**: Wenn die Credentials nicht sitzen, gibt `env.py:192` diesen Satz aus:
+**Symptom**: Wenn die Credentials nicht stimmen, gibt `env.py:192` diesen Satz aus:
 
 ```text
 flower 不读 ~/.claude/settings.json —— 那是可移植性的代价
 ```
 
-**Ursache**: Dieser Satz stimmt nicht mit dem Code überein. `env.py:56-75` **liest** `~/.claude/settings.json`
-sehr wohl, nimmt daraus nur die Credential-Felder und benutzt sie als letzte Fallback-Stufe — genau damit
-wirbt `install.sh` auch. Der Satz wird erst ausgegeben, nachdem auch der Fallback leer ausgegangen ist, er
-lässt also nichts fehlschlagen; aber er führt zu dem Schluss „flower kann meinen Claude-Code-Token nicht
-benutzen", und das ist falsch. Festgehalten in
+**Ursache**: Der Satz widerspricht dem Code. `env.py:56-75` **liest** `~/.claude/settings.json`
+sehr wohl, greift daraus nur die Credential-Felder ab und benutzt sie als letzten Fallback — genau
+damit wirbt auch `install.sh`. Der Satz wird erst gedruckt, nachdem dieser Fallback leer ausgegangen
+ist, er lässt also nichts scheitern; aber er verleitet zu dem Schluss „flower kann meinen
+Claude-Code-Token nicht benutzen", und der ist falsch. Notiert in
 [issue #13](https://github.com/ChenyuHeee/flower/issues/13).
 
-**Was tun**: Wer Claude Code lokal installiert hat, braucht keine neuen Credentials zu beantragen, der
-Fallback nimmt sie von selbst auf (siehe
-[install.md](../getting-started/install.md#本机装过-claude-code-的话可能一个问题都不问)).
-Wenn du diesen Satz wirklich siehst, heißt das, dass auch in jener Datei kein brauchbares Credential-Feld
-steht — dann wie im vorigen Eintrag eine `.env` schreiben.
+**Was tun**: Wer Claude Code lokal installiert hat, muss keine neuen Credentials beantragen, der
+Fallback greift sie selbst auf
+(siehe [install.md](../getting-started/install.md#本机装过-claude-code-的话可能一个问题都不问)).
+Wenn dieser Satz wirklich erscheint, enthält auch diese Datei keine brauchbaren Credential-Felder —
+dann nach dem vorigen Eintrag eine `.env` schreiben.
 
-### Unklar, welche Credentials und welcher Endpoint tatsächlich greifen {#生效值}
+### Unklar, welche Credentials und welcher Endpunkt tatsächlich greifen {#生效值}
 
-**Symptom**: Die `.env` wurde geändert, die Requests gehen trotzdem ans alte Gateway; oder es lässt sich
-nicht sagen, welches Modell gerade benutzt wird.
+**Symptom**: `.env` wurde geändert, die Requests gehen trotzdem an das alte Gateway; oder es ist
+unklar, welches Modell gerade benutzt wird.
 
-**Ursache**: Credentials und Endpoint haben mehrere Quellen (Prozessumgebung, `.env`, Fallback); wer
-gewinnt, steht nicht in der Konfigurationsdatei, sondern zeigt sich zur Laufzeit.
+**Ursache**: Credentials und Endpunkt haben mehrere Quellen (Prozessumgebung, `.env`, Fallback); wer
+gewinnt, entscheidet nicht die Konfigurationsdatei, sondern die Laufzeit.
 
-**Was tun**: Einmal mit `-v` starten. Beim Start wird `describe()` ausgegeben: die wirksame `BASE_URL`
-und das Modell-Mapping, der Token maskiert.
+**Was tun**: Einmal mit `-v` starten. Beim Start wird `describe()` gedruckt: die wirksame `BASE_URL`
+und das Modell-Mapping, Token maskiert.
 
 ```bash
 flower -v
@@ -191,13 +192,13 @@ Die vollständige Schalterliste steht in [cli.md](cli.md#全局开关), die voll
 ### Ein `KEY=` in der `.env` blockiert alle nachgelagerten Quellen {#空值占位}
 
 **Symptom**: In der Prozessumgebung ist ein Token exportiert, in der `.env` steht außerdem die Zeile
-`ANTHROPIC_AUTH_TOKEN=`, und es kommt trotzdem „fehlende Credentials".
+`ANTHROPIC_AUTH_TOKEN=`, und es kommt trotzdem „Credentials fehlen".
 
-**Ursache**: Auch ein leerer Wert ist eine Zuweisung. Ein `KEY=` in einer höherpriorisierten Quelle
-**belegt** diesen Schlüssel, niedrigere Quellen füllen ihn nicht mehr; und `check_credentials()`
-(definiert in `env.py:184`) prüft auf „Wert nicht leer", meldet also weiterhin fehlend. „Belegt" und
-„fehlt" sind zwei verschiedene Dinge, das Symptom ist identisch — das ist bei dieser Klasse von Problemen
-das am schwersten selbst Erkennbare.
+**Ursache**: Ein leerer Wert ist auch eine Zuweisung. Das `KEY=` aus der höherpriorisierten Quelle
+**belegt** den Schlüssel, niedriger priorisierte Quellen füllen ihn nicht mehr auf; und
+`check_credentials()` (definiert in `env.py:184`) prüft auf „Wert nicht leer", meldet also weiterhin
+Fehlen. „Belegt" und „fehlt" sind zwei verschiedene Dinge, sehen aber exakt gleich aus — das macht
+diese Fehlerklasse am schwersten selbst erkennbar.
 
 **Was tun**: Die ganze Zeile löschen, keine leeren Werte stehen lassen.
 
@@ -205,53 +206,52 @@ das am schwersten selbst Erkennbare.
 grep -n '^[A-Za-z_][A-Za-z0-9_]*=$' .env     # listet alle Zeilen mit leerem Wert
 ```
 
-Nach dem Löschen mit `-v` die wirksamen Werte noch einmal bestätigen. Die Parse-Regeln stehen in
+Danach mit `-v` die wirksamen Werte noch einmal prüfen. Die Parse-Regeln stehen in
 [config.md](config.md#env-解析).
 
-### Fremdes Gateway: verbunden, aber die erste Runde scheitert {#网关}
+### Drittanbieter-Gateway: Verbindung steht, aber die erste Runde scheitert {#网关}
 
 **Symptom**: 401 / 403; oder die Meldung, der Modellname existiere nicht; oder gleich zu Beginn ein
-[Handoff](glossary.md#换代), zusammen mit der Meldung „Startsockel".
+[Handoff](glossary.md#换代) mit der Meldung „Startup-Floor".
 
-**Ursache**: Drei Arten von Fehlkonfiguration, jede mit eigenem Symptom.
+**Ursache**: Drei Arten von Fehlkonfiguration, jede mit eigenem Erscheinungsbild.
 
-??? note "Drei Arten von Gateway-Fehlkonfiguration und wie man sie erkennt"
+??? note "Drei Gateway-Fehlkonfigurationen und wie man sie auseinanderhält"
 
-    | Symptom | Meistens | Wo ansetzen |
+    | Symptom | Meist | Wo ansetzen |
     |---|---|---|
-    | 401 / 403 | Die Credentials sind gültig, aber nicht von diesem Gateway ausgestellt; oder der `BASE_URL` fehlt der Pfad bzw. hat einen Slash zu viel | [config.md](config.md#凭证变量) |
+    | 401 / 403 | Die Credentials stimmen, sind aber nicht von diesem Gateway ausgestellt; oder der `BASE_URL` fehlt ein Pfad bzw. hat einen Slash zu viel | [config.md](config.md#凭证变量) |
     | Modellname existiert nicht | Das Gateway kennt nur seine eigenen Modellnamen, das Mapping fehlt | [config.md](config.md#模型变量) |
-    | Handoff direkt beim Start, Meldung „Startsockel" | Fenster zu klein konfiguriert: die Schwelle liegt unter dem Startsockel der Rolle ([Coordinator](glossary.md#协调者) gemessen bei ca. 34k) | `--window`, siehe [handoff.md](../guide/handoff.md#阈值怎么算) |
+    | Handoff direkt zu Beginn, Meldung „Startup-Floor" | Fenster zu klein konfiguriert: die Schwelle liegt unter dem Startup-Floor der Rolle (beim [Coordinator](glossary.md#协调者) gemessen ca. 34k) | `--window`, siehe [handoff.md](../guide/handoff.md#阈值怎么算) |
 
-**Was tun**: Erst mit `-v` die wirksamen Werte ausgeben, dann an der Konfiguration drehen. Besonders das
-Fenster lohnt den Abgleich — das Gateway auf der Entwicklungsmaschine ist auf `claude-opus-5[1m]`
-konfiguriert; hätte man weiterhin mit 200k gerechnet, gäbe es alle 150k einen Handoff, dabei kommt es
-tatsächlich bis 950k — **Faktor 5 Unterschied**, und [long-horizon](glossary.md#长程) Arbeit würde in
-Fetzen zerschnitten.
+**Was tun**: Erst mit `-v` die wirksamen Werte ausgeben lassen, dann an der Konfiguration drehen.
+Besonders das Fenster lohnt den Abgleich: Das Gateway der Entwicklungsmaschine ist auf
+`claude-opus-5[1m]` konfiguriert; hätte man früher mit 200.000 gerechnet, wäre alle 150.000 ein
+Handoff fällig gewesen, während es tatsächlich bis 950.000 durchhält — **Faktor 5 Unterschied**,
+[long-horizon](glossary.md#长程) Arbeit wird dadurch in Fetzen geschnitten.
 
 ---
 
 ## Läuft, verhält sich aber falsch {#行为不对}
 
-Die Symptome dieser Gruppe sind keine Fehlermeldungen, sondern: **das Kommando läuft durch, Exit-Code 0,
-aber es tut das Falsche.**
-Die ersten vier sind bestätigte Code-Fehler, die Issues sind eingereicht; hier stehen Workarounds, keine
-Fixes. Der letzte ist so gewollt.
+Die Symptome dieser Gruppe sind keine Fehlermeldungen: **der Befehl läuft durch, Exit-Code 0, und tut
+trotzdem das Falsche.** Die ersten vier sind bestätigte Code-Defekte, die Issues sind eingereicht;
+was hier steht, ist der Workaround, nicht der Fix. Der letzte Punkt ist so gewollt.
 
-### `flower setup` startet einen Agenten {#setup-跑成了-agent}
+### `flower setup` startet einen Agent {#setup-跑成了-agent}
 
-**Symptom**: Du führst `flower setup` aus und erwartest, dass nach Endpoint und Token gefragt wird.
-Stattdessen fragt es „was soll getan werden", durchläuft den kompletten go-Ablauf und behandelt das Wort
-`setup` als Aufgabenbeschreibung. Danach ist kein einziges Zeichen an Credentials geschrieben.
+**Symptom**: Man führt `flower setup` aus und erwartet Fragen nach Endpunkt und Token; stattdessen
+fragt es „was soll getan werden", durchläuft den kompletten go-Ablauf und behandelt das Wort `setup`
+als Aufgabenbeschreibung. Am Ende ist kein einziges Zeichen an Credentials geschrieben worden.
 
-**Ursache**: Das `_CMDS` in `cli.py:758` listet nur `"go"`, `"run"`, `"once"` — `"setup"` fehlt. Der
-Schritt, der das Default-Subkommando ergänzt, schreibt das argv `["setup"]` deshalb zu `["go", "setup"]`
-um — `setup` wird vom Subkommando zum ersten Positionsargument von `go` degradiert, also zum Anliegen selbst.
-**Es gibt kein argv, das den Konfigurationsassistenten erreicht.** Gemeldet als
-[#11](https://github.com/ChenyuHeee/flower/issues/11).
+**Ursache**: `_CMDS` in `cli.py:937` listet nur `"go"`, `"run"`, `"once"` und hat `"setup"`
+vergessen. Der Schritt, der das Default-Subkommando ergänzt, schreibt argv `["setup"]` damit zu
+`["go", "setup"]` um — `setup` wird vom Subkommando zum ersten Positionsargument von `go`
+degradiert, also zum Anliegen selbst. **Es gibt kein argv, das den Konfigurationsassistenten
+erreicht.** Gemeldet als [#11](https://github.com/ChenyuHeee/flower/issues/11).
 
-**Was tun**: Mit Ctrl-C abbrechen und die Konfigurationsdatei direkt schreiben. Mehr als in diese Datei zu
-schreiben tut `setup` ohnehin nicht:
+**Was tun**: Mit Ctrl-C abbrechen und die Konfigurationsdatei direkt schreiben. `setup` hätte
+ohnehin nichts anderes getan, als in diese Datei zu schreiben:
 
 ```bash
 mkdir -p ~/.config/flower
@@ -262,58 +262,59 @@ EOF
 
 Die vollständigen Variablennamen und die Suchreihenfolge für Credentials stehen in
 [config.md](config.md#凭证变量).
-Danach in einem beliebigen Verzeichnis einmal `flower -v` laufen lassen; der beim Start ausgegebene
-wirksame Endpoint ist die Gegenprobe.
+Danach in einem beliebigen Verzeichnis einmal `flower -v` laufen lassen; der beim Start gedruckte
+wirksame Endpunkt ist die Gegenprobe.
 
-### Ein `?` in Vollbreite löst die Oracle-Frage nicht aus {#全角问号}
+### Das Vollbreiten-`？` löst keine Oracle-Frage aus {#全角问号}
 
-**Symptom**: Du tippst gemäß [Oracle-Frage](cli.md#旁路问答) am Eingabeprompt `?这个目录能删吗`; es
-startet keinen [Oracle](glossary.md#旁路顾问), sondern behandelt den Satz als Antwort auf die aktuelle
-Frage oder nimmt ihn unverändert in den Posteingang auf.
+**Symptom**: Man tippt gemäß [Oracle-Frage](cli.md#旁路问答) am Eingabeprompt `？这个目录能删吗`,
+und statt den [Oracle](glossary.md#旁路顾问) zu starten, wird der Satz als Antwort auf die aktuelle
+Frage behandelt oder unverändert in den Posteingang aufgenommen.
 
-**Ursache**: `cli.py:733` führt zweimal hintereinander ein `startswith("?")` aus, **beide Male mit
-demselben ASCII-Zeichen**. Der Codeabsicht nach hätte die zweite Prüfung das vollbreite `?` prüfen müssen.
-Chinesische Eingabemethoden erzeugen standardmäßig genau dieses vollbreite Zeichen — die Hauptnutzer
-dieses Features können es also ausnahmslos nicht benutzen. Gemeldet als
-[#12](https://github.com/ChenyuHeee/flower/issues/12).
+**Ursache**: `cli.py:907` macht zweimal hintereinander ein `startswith("?")` und benutzt
+**beide Male dasselbe ASCII-Zeichen**. Der Absicht des Codes nach hätte der zweite Test auf das
+Vollbreiten-`？` prüfen müssen. Chinesische Eingabemethoden erzeugen standardmäßig genau dieses
+Vollbreitenzeichen — die Hauptnutzer dieser Funktion können sie also ausnahmslos nicht benutzen.
+Gemeldet als [#12](https://github.com/ChenyuHeee/flower/issues/12).
 
-!!! warning "Das verunreinigt die Anforderungen"
-    Ein ins Leere laufendes `?` erzeugt keinen Fehler und wird auch nicht verworfen. Es wird als normale
-    Eingabe behandelt: in der Clarify-Phase als Antwort auf die gerade gestellte Frage, sonst als
-    Posteingangseintrag.
-    **Ein Satz, den du nur unter vier Augen fragen wolltest, landet im Brief.** Wenn du den Tippfehler
-    bemerkst, korrigiere sofort `.flower/notes/需求.md`; diese Datei ist der Maßstab für alles Nachgelagerte.
+!!! warning "Das verunreinigt die Anforderung"
+    Ein ins Leere laufendes `？` erzeugt keinen Fehler und wird auch nicht verworfen. Es wird als
+    normale Eingabe behandelt: in der Clarify-Phase als Antwort auf die aktuelle Frage, sonst
+    landet es im Posteingang.
+    **Ein Satz, den du nur unter vier Augen fragen wolltest, landet im Brief.** Wenn du den Fehler
+    bemerkst, korrigiere sofort `.flower/notes/需求.md`; diese Datei ist der Maßstab für alles
+    Nachgelagerte.
 
-**Was tun**: Auf Halbbreite umschalten und `?` tippen, oder erst das halbbreite `?` tippen und dann für
-den Text zurück auf Chinesisch schalten.
+**Was tun**: Auf Halbbreite umschalten und `?` tippen, oder erst das halbbreite `?` setzen und dann
+für den Fließtext zurück auf Chinesisch wechseln.
 
 ### Bei `once` sind die kumulierten Kosten immer `$0.00` und die Dauer immer `0:00` {#once-计数为零}
 
-**Symptom**: `flower once` läuft von Anfang bis Ende durch, in der Statuszeile unten stehen die
-kumulierten Kosten dauerhaft als `累计 $0.00`, der Timer bleibt bei `0:00` — während dasselbe Modell mit
-derselben Arbeit unter `go` Zahlen liefert.
+**Symptom**: `flower once` läuft von Anfang bis Ende durch, die Statuszeile am unteren Rand zeigt
+durchgehend `累计 $0.00`, der Timer bleibt auf `0:00` — während dasselbe Modell mit derselben Arbeit
+unter `go` Zahlen liefert.
 
-**Ursache**: Das `render()` von `once` **erzeugt bei jedem eintreffenden Event ein neues `Render`**, die
-Akkumulatoren werden dabei mit neu aufgebaut und starten jedes Mal bei null. Die Summen werden also
-wiederholt auf null gesetzt, nicht etwa nicht erfasst. Gemeldet als
-[#14](https://github.com/ChenyuHeee/flower/issues/14).
+**Ursache**: Das `render()` von `once` **erzeugt bei jedem eingehenden Event ein neues `Render`**,
+die Akkumulatoren werden mit neu aufgebaut und starten jedes Mal bei null. Die kumulierten Werte
+werden also wiederholt auf null gesetzt, nicht etwa gar nicht erfasst.
+Gemeldet als [#14](https://github.com/ChenyuHeee/flower/issues/14).
 
-**Was tun**: Wer korrekte Zahlen braucht, nimmt `go`, dieser Weg ist nicht betroffen. Wer die
-Einzelrunden-Form von `once` will und trotzdem die Abrechnung sehen möchte, schaut nach dem Lauf in
-`runs/manifest.json` — dort sind die Kosten jedes Schritts festgehalten, und diese Aufzeichnung stimmt.
+**Was tun**: Wer korrekte Zahlen braucht, nimmt `go`, dieser Pfad ist nicht betroffen. Wer die
+Ein-Runden-Form von `once` will und trotzdem abrechnen möchte, schaut nach dem Lauf in
+`runs/manifest.json` — die Kosten jedes Schritts stehen dort, und diese Aufzeichnung stimmt.
 Details in [config.md](config.md#run-dir).
 
-### Ein Skill in `plugin/` wird nie geladen {#plugin-不加载}
+### Skills unter `plugin/` werden nie geladen {#plugin-不加载}
 
-**Symptom**: Du hast gemäß [deploy.md](deploy.md#写一个-skill完整例子) einen Skill geschrieben, die
-Verzeichnisstruktur stimmt, aber der Agent verhält sich, als wüsste er nichts davon — **keine Fehlermeldung,
-keine einzige Logzeile**.
+**Symptom**: Skill nach [deploy.md](deploy.md#写一个-skill完整例子) geschrieben, Verzeichnisstruktur
+stimmt, aber der Agent verhält sich, als wüsste er nichts davon — **keine Fehlermeldung, keine Zeile
+Log**.
 
 **Ursache**: `plugin/` ist nicht ins Wheel gepackt. Im installierten Paket zeigt `PLUGIN_DIR` auf
 `<site-packages>/plugin`, dieses Verzeichnis existiert nicht, und die Existenzprüfung vor dem Laden
-überspringt es still. **Alle drei Wege von `install.sh` sind betroffen**, nur ein aus dem Quellcode
-ausgecheckter Repository-Baum kann laden. Gemeldet als
-[#15](https://github.com/ChenyuHeee/flower/issues/15).
+überspringt stillschweigend. **Alle drei Pfade von `install.sh` sind betroffen**, nur ein
+Quellcode-Checkout kann laden.
+Gemeldet als [#15](https://github.com/ChenyuHeee/flower/issues/15).
 
 **Was tun**: Zuerst selbst prüfen, wohin der Pfad tatsächlich aufgelöst wird.
 
@@ -321,8 +322,8 @@ ausgecheckter Repository-Baum kann laden. Gemeldet als
 python3 -c "from flower.core.agent import PLUGIN_DIR; print(PLUGIN_DIR, PLUGIN_DIR.is_dir())"
 ```
 
-Kommt `False` heraus, ist es dieser Fall. Wer Skills nutzen will, hat derzeit genau eine Möglichkeit:
-**aus dem Quellcode-Checkout laufen lassen**.
+Wird `False` ausgegeben, ist es dieser Fall. Wer Skills nutzen will, hat derzeit genau eine
+Möglichkeit: **aus einem Quellcode-Checkout laufen lassen**.
 
 ```bash
 git clone https://github.com/ChenyuHeee/flower
@@ -331,259 +332,263 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 ln -sf "$PWD/.venv/bin/flower" ~/.local/bin/flower
 ```
 
-Ein mit `-e` installiertes Paket zeigt zurück ins Checkout-Verzeichnis, `PLUGIN_DIR` landet auf dem echten
-`plugin/`, und die Selbstprüfung oben gibt dann `True` aus.
+Ein mit `-e` installiertes Paket zeigt zurück auf das Checkout-Verzeichnis, `PLUGIN_DIR` landet auf
+dem echten `plugin/`, und dieselbe Prüfung gibt dann `True` aus.
 
 ### `-T` zeigt bei `go` keine Wirkung {#trim-与-go}
 
-**Symptom**: Du gibst `flower go` ein `-T` mit; mit und ohne verhält es sich exakt gleich, als wäre der
+**Symptom**: `flower go` mit `-T` aufgerufen; mit und ohne verhält es sich exakt gleich, als wäre der
 Schalter kaputt.
 
-**Ursache**: **Das ist so gewollt, kein Fehler.** Der `go`-Pfad hat [Trim](glossary.md#裁剪) ohnehin
-standardmäßig an, die von `-T` ausgedrückte Absicht ist bereits erfüllt, also ändert ein weiteres Mal
-nichts. Der eigentliche Schalter auf diesem Weg ist das umgekehrte `--no-trim` — explizit angeben muss man
-nur, wenn man Trim abschalten will. `-T` ist nur bei `run` und `once` ein sinnvoller Schalter.
+**Ursache**: **Das ist so gewollt, kein Defekt.** Der `go`-Pfad hat [Trim](glossary.md#裁剪)
+ohnehin standardmäßig an, die Absicht hinter `-T` ist bereits erfüllt, ein zweites Mal ändert nichts.
+Der eigentliche Schalter auf diesem Pfad ist der umgekehrte `--no-trim` — nur um Trim abzuschalten
+muss man ihn explizit setzen. `-T` ist nur bei `run` und `once` ein sinnvoller Schalter.
 
-**Was tun**: Wenn du bei `go` bestätigen willst, dass Trim wirklich an ist, schau mit `-v` in die
-Startausgabe und urteile nicht über An-/Abwesenheit von `-T`; zum Abschalten `--no-trim` geben. Die
+**Was tun**: Um bei `go` zu bestätigen, dass Trim wirklich an ist, den Startausdruck mit `-v`
+anschauen und nicht aus An-/Abwesenheit von `-T` schließen; zum Abschalten `--no-trim` geben. Die
 vollständige Semantik der Schalter steht in [cli.md](cli.md#全局开关).
 
-## Es sagt, es sei fertig, ist es aber nicht {#没做完}
+## Es sagt fertig, ist aber nicht fertig {#没做完}
 
 Der [Goal Guard](../guide/goal.md) existiert genau dafür — Worker haben einen systematischen
-Optimismus-Bias, sie wissen, was sie getan haben, nicht, was sie ausgelassen haben. Aber auch der Guard
-irrt, und die Richtung der Fehlurteile hat System.
-Die folgenden fünf Einträge sind aufgeteilt in „er lässt durch, was nicht durchgehen dürfte" und „er lässt
-nie durch".
+Optimismus-Bias, sie wissen, was sie getan haben, aber nicht, was sie ausgelassen haben. Aber auch
+der Guard urteilt falsch, und die Richtung des Fehlurteils hat System. Die folgenden fünf Punkte
+sind getrennt nach „hat durchgewinkt, was nicht durchgehen durfte" und „winkt gar nichts durch".
 
-### Es sagt „hier lässt sich nichts verifizieren", und dann geht es durch {#无法达成不是未达成}
+### Es sagt „hier nicht überprüfbar" und lässt es dann durch {#无法达成不是未达成}
 
-**Symptom**: Im Verdict steht „lässt sich in der aktuellen Umgebung nicht verifizieren, gilt als erreicht",
-und der Workflow läuft weiter.
+**Symptom**: Im Verdikt steht „in der aktuellen Umgebung nicht überprüfbar, gilt als erreicht", und
+der Workflow läuft weiter.
 
-**Ursache**: Der [Judge](glossary.md#判定者) hat „nicht erreichbar" und „nicht erreicht" zu einem Ergebnis
-verschmolzen. Das sind **verschiedene Ergebnisse**, genau darum geht es in
-[Drei Ergebnisse, nicht zwei](../guide/goal.md#三个结论不是两个):
-„nicht erreicht" heißt zurückgeben und weiterarbeiten, „nicht erreichbar" heißt **anhalten und den
-Menschen fragen** — akzeptieren, das Ziel ändern, oder feststellen, dass der Judge sich geirrt hat.
-Gibt es nur die beiden Ergebnisse „erreicht/nicht erreicht", dreht der Coordinator bei einem in Wahrheit
-unerreichbaren Ziel Runde um Runde leer, bis das Budget erschöpft ist.
+**Ursache**: Der [Judge](glossary.md#判定者) hat „nicht erreichbar" und „nicht erreicht" zu einer
+Schlussfolgerung vermischt. Das sind **zwei verschiedene Schlussfolgerungen**, und genau darum geht
+es in [Drei Schlussfolgerungen, nicht zwei](../guide/goal.md#三个结论不是两个):
+„nicht erreicht" heißt zurückgeben und weiterarbeiten, „nicht erreichbar" heißt **anhalten und
+nachfragen** — akzeptieren, Ziel ändern, oder feststellen, dass der Judge falsch lag.
+Gibt es nur die zwei Schlussfolgerungen „erreicht/nicht erreicht", dreht ein tatsächlich unmögliches
+Ziel den Coordinator Runde um Runde leer, bis das Kontingent aufgebraucht ist.
 
-**Was tun**: **„Lässt sich hier nicht prüfen" darf nie als erreicht gelten.** Sag in den `instructions`
-für den Judge namentlich, was in deinem Szenario als nicht machbar gilt, damit er „nicht erreichbar" gibt,
-wenn „nicht erreichbar" richtig ist.
-Wer wirklich nicht angehalten und gefragt werden will, gibt `--timeout 0`: bei „nicht erreichbar" wird
-direkt gestoppt, die Begründung bleibt auf der Platte, statt durchgewinkt zu werden.
+**Was tun**: **„Hier nicht überprüfbar" darf nie als erreicht gelten.** In den `instructions` für den
+Judge namentlich festhalten, was in deinem Szenario als nicht machbar zählt, damit er „nicht
+erreichbar" liefert, wenn „nicht erreichbar" angebracht ist.
+Wer wirklich nicht angehalten und gefragt werden will, gibt `--timeout 0`: bei „nicht erreichbar"
+wird direkt gestoppt und die Begründung bleibt auf Platte, statt durchgemogelt zu werden.
 
 ### Es liest den Quellcode und erklärt die Sache für erledigt {#判产出物}
 
-**Symptom**: In der Begründung des Verdicts steht „im Code ist X bereits implementiert", „die
-Funktionssignatur entspricht den Anforderungen", aber Build-Artefakte, Kommandoausgaben, laufende Dienste
-— nichts davon wurde angefasst.
+**Symptom**: Die Begründung des Verdikts lautet „im Code ist X bereits implementiert", „die
+Funktionssignatur entspricht der Anforderung", aber Build-Artefakt, Kommandoausgabe und laufender
+Dienst wurden nicht ein einziges Mal angefasst.
 
 **Ursache**: Der Judge wurde auf den Quellcode gelenkt.
 [Beurteilt wird das Artefakt, nicht der Quellcode](../guide/goal.md#判的是产出物不是源码) — ob der
-Quellcode richtig aussieht und ob das Abgelieferte benutzbar ist, sind zwei verschiedene Dinge. Ersteres
-ist das, wovon der Worker bereits überzeugt ist; es noch einmal zu bestätigen erzeugt keine neue
-Information.
+Quellcode richtig aussieht und ob das Abgelieferte benutzbar ist, sind zwei verschiedene Dinge.
+Ersteres ist das, wovon der Worker bereits überzeugt ist; es noch einmal zu bestätigen erzeugt keine
+neue Information.
 
-**Was tun**: Prüfpunkte müssen als Aussagen über das **Artefakt** formuliert sein. „Die Exportfunktion ist
-implementiert" zählt nicht; „`./app export out.csv` ausführen, `out.csv` hat 3 Spaltenüberschriften" zählt.
-So sollte schon beim Formulieren des Ziels geschrieben werden, sonst muss der Judge die vagen Punkte selbst
-ergänzen.
+**Was tun**: Prüfpunkte müssen als Aussagen über das **Artefakt** formuliert sein. „Export-Funktion
+implementiert" zählt nicht, „`./app export out.csv` ausführen, `out.csv` hat 3 Spaltenüberschriften"
+zählt. So sollte es schon beim Formulieren des Ziels geschrieben werden, sonst muss der Judge die
+vagen Punkte selbst ergänzen.
 
-### Der Judge kann keine Kommandos ausführen, also liest er das Makefile und lässt durch {#判定者不能跑命令}
+### Der Judge kann keine Befehle ausführen, also liest er das Makefile und winkt durch {#判定者不能跑命令}
 
-**Symptom**: Das Ziel ist „ein auf Linux lauffähiges Binary bauen", das Verdict ist bestanden. Du machst
-selbst ein `file` — das Artefakt ist Mach-O, gar kein ELF.
+**Symptom**: Das Ziel lautet „ein unter Linux lauffähiges Binary bauen", das Verdikt ist positiv.
+Ein eigenes `file` zeigt: das Artefakt ist Mach-O, überhaupt kein ELF.
 
-**Ursache**: Der Judge ist standardmäßig `judge(can_run=False)`, er hat **nur `Read` / `Glob` / `Grep`**
-zur Hand. Diese drei Werkzeuge können Dateien lesen, **aber weder `file` noch `./app --version`
-ausführen**. Also weicht er aus, liest das Makefile, sieht im Darwin-Zweig Cross-Compilation stehen und
-hält die Bedingung für erfüllt. Er hat nicht gelogen, er hat **im Rahmen seiner Möglichkeiten das
-gefunden, was am ehesten nach Beweis aussieht**.
+**Ursache**: Der Judge ist standardmäßig `judge(can_run=False)` und hat **nur `Read` / `Glob` /
+`Grep`** zur Hand. Diese drei Werkzeuge können Dateien lesen, aber **weder `file` noch
+`./app --version` ausführen**. Also weicht er aus, liest das Makefile, sieht im Darwin-Zweig
+Cross-Compilation stehen und hält die Bedingung für erfüllt.
+Er hat nicht gelogen, er hat nur **im Rahmen seiner Möglichkeiten das gefunden, was einem Beweis am
+ähnlichsten sieht**.
 
-??? note "Wann `can_run` zwingend an muss"
-    Das Kriterium ist einfach: **Sobald im Ziel Wörter wie „das Gebaute" vorkommen, muss es an.**
+??? note "Wann `can_run` zwingend eingeschaltet werden muss"
+    Die Entscheidungsregel ist einfach: **Sobald im Ziel Begriffe wie „das Gebaute" vorkommen,
+    einschalten.**
 
-    - Artefakte: Binary, Image, Paket, generierte Daten — an
-    - Verhalten: Dienst startet, Kommando gibt 0 zurück, Ausgabe passt auf ein Muster — an
-    - Reiner Text: ob ein Dokument geschrieben wurde, ob ein Feld ins Schema aufgenommen wurde — nicht nötig
+    - Artefakt-Art: Binary, Image, Paketdatei, generierte Daten — einschalten
+    - Verhaltens-Art: Dienst startet, Befehl liefert 0, Ausgabe passt auf ein Muster — einschalten
+    - Reine Text-Art: Doku geschrieben oder nicht, Feld im Schema ergänzt oder nicht — nicht nötig
 
-    Auf der Kommandozeile ist das `--judge-can-run`. Beim eigenen Verdrahten sehen die Einstiegspunkte
+    Auf der Kommandozeile ist das `--judge-can-run`. Beim eigenen Verdrahten sehen die Einstiege
     unterschiedlich aus, laufen aber alle auf denselben Parameter von `judge()` hinaus:
 
-    | Einstieg | Wie übergeben | Fundstelle |
+    | Einstiegspunkt | Wie übergeben | Fundstelle |
     |---|---|---|
-    | `judge()` | `can_run=` ist ein regulärer Parameter | `roles.py:361` |
-    | `with_goal()` | `can_run=` ist Parameter, wird an `judge()` weitergereicht | `goal.py:155` → `:170` |
-    | `goal_step()` | **kein `can_run`-Parameter**, aber es landet in `**spec_kw`, und genau diese Zeile ist `judge(..., **spec_kw)` — kommt an | `goal.py:97` → `:105` |
+    | `judge()` | `can_run=` ist ein echter Parameter | `roles.py:361` |
+    | `with_goal()` | `can_run=` ist Parameter und wird an `judge()` weitergereicht | `goal.py:155` → `:170` |
+    | `goal_step()` | **kein `can_run`-Parameter**, aber es landet in `**spec_kw`, und genau diese Zeile lautet `judge(..., **spec_kw)` — kommt also an | `goal.py:97` → `:105` |
     | `starter_flow()` | `judge_can_run=`, wird zu `with_goal(can_run=…)`; `--judge-can-run` geht genau diesen Weg | `starter.py:105` → `:196` |
 
-    Der Preis: Der Judge führt tatsächlich Kommandos aus, eine Verdict-Runde wird langsamer und teurer;
-    dafür prüft er **den Ort selbst** und nicht dessen Bedienungsanleitung. Siehe
-    [Darf der Judge Kommandos ausführen](../guide/goal.md#判定者能不能跑命令).
+    Der Preis: Der Judge führt tatsächlich Befehle aus, eine Verdikt-Runde wird langsamer und teurer;
+    dafür prüft er den **tatsächlichen Zustand** und nicht dessen Beschreibung. Siehe
+    [Darf der Judge Befehle ausführen](../guide/goal.md#判定者能不能跑命令).
 
-**Was tun**: Geht es im Ziel um Artefakte, `--judge-can-run` anschalten. Wenn nicht, gilt „muss allein durch
-Lesen entscheidbar sein" als harte Randbedingung beim Formulieren der Prüfpunkte — ein Punkt, der sich so
-nicht formulieren lässt, braucht ohnehin ein Kommando.
+**Was tun**: Geht es im Ziel um Artefakte, `--judge-can-run` einschalten. Wenn nicht eingeschaltet,
+gilt beim Formulieren der Prüfpunkte die harte Nebenbedingung „was lesbar ist, ist beurteilbar" —
+ein Punkt, der sich so nicht formulieren lässt, brauchte von vornherein die Ausführung von Befehlen.
 
-### Die Prüfliste hat über ein Dutzend Punkte und wird nie bestanden {#清单长度}
+### Die Prüfliste hat über ein Dutzend Punkte und geht nie durch {#清单长度}
 
-**Symptom**: Jede Runde wird zurückgegeben, es folgt eine lange Liste dessen, was fehlt, mit jeder
-Korrektur wird es mehr, die Arbeit wird nie fertig.
+**Symptom**: Jede Runde wird zurückgewiesen, mit einer langen Liste, woran es fehlt; je mehr
+korrigiert wird, desto mehr wird es, die Arbeit wird nie fertig.
 
-**Ursache**: Die Liste wurde nach „wie gründlich will ich sein" geschrieben, nicht nach „wie viele Arten
-des Scheiterns hat diese Arbeit".
-[Die Länge der Liste ergibt sich daraus, wie viele Arten des Scheiterns es gibt](../guide/goal.md#清单的长度由有多少种失败方式决定):
-Für eine Aufgabe wie `git clone && make && ./app` **reichen drei bis fünf Punkte** — Build erfolgreich,
-läuft, benutzbar.
+**Ursache**: Die Liste wurde nach „wie gründlich will ich sein" geschrieben, nicht nach „wie viele
+Arten hat diese Arbeit zu scheitern".
+[Die Länge der Liste bestimmt sich aus der Anzahl der Fehlermodi](../guide/goal.md#清单的长度由有多少种失败方式决定):
+Für eine Aufgabe wie `git clone && make && ./app` reichen **drei bis fünf Punkte** — Build
+erfolgreich, startet, benutzbar.
 Bei dem realen Absturz in [HT002](../cases/ht002.md#那条查-flower-的清单自己把自己判失败了) wurde die
-Aufgabe „das Repository installieren und zum Laufen bringen" zu **15 Punkten** ausformuliert: nur 5 davon
-prüften, ob etwas benutzbar ist, 6 prüften, ob der Ablauf Regeln eingehalten hat, und 4 waren
-**prinzipiell nicht prüfbar**.
+Aufgabe „das Repository installieren und laufen lassen" zu **15 Punkten** ausformuliert: nur 5 davon
+prüften, ob etwas benutzbar ist, 6 prüften, ob der Prozess eingehalten wurde, und 4 waren
+**prinzipiell nicht überprüfbar**.
 
-**Was tun**: `.flower/notes/目标.md` ändern, diese Datei ist die Grundlage des Verdicts. Punkt für Punkt
-fragen „welcher Art des Scheiterns entspricht dieser Punkt"; was sich nicht beantworten lässt, streichen.
-Der Schritt, der das Ziel setzt, meldet sich bei nicht prüfbaren Punkten ohnehin — behalte die
-angemahnten Punkte nicht mit Gewalt bei.
+**Was tun**: `.flower/notes/目标.md` ändern, diese Datei ist die Grundlage des Verdikts. Punkt für
+Punkt fragen „welchem Fehlermodus entspricht dieser Punkt"; was sich nicht beantworten lässt, wird
+gelöscht. Der Schritt zum Setzen der Ziele schlägt bei nicht überprüfbaren Punkten ohnehin Alarm —
+die angemahnten Punkte nicht mit Gewalt drinlassen.
 
-### Grenzen wurden als Prüfpunkte formuliert {#边界不是判定项}
+### Grenzen wurden als Prüfpunkte geschrieben {#边界不是判定项}
 
-**Symptom**: In der Liste tauchen Punkte auf wie „`brew install` wurde nicht ausgeführt", „außerhalb des
-Projektverzeichnisses wurde keine Datei geändert"; der Judge prüft zum Selbstfreispruch die mtime von
-`~/.zshrc` und schaut nach, ob am `.flower/`-Verzeichnis etwas angefasst wurde.
+**Symptom**: In der Liste tauchen Punkte auf wie „`brew install` wurde nicht ausgeführt" oder
+„außerhalb des Projektverzeichnisses wurde keine Datei verändert", und der Judge prüft zur eigenen
+Entlastung die mtime von `~/.zshrc` und ob am Verzeichnis `.flower/` etwas angefasst wurde.
 
-**Ursache**: Grenzen und Prüfpunkte beschränken verschiedene Dinge; sie zu vermischen war die
-Hauptursache jenes HT002-Vorfalls
-([Grundursache 1](../cases/ht002.md#根因一边界被当成了判定项)).
+**Ursache**: Grenzen und Prüfpunkte schränken Verschiedenes ein; sie zu vermischen war die
+Hauptursache des Absturzes in HT002
+([Ursache eins](../cases/ht002.md#根因一边界被当成了判定项)).
 
-| | Beschränkt was | Wie eingehalten |
+| | Was wird eingeschränkt | Wie einhalten |
 |---|---|---|
-| **Grenze** | **Wie du arbeitest** („nur innerhalb des Projektverzeichnisses installieren", „Geschäftscode nicht anfassen") | Durch **Nicht-Überschreiten**, nicht durch nachträglichen Selbstnachweis |
-| **Prüfpunkt** | **Das Abgelieferte** („läuft es", „stimmt das Ergebnis") | Durch Verifikation vor Ort |
+| **Grenzen** | **Wie du arbeitest** („nur innerhalb des Projektverzeichnisses installieren", „Fachcode nicht anfassen") | Durch **Nicht-Überschreiten**, nicht durch nachträglichen Selbstbeweis |
+| **Prüfpunkte** | **Das Abgelieferte** („läuft es", „stimmt das Ergebnis") | Durch Verifikation vor Ort |
 
-Grenzen sind genau der Abschnitt, den man in der Clarify-Phase ausführlich füllen soll. Sie Punkt für
-Punkt in die Prüfliste zu übertragen heißt: jede zusätzliche Grenze wird zu einer zusätzlichen Prüfung —
-und die meisten dieser Prüfungen sind nicht durchführbar; nicht prüfbare Punkte reißen die ganze
-Verdict-Runde mit ins Scheitern.
+Grenzen sind genau der Abschnitt, den man in der Clarify-Phase ausdrücklich vollschreiben soll. Sie
+einzeln in die Prüfliste zu übernehmen bedeutet: jede zusätzliche Grenze ist eine zusätzliche
+Prüfung, und die meisten dieser Prüfungen sind nicht durchführbar — nicht überprüfbare Punkte reißen
+die ganze Verdikt-Runde mit ins Scheitern.
 
 **Was tun**: Grenzen bleiben im Abschnitt „Grenzen" des Briefs und werden durch Nicht-Überschreiten
-eingehalten, nicht durch Aufnahme in die Prüfliste. Wenn wirklich Rechenschaft nötig ist, ein Satz —
-**nicht in sechs Punkte zerlegen**.
+eingehalten, nicht in die Prüfliste. Wenn wirklich Rechenschaft nötig ist, ein Satz dazu,
+**nicht in sechs Punkte aufgespalten**.
 
 ---
 
 ## Kontext und Kosten {#上下文与花费}
 
-In einem long-horizon Run sind Kontext und Geld dasselbe Problem: Läuft der Kontext voll, gibt es
-entweder einen Handoff oder dieser Schritt fliegt auf; und jeder Satz, den man in einer Runde wiederholt,
+In long-horizon Runs sind Kontext und Geld dasselbe Problem: Der Kontext läuft voll, dann kommt
+entweder ein Handoff oder dieser Schritt fliegt; und jeder Satz, der in einer Runde wiederholt wird,
 muss in jeder folgenden Runde erneut bezahlt werden.
 
 ### Mitten im Lauf öffnet es selbst eine neue Session und sagt „Handoff" {#换代打断}
 
-**Symptom** Im Event-Strom erscheint `handoff`, `payload["phase"]` zuerst `near`, dann `done`, dazwischen
-kostet das Schreiben des [Handoff-Dokuments](glossary.md#交接书) eine zusätzliche Runde, danach geht die
-Arbeit normal weiter.
+**Symptom** Im Eventstrom taucht `handoff` auf, `payload["phase"]` erst `near`, dann `done`,
+dazwischen eine zusätzliche Runde Zeit für das Schreiben des [Handoff-Dokuments](glossary.md#交接书),
+danach geht die Arbeit normal weiter.
 
-**Ursache** Der Kontext nähert sich der Schwelle. flower **compacted nicht** — es schreibt den Zustand der
-aktuellen Session in ein fünfteiliges Handoff-Dokument und startet eine neue Session, die es liest und
-weiterarbeitet. [Compact](glossary.md#压缩) löscht die teuersten Informationen gleich mit weg, etwa „Wege,
-die nicht funktionieren", während das Handoff-Dokument explizit ist, auf der Platte liegt und jederzeit
-änderbar bleibt: Die übernehmende Session liest genau diese Datei.
+**Ursache** Der Kontext nähert sich der Schwelle. flower **macht kein compact** — es schreibt den
+Zustand der aktuellen Session als fünfteiliges Handoff-Dokument und startet eine neue Session, die
+es liest und weitermacht. [Compact](glossary.md#压缩) löscht die teuersten Informationen gleich mit,
+etwa „Wege, die nicht funktionieren"; das Handoff-Dokument dagegen ist explizit, liegt auf Platte und
+ist jederzeit änderbar: Die übernehmende Session liest genau diese Datei.
 
-**Was tun** Das ist der normale Pfad, nichts zu tun. Ein Handoff zählt nicht als Retry — `attempts` steigt
-nicht (das zählt Fehlschläge), die verbrannte session_id wird in `StepResult.retired` festgehalten, und
-die nach außen sichtbare `session_id` ist immer die des noch lebenden Nachfolgers
+**Was tun** Das ist der Normalpfad, nichts zu tun. Ein Handoff zählt nicht als Retry — `attempts`
+steigt nicht (es zählt Fehlschläge), die verbrannte session_id steht in `StepResult.retired`, und die
+nach außen sichtbare `session_id` ist immer der noch lebende Nachfolger
 (siehe [../guide/handoff.md#换代不算重试账怎么记](../guide/handoff.md#换代不算重试账怎么记)).
 Wer wirklich zum Auto-Compact des SDK zurück will, nimmt `--no-handoff`.
 
-??? note "Woher die Schwelle kommt und warum der Default so offensiv gewählt ist"
-    `at = window - headroom`. `window` ist **standardmäßig 1 Million**, bestimmt über den Modellnamen:
-    Namen mit `haiku` zählen als 200k, alle anderen als 1 Million. `headroom` ist standardmäßig 50k —
-    Auto-Compact greift bei −33k, der Handoff muss ihm zuvorkommen, und das Schreiben des Handoffs selbst
-    braucht noch eine Runde; 50k erfüllt beides zugleich.
+??? note "Woher die Schwelle kommt und warum der Default so aggressiv gewählt ist"
+    `at = window - headroom`. `window` ist **standardmäßig 1 Million**, bestimmt nach Modellname: Namen
+    mit `haiku` gelten als 200.000, alle anderen als 1 Million. `headroom` ist standardmäßig 50k —
+    Auto-Compact greift bei −33k, der Handoff muss davor sein, und das „Handoff schreiben" selbst
+    braucht noch eine Runde; 50k erfüllt beides gleichzeitig.
 
-    Zu groß zu schätzen ist kein harter Fehler: Ist das echte Fenster kleiner, wird die Schwelle nie
-    erreicht, der Request wird von der API mit „Prompt zu lang" abgewiesen, flower erkennt dieses Signal
-    (`handoff.is_overflow()`) und macht auf der Stelle einen Handoff mit einem mechanisch
-    zusammengesetzten Fallback-Dokument; der Schritt schlägt nicht fehl
+    Zu groß geschätzt ist kein harter Fehler: Ist das echte Fenster kleiner, wird die Schwelle nie
+    erreicht, der Request wird von der API mit „prompt zu lang" abgelehnt, flower erkennt dieses
+    Signal (`handoff.is_overflow()`) und macht auf der Stelle mit einem mechanisch
+    zusammengesetzten Ersatzdokument einen Handoff — der Schritt scheitert nicht
     (siehe [../guide/handoff.md#is_overflow把硬错变成当场换代](../guide/handoff.md#is_overflow把硬错变成当场换代)).
 
-    Ein Messwert, der Erwähnung verdient: Das Gateway auf der Entwicklungsmaschine ist auf
-    `claude-opus-5[1m]` konfiguriert. Hätte man weiterhin mit 200k gerechnet, gäbe es alle 150k einen
-    Handoff, dabei kommt es tatsächlich bis 950k — **Faktor 5 Unterschied**, long-horizon Arbeit würde in
-    Fetzen zerschnitten.
+    Ein Messwert, der Erwähnung verdient: Das Gateway der Entwicklungsmaschine ist auf
+    `claude-opus-5[1m]` konfiguriert. Hätte man früher mit 200.000 gerechnet, wäre alle 150.000 ein
+    Handoff fällig gewesen, während es tatsächlich bis 950.000 durchhält — **Faktor 5 Unterschied**,
+    long-horizon Arbeit wird dadurch in Fetzen geschnitten.
 
-### Handoff gleich zu Beginn, und er hört nicht auf {#一开局就换代}
+### Handoff gleich zu Beginn, und es hört nicht auf {#一开局就换代}
 
-**Symptom** Die Fehlermeldung erwähnt den „Startsockel", oder derselbe Schritt macht wiederholt Handoffs,
-bis er gegen `max_generations=8` läuft.
+**Symptom** Die Fehlermeldung erwähnt „Startup-Floor", oder derselbe Schritt macht immer wieder
+Handoffs, bis `max_generations=8` erreicht ist.
 
-**Ursache** `window` ist zu klein konfiguriert, die Schwelle liegt unter dem Startsockel dieser Rolle —
-beim Coordinator gemessen ca. 34k, allein System-Prompt plus [Workbench](glossary.md#工作台)-Index
-verbrauchen das. Die neue Session überschreitet die Linie schon beim ersten Wort, also Handoff schreiben,
-übergeben, wieder überschreiten, endlos (Handoffs zehren nicht am Retry-Budget, das ist Absicht).
+**Ursache** `window` ist zu klein konfiguriert, die Schwelle liegt unter dem Startup-Floor dieser
+Rolle — beim Coordinator gemessen ca. 34k, allein System-Prompt plus [Workbench](glossary.md#工作台)-Index
+verbrauchen das. Die neue Session überschreitet die Linie mit dem ersten Wort, also Handoff
+schreiben, Generationswechsel, wieder überschreiten, endlos
+(Handoffs zehren nicht am Retry-Kontingent, das ist Absicht).
 
-**Was tun** `--window` auf das echte Fenster des Modells stellen; `-v` gibt den wirksamen Endpoint und das
-Modell-Mapping aus. Ein normaler langer Lauf kommt nie an 8 Generationen; wer wirklich dagegenläuft, hat
-fast sicher diese Ursache, und die Fehlermeldung sagt das auch direkt
+**Was tun** `--window` auf das echte Fenster des Modells setzen; `-v` druckt den wirksamen Endpunkt
+und das Modell-Mapping. Ein normaler langer Lauf braucht keine 8 Generationen; wer tatsächlich
+dagegenläuft, hat fast sicher diese Ursache, und die Fehlermeldung sagt genau das
 (siehe [../guide/handoff.md#一道防跑飞的闸](../guide/handoff.md#一道防跑飞的闸)).
-Ein verwandtes Symptom ist „das Handoff-Dokument ist immer die Fallback-Version": Die Ursache steht unter
+Ein verwandtes Symptom ist „das Handoff-Dokument ist immer die Notvariante": Der Grund steht unter
 `errors` in `runs/manifest.json`.
 
-### Bleibt auf halbem Weg stehen mit der Meldung, das Budget sei ausgeschöpft {#预算到顶}
+### Bleibt auf halbem Weg stehen mit der Meldung, das Budget sei erschöpft {#预算到顶}
 
-**Symptom** Der [Schritt](glossary.md#步骤) ist nicht fertig und stoppt, Begründung: Kostenlimit
-überschritten.
+**Symptom** Ein [Schritt](glossary.md#步骤) hört unfertig auf, Begründung: Kostenlimit überschritten.
 
-**Ursache** `AgentSpec(max_budget_usd=...)` ist eine **harte Obergrenze**, keine weiche Erinnerung;
-`Runtime.total_cost()` ist die Summe des aktuellen Runs.
+**Ursache** `AgentSpec(max_budget_usd=...)` ist ein **hartes Limit**, keine sanfte Erinnerung;
+`Runtime.total_cost()` ist die Summe dieses Runs.
 
-**Was tun** Bevor du das Limit anhebst, prüfe, ob es nicht im Leerlauf dreht. Runde um Runde zurückgegeben
-ohne jeden Fortschritt heißt meist: Der Judge hätte „nicht erreichbar" geben müssen und hat „nicht
-erreicht" gegeben — ein in Wahrheit unerreichbares Ziel brennt weiter, bis das Budget leer ist
+**Was tun** Vor dem Anheben des Limits sicherstellen, dass es sich nicht im Leerlauf dreht. Runde um
+Runde zurückgewiesen ohne Fortschritt heißt meist, dass der Judge „nicht erreichbar" hätte geben
+müssen und stattdessen „nicht erreicht" gegeben hat — ein tatsächlich unmögliches Ziel brennt bis
+zum Kontingentende weiter
 (siehe [../guide/goal.md#三个结论不是两个](../guide/goal.md#三个结论不是两个)).
-Erst sicherstellen, dass normal gearbeitet wird, dann das Limit anheben.
+Erst bestätigen, dass wirklich gearbeitet wird, dann das Limit anheben.
 
 ### Warum war dieser Lauf so teuer {#为什么这么贵}
 
-**Symptom** Die Kosten liegen weit über der Erwartung, aber an der Ausgabe sieht man nicht, wohin das Geld
-gegangen ist.
+**Symptom** Die Kosten liegen weit über der Erwartung, aber an der Ausgabe ist nicht abzulesen, wo
+das Geld geblieben ist.
 
-**Ursache** Die Abrechnung steht nicht im Kontext des Modells. `session_id`, Kosten, Anzahl der Retries und
-Fehlerursache jedes Schritts stehen nur in `runs/manifest.json`, **prozessübergreifend angehängt**. Auch
-Retry-Historie und Originalfehler stehen nur dort — das Modell sieht sie nicht, und das ist Absicht:
-Häufen sich abgelehnte Aufrufe im Kontext, lernt der Coordinator „Bash wird eh geblockt" und versucht nicht
-einmal mehr `git status` (`Runtime(keep_denials=1)` räumt standardmäßig auf, nicht hochdrehen).
+**Ursache** Die Abrechnung steht nicht im Kontext des Modells. `session_id`, Kosten, Anzahl der
+Retries und Fehlergründe jedes Schritts stehen nur in `runs/manifest.json`, **prozessübergreifend
+angehängt**. Auch die Retry-Historie und die Original-Fehlertexte stehen nur dort — das Modell sieht
+sie nicht, und das ist Absicht: Häufen sich abgelehnte Aufrufe im Kontext, lernt der Coordinator
+„Bash wird sowieso blockiert" und probiert nicht einmal mehr `git status`
+(`Runtime(keep_denials=1)` räumt standardmäßig auf, nicht hochdrehen).
 
-**Was tun** `runs/manifest.json` öffnen und die Kosten pro Schritt abgleichen (Disk-Layout siehe
-[config.md#磁盘布局](config.md#磁盘布局)). Ein paar gemessene Referenzwerte:
+**Was tun** `runs/manifest.json` öffnen und die Kosten pro Schritt abgleichen (das Plattenlayout
+steht in [config.md#磁盘布局](config.md#磁盘布局)).
+Einige gemessene Referenzwerte:
 
 | | Kosten |
 |---|---|
-| Startsockel eines Subagents (nicht amortisierbar) | ~4.3k tokens |
-| Startsockel des Coordinators | ~34k tokens |
-| `tests/smoke.py` Einzelagent, ganze Kette | ~$0.21 |
-| `tests/flow_demo.py` Workflow, drei Verdrahtungsarten | ~$0.39 |
-| `tests/delegation.py` Arbeitsteilung + Messung der Kontextverteilung | ~$0.71 |
+| Startup-Floor eines Subagents (nicht amortisierbar) | ~4.3k tokens |
+| Startup-Floor des Coordinators | ~34k tokens |
+| `tests/smoke.py` Einzel-Agent über die ganze Kette | ~$0.21 |
+| `tests/flow_demo.py` Workflow in drei Verdrahtungen | ~$0.39 |
+| `tests/delegation.py` Arbeitsteilung + Vermessung der Kontextverteilung | ~$0.71 |
 | `tests/isolation.py` drei Issues, drei Worktrees | ~$0.9 |
 
 ### Der Kontext wächst schneller als die Arbeit vorangeht {#上下文涨得快}
 
-**Symptom** In jedem [Task-Brief](glossary.md#任务书) wird dieselbe Disziplin wiederholt („erst lesen, dann
-ändern", „Geschäftscode nicht anfassen", „nach der Änderung Tests laufen lassen"), während der
-[Worker](glossary.md#执行者) sich ohnehin daran hält.
+**Symptom** In jedem [Task Brief](glossary.md#任务书) wird dieselbe Disziplin wiederholt („erst die
+Datei lesen, dann ändern", „Fachcode nicht anfassen", „nach der Änderung Tests laufen lassen"),
+obwohl der [Worker](glossary.md#执行者) sich ohnehin daran hält.
 
-**Ursache** Jeder Satz des Coordinators geht in dessen eigenes Transcript, und ein Transcript wächst nur.
-Die Disziplin noch einmal aufzusagen kostet in dieser Runde Geld — **und in jeder folgenden Runde muss
-dieser Abschnitt erneut mitbezahlt werden**. Was das Gegenüber bereits weiß, bringt beim Wiederholen null
-Ertrag, kostet aber dauerhaft.
+**Ursache** Jeder Satz des Coordinators landet in dessen eigenem Transcript, und ein Transcript
+wächst nur. Die Disziplin noch einmal aufzusagen kostet in dieser Runde Geld — **und in jeder
+folgenden Runde noch einmal für denselben Abschnitt**. Was das Gegenüber schon weiß, bringt bei
+Wiederholung null Ertrag und kostet dauerhaft.
 
-**Was tun** Disziplin gehört in den Mechanismus, nicht in jede Runde Text: Was sich über `allowed_tools`,
-den Abschnitt „Grenzen" des Briefs oder den Workbench-Index ausdrücken lässt, gehört nicht in den
-Task-Brief; der Task-Brief enthält nur, was sich in dieser Runde geändert hat. Die Arbeitsteilung selbst
-spart die größte Schicht
+**Was tun** Disziplin gehört in den Mechanismus, nicht in jede Runde Text: Was sich über
+`allowed_tools`, den Abschnitt „Grenzen" im Brief oder den Workbench-Index ausdrücken lässt, gehört
+nicht in den Task Brief; der Task Brief enthält nur, was sich in dieser Runde geändert hat. Die
+Arbeitsteilung selbst ist die Schicht, die am meisten spart
 (siehe [../guide/context.md#第一层分工省得最多](../guide/context.md#第一层分工省得最多)).
 Beim Resume lassen sich alte große Tool-Ergebnisse mit `-T` durch Dateizeiger ersetzen.
 
@@ -591,74 +596,77 @@ Beim Resume lassen sich alte große Tool-Ergebnisse mit `-T` durch Dateizeiger e
 
 ### Der Prozess wurde gekillt, die Maschine neu gestartet {#进程被杀}
 
-**Symptom** Mitten im Lauf ist alles weg, und im neuen Terminal ist unklar, wie man wieder anknüpft.
+**Symptom** Mitten im Lauf ist alles weg, und nach dem Neuöffnen des Terminals ist unklar, wie man
+wieder anknüpft.
 
 **Ursache** Es gibt nichts aufzusammeln. Die [Lineage](glossary.md#血缘) (`runs/lineage.json`) hält
 Schrittname → session_id fest, wird am Ende jedes Schritts auf Platte geschrieben, und zwar erst als
-`.tmp` und dann atomar ersetzt — ein Kill mittendrin hinterlässt keine halbe Datei.
+`.tmp` und dann per atomarem Replace — ein Kill mittendrin hinterlässt keine halbe Datei.
 
-**Was tun** Ins **selbe Verzeichnis** zurückgehen und erneut `flower` starten; jeder Schritt knüpft an
-seine bisherige Session an: Die Anforderungen werden nicht erneut abgefragt, das Ziel nicht erneut gesetzt,
-und selbst welche Sackgassen der Coordinator schon probiert hat, ist noch bekannt. Wer nichts sagen will,
-drückt einfach Enter
+**Was tun** In **dasselbe Verzeichnis** zurückkehren und noch einmal `flower` starten; jeder Schritt
+knüpft an seine bisherige Session an: Die Anforderung wird nicht erneut abgefragt, die Ziele werden
+nicht erneut gesetzt, und selbst welche Sackgassen der Coordinator schon probiert hat, ist noch
+bekannt. Wer nichts sagen will, drückt einfach Enter
 (siehe [../guide/continuity.md#进程被杀和机器重启](../guide/continuity.md#进程被杀和机器重启)).
-Der Judge ist die Ausnahme — er ist kein `Step`, sondern wird direkt aus dem Gate heraus entsandt und geht
-nie über die Lineage; deshalb ist er in jeder Runde ein frisches Augenpaar.
+Der Judge ist die Ausnahme — er ist kein `Step`, sondern wird direkt aus dem Gate heraus entsandt und
+läuft nie über die Lineage, also ist er in jeder Runde ein frisches Paar Augen.
 
 ### Es fängt jedes Mal von vorn an, knüpft überhaupt nicht an {#接不上}
 
-**Symptom** Im selben Verzeichnis erneut gestartet, und es fragt die Anforderungen wieder komplett ab.
+**Symptom** Ein erneuter Lauf im selben Verzeichnis fragt die Anforderung wieder komplett ab.
 
-**Ursache** Bei drei Arten von „passt nicht" fällt flower **still auf einen Neuanfang zurück, ohne Fehler**
-— [Kontinuität](glossary.md#接续) ist ein Bonus, ihr Ausfall darf niemanden an der Arbeit hindern:
+**Ursache** Bei drei Arten von „passt nicht" fällt flower ausnahmslos **still auf Neubeginn zurück
+und meldet keinen Fehler** — [Kontinuität](glossary.md#接续) ist Zugabe, ihr Ausfall darf niemanden
+an der Arbeit hindern:
 
-- `runs/lineage.json` fehlt, oder der darin stehende `workspace` stimmt nicht mit deinem aktuellen Pfad
-  überein (passiert, wenn das Verzeichnis kopiert wurde)
-- Die Session ist nicht mehr in `runs/sessions.db` (Datenbank gelöscht)
+- `runs/lineage.json` fehlt, oder das darin stehende `workspace` passt nicht zu deinem aktuellen Pfad (so ist es, wenn das Verzeichnis kopiert wurde)
+- Die Session steht nicht mehr in `runs/sessions.db` (Datenbank gelöscht)
 - Die Lineage-Datei ist beschädigt
 
-**Was tun** Zuerst prüfen, ob `runs/lineage.json` da ist und ob `workspace` stimmt (die Aufgaben der drei
-Dateien stehen in
-[../guide/continuity.md#落在磁盘上的三个文件](../guide/continuity.md#落在磁盘上的三个文件)).
-Dass es nach einem Verzeichniswechsel nicht anknüpft, ist **Absicht**: `project_key` wird aus dem
-Workspace-Pfad abgeleitet, die alte Session ist am neuen Ort nicht auffindbar.
+**Was tun** Zuerst schauen, ob `runs/lineage.json` existiert und ob `workspace` stimmt
+(die Aufgaben der drei Dateien stehen in [../guide/continuity.md#落在磁盘上的三个文件](../guide/continuity.md#落在磁盘上的三个文件)).
+Dass nach einem Verzeichniswechsel nicht angeknüpft wird, ist **Absicht**: `project_key` wird aus dem
+Workspace-Pfad abgeleitet, und die alte Session ist am neuen Ort nicht auffindbar.
 
-### Neu anfangen, aber die Historie nicht verlieren {#想重开}
+### Neu anfangen, ohne die Historie zu verlieren {#想重开}
 
-**Symptom** Die Anforderung hat die Richtung gewechselt, und es soll nicht an der alten Sache weiterreden.
+**Symptom** Die Anforderung hat die Richtung gewechselt, und es soll nicht am alten Kram
+weitererzählt werden.
 
-**Ursache** Das Standardverhalten ist Weiterreden. In einem bereits benutzten Verzeichnis ist
-`flower "顺便支持代码块高亮"` keine neue Aufgabe, sondern ein weiterer Satz im selben Gespräch.
+**Ursache** Das Standardverhalten ist Weitererzählen. `flower "顺便支持代码块高亮"` in einem bereits
+benutzten Verzeichnis ist keine neue Aufgabe, sondern ein weiterer Satz.
 
-**Was tun** `--new`. Das ist **Archivieren, nicht Löschen**, das Alte bleibt in `notes/archive/`.
-Beim [Wake](glossary.md#唤醒) wird zuerst eine Zeile mit dem aktuellen Kontextumfang gemeldet; wenn dir
-der zu groß ist, führt derselbe Weg weiter.
+**Was tun** `--new`. Das ist **Archivieren, kein Löschen**, das Alte bleibt in `notes/archive/`.
+Beim [Wake](glossary.md#唤醒) wird zuerst eine Zeile mit der aktuellen Kontextgröße gemeldet; wem die
+zu groß ist, geht ebenfalls diesen Weg.
 
-### Netz weg, es meldet nichts und bewegt sich nicht {#断网}
+### Netzwerk weg, es meldet nichts und bewegt sich nicht {#断网}
 
-**Symptom** Auf der Oberfläche keine neuen Events, der Prozess lebt noch, sieht aus wie hängengeblieben.
+**Symptom** Auf der Oberfläche kommen keine neuen Events, der Prozess lebt noch, es sieht aus wie
+hängengeblieben.
 
-**Ursache** Netzausfall wird als „kurz warten" behandelt, nicht als Fehlschlag. flower hängt und wartet:
+**Ursache** Netzausfall wird als „kurz warten" behandelt, nicht als Fehlschlag. flower wartet:
 erst DNS probieren, dann TCP, und erst wenn es durchgeht, weitermachen
 (siehe [../guide/continuity.md#韧性断网时挂着等而且错误不进接续后的上下文](../guide/continuity.md#韧性断网时挂着等而且错误不进接续后的上下文)).
-In HT001 wurde das durch einen echten Ausfall verifiziert
+In HT001 wurde das durch einen echten Ausfall bestätigt
 (siehe [../cases/ht001.md#六断网续跑第一次被真实故障验证](../cases/ht001.md#六断网续跑第一次被真实故障验证)).
 
-**Was tun** Warten; mit `-v` sieht man die Proben laufen. Die während der Wartezeit angefallenen Fehler
-**gehen nicht in den Kontext nach der Fortsetzung** — sie landen nur in `runs/manifest.json`, und die
-übernehmende Session sieht einen sauberen Zustand, den keine Reihe von Timeouts in die Irre führt.
+**Was tun** Warten; mit `-v` sieht man die Probes laufen. Die während der Wartezeit angefallenen
+Fehler **kommen nicht in den Kontext nach der Fortsetzung** — sie landen nur in
+`runs/manifest.json`, und die übernehmende Session sieht einen sauberen Zustand und lässt sich nicht
+von einer Kette von Timeouts in die Irre führen.
 
-### Zweimal Ctrl-C, der Abschluss ist unvollständig {#双重-ctrl-c}
+### Zweimal Ctrl-C hintereinander, der Abschluss läuft nicht vollständig {#双重-ctrl-c}
 
-**Symptom** Ein `kill` (SIGTERM) und zweimaliges Ctrl-C hinterlassen unterschiedliche Zustände.
+**Symptom** Ein Beenden per `kill` (SIGTERM) und zweimal Ctrl-C hinterlassen unterschiedliche Zustände.
 
-**Ursache** Bekannte Lücke. Doppeltes Ctrl-C wirft `KeyboardInterrupt`: Das `finally` von `_drive` in
-`cli.py` ruft `rt.close()`, aber **nicht** `rt.rescue()` — `rescue()` rufen nur die Handler für
-SIGHUP/SIGTERM.
+**Ursache** Bekannte Lücke. Doppeltes Ctrl-C wirft ein `KeyboardInterrupt`: das `finally` von
+`_drive` in `cli.py` ruft `rt.close()`, aber **nicht** `rt.rescue()` — nur der Handler für
+SIGHUP/SIGTERM ruft `rescue()`.
 
-**Was tun** Die Lineage bleibt auf beiden Pfaden erhalten (nach jedem Schritt atomar auf Platte), ein
-erneuter Start knüpft also trotzdem an, diese Lücke kostet keinen Fortschritt. Für einen vollständigen
-Abschluss `kill <pid>` benutzen statt wild Ctrl-C zu drücken.
+**Was tun** Die Lineage bleibt auf beiden Pfaden erhalten (nach jedem Schritt atomar auf Platte),
+ein erneuter Lauf knüpft also trotzdem an, und diese Lücke kostet keinen Fortschritt. Wer den
+vollständigen Abschluss will, nimmt `kill <pid>` statt wild auf Ctrl-C zu hämmern.
 
 ## Parallelität und Isolation {#并行与隔离}
 
@@ -666,23 +674,24 @@ Abschluss `kill <pid>` benutzen statt wild Ctrl-C zu drücken.
 
 **Symptom** Mit eingeschalteter Isolation startet es nicht und meldet `not in a git repository`.
 
-**Ursache** `worker(..., isolate=True)` gibt jedem Agenten über git worktree eine private Kopie; ist der
-Workspace kein Git-Repository, lässt sich keine anlegen.
+**Ursache** `worker(..., isolate=True)` gibt jedem Agent über git worktree eine private Kopie; ist
+der Workspace kein git-Repository, lässt sich die nicht anlegen.
 
-**Was tun** Dieser Fall **degradiert nicht still** — entweder wirklich in einem Repository laufen lassen
-oder `isolate` abschalten. Isolation garantiert, dass mehrere Agenten gleichzeitig ändern können, ohne die
-Arbeitsbäume der anderen zu sehen; sie garantiert dir nicht, dass das Mergen konfliktfrei ist.
+**Was tun** Hier gibt es **keine stille Degradierung** — entweder wirklich in einem Repository laufen
+lassen, oder `isolate` abschalten. Isolation garantiert, dass mehrere Agents gleichzeitig ändern
+können, ohne die Arbeitsbäume der anderen zu sehen; sie garantiert dir keine konfliktfreie
+Zusammenführung.
 
 ### Ein isolierter Agent kann nicht in die Workbench schreiben {#隔离写不进工作台}
 
-**Symptom** Der Subagent meldet „Schreibrecht verweigert", Skripte und Artefakte landen nicht auf der
-Platte; oder die Artefakte landen in genau einem Worktree und die anderen Agenten sehen sie nicht.
+**Symptom** Der Subagent meldet „Schreibrecht verweigert", Skripte und Artefakte landen nicht auf
+Platte; oder die Artefakte landen in einem bestimmten Worktree und die anderen Agents sehen sie nicht.
 
-**Ursache** Ein Worktree ist die **private Kopie** eines Agenten, die Workbench ist die agentübergreifende
-**gemeinsame Schicht**. Legt man Gemeinsames in einen privaten Zaun, kommen die anderen naturgemäß nicht
-heran.
+**Ursache** Ein Worktree ist die **private Kopie** je Agent, die Workbench ist die **gemeinsame
+Schicht** über Agents hinweg. Wer Gemeinsames in einen privaten Zaun stellt, macht es für die
+anderen unerreichbar.
 
-**Was tun** Bei eingeschalteter Isolation die Workbench **außerhalb des Repositories** ablegen:
+**Was tun** Bei eingeschalteter Isolation die Workbench **außerhalb des Repositories** ansiedeln:
 
 ```python
 wb = Workbench(Path.cwd(), home=Path.cwd().parent / ".flower-proj").ensure()
@@ -692,27 +701,29 @@ Liegt sie außerhalb des Workspace, erteilt `Runtime` die Freigabe automatisch p
 `Runtime(workbench=True)` erledigt das bereits, bei einer selbst gebauten `Workbench` musst du die
 Freigabe selbst geben.
 
-!!! warning "Die Workbench hat zwei Default-Positionen, und sie sind verschieden"
-    `Workbench(workspace)` — den Weg gehen die CLI und `starter_flow()` — legt die Workbench nach
-    `<workspace>/.flower`; `Runtime(workbench=True)` (also `-W`) legt sie nach `<run_dir>/workbench`, also
-    `runs/workbench`. Ein Lauf von `flower` gibt dir also ein `.flower/`, ein `Runtime(workbench=True)` in
-    Python **nicht**.
+!!! warning "Die Workbench hat zwei Defaultpositionen, und sie sind verschieden"
+    `Workbench(workspace)` — den Weg gehen CLI und `starter_flow()` — legt die Workbench nach
+    `<workspace>/.flower`;
+    `Runtime(workbench=True)` (also `-W`) legt sie dagegen nach `<run_dir>/workbench`, also
+    `runs/workbench`.
+    Ein `flower`-Lauf liefert dir also ein `.flower/`, ein `Runtime(workbench=True)` in Python
+    **nicht**.
 
-### Mit flower gibt es ein `.flower/`, im eigenen Skript nicht {#两个工作台默认值}
+### Bei `flower` gibt es `.flower/`, beim eigenen Skript nicht {#两个工作台默认值}
 
-**Symptom** Der Brief wurde nachweislich nach `.flower/notes/需求.md` geschrieben, der Coordinator tut aber,
-als hätte er ihn nie gelesen; **keine Fehlermeldung**.
+**Symptom** Der Brief wurde nachweislich nach `.flower/notes/需求.md` geschrieben, der Coordinator
+verhält sich aber, als hätte er ihn nie gelesen; **kein Fehler**.
 
-**Ursache** Du hast zwei Workbench-Objekte in der Hand. Der Brief wird in Verzeichnis A geschrieben, der in
-den System-Prompt injizierte Index scannt Verzeichnis B, und das Versprechen „weiß von Anfang an, wo die
-Anforderungsdatei liegt" **fällt still aus**. Beide Fehlerarten melden nichts: Ein selbst
-zusammengebauter `brief_path` relativ zum Prozess-cwd und die von `-W` erzeugte `<run_dir>/workbench` sind
-zwei Verzeichnisse; und sich den Pfad rückwärts aus dem `Runtime` zu holen geht auch nicht — `cli.py` ruft
-erst `main()` und baut den `Workflow`, erst danach entsteht das `Runtime`, da ist `brief_path` längst
-festgelegt.
+**Ursache** Du hast zwei Workbench-Objekte in der Hand. Der Brief wird nach Verzeichnis A
+geschrieben, der in den System-Prompt injizierte Index scannt Verzeichnis B, und die Zusage „von
+Anfang an weiß es, wo die Anforderungsdatei liegt" **fällt still aus**. Beide Fehlerarten melden
+nichts: Ein selbst zusammengebauter `brief_path` relativ zum Prozess-cwd und das von `-W` erzeugte
+`<run_dir>/workbench` sind zwei Verzeichnisse; und es rückwärts aus dem `Runtime` zu holen geht auch
+nicht — `cli.py` ruft erst `main()` und baut den `Workflow`, das `Runtime` entsteht danach, da ist
+`brief_path` längst festgenagelt.
 
-**Was tun** Selbst eine `Workbench` bauen und **dasselbe Objekt** sowohl dem `Workflow` als auch dem
-`Runtime` mitgeben; damit ist die Position festgenagelt:
+**Was tun** Selbst eine `Workbench` bauen und **dasselbe Objekt** gleichzeitig an `Workflow` und
+`Runtime` hängen, dann ist die Position festgenagelt:
 
 ```python
 wb = Workbench(Path.cwd()).ensure()
@@ -720,8 +731,9 @@ wf = Workflow(channel=ch, workbench=wb, steps=[...])
 rt = Runtime(workspace=".", workbench=wb)
 ```
 
-`tests/trial_offline.py` nagelt das fest: Assertion 5 prüft, dass der Brief in `prompt_block()` auftaucht.
-Außerdem wird der Index nur in den System-Prompt des **Coordinators** injiziert, Subagenten erben ihn nicht
-(gemessen $0.2461, `tests/prelude_live.py`) — der Pfad muss vom Coordinator weitergegeben werden, nicht
-jeder Subagent weiß ihn automatisch
+`tests/trial_offline.py` nagelt das fest: Die 5. Assertion prüft, dass der Brief in `prompt_block()`
+auftaucht.
+Außerdem wird der Index nur in den System-Prompt des **Coordinators** injiziert, Subagents erben ihn
+nicht (gemessen $0.2461, `tests/prelude_live.py`) — die Pfade muss der Coordinator weitergeben, nicht
+jeder Subagent weiß sie automatisch
 (siehe [../guide/workflow.md#工作台要挂在-workflow-上](../guide/workflow.md#工作台要挂在-workflow-上)).

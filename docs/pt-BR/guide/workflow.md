@@ -1,24 +1,24 @@
 # Projetar um workflow
 
-O framework cuida apenas do mecanismo: como um passo roda, como as sessões se encadeiam, o que fazer quando falha, como economizar contexto.
-**O [workflow](../reference/glossary.md#流程) é você quem escreve** — o framework não sabe em que projeto você está, nem em que linguagem,
-e nem deveria saber. Esta página trata de como projetar um workflow; a tabela completa de campos de `Step` e `Workflow` está na
+O framework cuida apenas do mecanismo: como um step roda, como as sessions se encadeiam, o que fazer quando algo falha, como economizar contexto.
+**[O workflow](../reference/glossary.md#流程) é você quem escreve** — o framework não sabe em que projeto você está nem em que linguagem,
+e nem deve saber. Esta página trata de como projetar um workflow; a tabela completa de campos de `Step` e `Workflow` está na
 [API Python](../reference/api.md).
 
 ## Que problema resolve {#解决什么问题}
 
-Uma run [long-horizon](../reference/glossary.md#长程) não cabe em um único prompt: primeiro esclarecer o requisito,
-depois pesquisar, depois implementar, depois revisar — cada trecho tem seu próprio papel, seu próprio contexto, seus próprios critérios de aceitação.
+Um run [long-horizon](../reference/glossary.md#长程) não é algo que caiba em um único prompt: primeiro esclarecer o requisito,
+depois pesquisar, depois implementar, depois revisar — cada trecho tem seu próprio papel, seu próprio contexto, seu próprio critério de aceitação.
 Se você escrever tudo em um único prompt, o modelo decide sozinho qual trecho pular; escrito como workflow, **a ordem, as condições de saída e a passagem de estado viram
-código Python** — legível, testável, e você pode re-rodar apenas o passo que quebrou.
+código Python** — legível, testável, e você pode reexecutar só o step que quebrou.
 
-O `Workflow` faz apenas três coisas:
+`Workflow` faz apenas três coisas:
 
-- roda uma sequência de [passos](../reference/glossary.md#步骤) em ordem
-- decide o que cada passo enxerga do que veio antes (três formas de encadear sessões + um dicionário `ctx`)
-- decide quando tentar de novo e quando sair mais cedo
+- roda uma sequência de [steps](../reference/glossary.md#步骤) em ordem
+- decide o que cada step enxerga do que veio antes (três formas de encadear session + um dicionário `ctx`)
+- decide quando repetir e quando sair antes do fim
 
-Ele não carrega nenhuma suposição de domínio. Onde cortar, o que aceitar em cada passo, o que fazer quando não passa — essas quatro coisas são "projetar um workflow".
+Ele não contém nenhuma suposição de domínio. Onde cortar, o que aceitar em cada step, o que fazer quando não passa — essas quatro coisas são "projetar o workflow".
 
 ## Como usar (código mínimo) {#怎么用最小代码}
 
@@ -36,9 +36,9 @@ terse = AgentSpec(
 
 def main() -> Workflow:
     return Workflow([
-        # Sessão nova: só consome o que foi passado no prompt
+        # Session nova: só consome o que foi passado no prompt
         Step("取词", terse, "读 seed.txt,只回文件里那个词。"),
-        # Ainda uma sessão nova, injetando o resultado do passo anterior no prompt (barato, evita contaminação)
+        # Ainda uma session nova, injetando no prompt o resultado do step anterior (barato, evita contaminação)
         Step("造句", terse, lambda ctx: f"用「{ctx['取词']}」造一个五字短句,只回短句。"),
     ])
 ```
@@ -47,10 +47,10 @@ def main() -> Workflow:
 flower run flows.py:main -w /path/to/repo
 ```
 
-O argumento de `flower run` é `módulo:atributo` ou `caminho/do/arquivo:atributo`. Se o objeto obtido for chamável, ele é chamado uma vez;
-com o `Workflow` em mãos, a run começa. Ao terminar, o terminal imprime o custo total e o caminho do run manifest.
+O argumento de `flower run` é `módulo:atributo` ou `caminho/arquivo:atributo`. Se o objeto obtido for chamável, ele é chamado uma vez;
+com o `Workflow` em mãos, roda. Ao terminar, o terminal imprime o custo total e o caminho do run manifest.
 
-Escrever seu próprio driver também funciona; o primeiro argumento de `Workflow.run` é um `Runtime`:
+Você também pode escrever seu próprio driver; o primeiro argumento de `Workflow.run` é um `Runtime`:
 
 ```python
 ctx = await wf.run(rt, on_step=lambda step, r: print(f"{step.name} ok={r.ok} ${r.cost_usd:.4f}"))
@@ -58,93 +58,93 @@ ctx = await wf.run(rt, on_step=lambda step, r: print(f"{step.name} ok={r.ok} ${r
 
 ## O que ele faz de fato {#它实际做了什么}
 
-### O que um Step recebe e o que precisa devolver {#一个-step-收到什么必须返回什么}
+### O que um Step recebe e o que precisa retornar {#一个-step-收到什么必须返回什么}
 
-`Step` não é uma função, é uma **declaração**. O que realmente executa é `Runtime.run(step.spec, prompt renderizado, ...)` —
-**um passo = uma chamada de `Runtime.run` = uma [sessão](../reference/glossary.md#会话)**.
+`Step` não é uma função, é uma **declaração**. Quem executa de fato é `Runtime.run(step.spec, prompt renderizado, ...)` —
+**um step = uma chamada de `Runtime.run` = uma [session](../reference/glossary.md#会话)**.
 
 Os três primeiros campos são posicionais, `Step(name, spec, prompt)`:
 
-- `name` — nome do passo. É ao mesmo tempo a chave em `ctx`, o nome da linha em `runs/manifest.json`
+- `name` — nome do step. É ao mesmo tempo a chave no `ctx`, o nome da linha em `runs/manifest.json`
   e a chave da [linhagem](../reference/glossary.md#血缘) entre processos.
-- `spec` — qual `AgentSpec` roda este passo. Ele define a whitelist de ferramentas, o modelo e o budget deste passo.
-- `prompt` — `str`, ou `(ctx) -> str`. Quando chamável, recebe o `ctx` atual;
-  **essa é a forma mais barata de alimentar o resultado do passo anterior** (a outra é encadear a sessão, veja abaixo).
+- `spec` — com qual `AgentSpec` rodar. Define a whitelist de ferramentas, o modelo e o budget deste step.
+- `prompt` — `str`, ou `(ctx) -> str`. Se for chamável, recebe o `ctx` atual;
+  **essa é a forma mais barata de alimentar o resultado do step anterior** (a outra é encadear a session, veja abaixo).
 
-O que o passo "devolve" é um `StepResult`, mas dentro do workflow você recebe duas coisas:
+O que este step "retorna" é um `StepResult`, mas dentro do workflow você recebe duas coisas:
 
-- `ctx[step.name]` — por padrão `result.text`; se você passou `reduce`, é o valor de retorno de `reduce`;
+- `ctx[step.name]` — por padrão `result.text`; se você passou `reduce`, é o retorno de `reduce`;
 - `ctx["_results"][step.name]` — o `StepResult` completo (custo, número de turnos, tentativas, `session_id`).
 
-`result.text` **só coleta o texto da main thread**: as falas do subagent ficam no transcript dele, a [task brief](../reference/glossary.md#任务书)
-enviada a ele é `kind="prompt"`, e o erro sintético de desconexão é `kind="error"`
+`result.text` **só coleta o corpo da main thread**: as falas do subagent ficam no transcript dele, o
+[task brief](../reference/glossary.md#任务书) despachado para ele é `kind="prompt"`, o erro sintético de queda de conexão é `kind="error"`
 — nenhum dos três entra.
 
 ### reduce: não é açúcar sintático {#reduce不是糖}
 
-Por padrão, o que é repassado adiante é a fala literal do modelo. Em alguns passos, essa fala literal **não deveria** ser repassada como está:
+Por padrão, o que passa adiante é literalmente o que o modelo disse. Em alguns steps, o que foi dito **não deve** ser repassado como está:
 
 ```python
 Step("确认需求", spec=确认者, prompt="帮我做一个 X",
      reduce=lambda r, ctx: ctx["_brief"].prompt_block())
 ```
 
-Na prática, o passo de clarify **cola o código inteiro** além das quatro seções. O que segue para jusante precisa ser as quatro seções já parseadas,
-senão aquele monte de código entra no prompt do passo seguinte. É esse campo que segura o `clarify_step`.
+Na prática, o step de esclarecimento do requisito **cola o código inteiro** além dos quatro blocos. O que vai para os steps seguintes precisa ser os quatro blocos já parseados,
+senão aquele monte de código entra no prompt do próximo step. É com esse campo que `clarify_step` se protege.
 
 `reduce` **precisa ser uma função síncrona**; `gate` / `when` / `on_reject` podem ser async.
 
 ### Como o estado flui pelo ctx {#状态怎么在-ctx-里流动}
 
-`ctx` é um `dict[str, Any]` — é o próprio `Workflow.context`. Ao fim de cada passo, a escrita segue esta tabela:
+`ctx` é um `dict[str, Any]` — é o próprio `Workflow.context`. Ao fim de cada step, a escrita segue esta tabela:
 
-| Situação | `ctx[nome do passo]` | Outros |
+| Situação | `ctx[nome do step]` | Outros |
 |---|---|---|
-| `when(ctx)` retorna False | **não escreve**, o passo inteiro é pulado | não produz result, nem entra em `_results` |
-| Passou | `reduce(result, ctx)`, ou `result.text` se não houver reduce | |
-| Falhou + `on_fail="stop"` (padrão) | **não escreve** | escreve `ctx["_failed_at"]`, o workflow inteiro para neste passo |
-| Falhou + `on_fail="skip"` | **não escreve** | continua adiante |
-| Falhou + `on_fail="continue"` | `result.text` (incompleto, **sem passar por `reduce`**) | continua adiante |
+| `when(ctx)` retorna False | **não escreve**, o step inteiro é pulado | não produz result nem entra em `_results` |
+| Passou | `reduce(result, ctx)`; sem `reduce`, `result.text` | |
+| Falhou + `on_fail="stop"` (padrão) | **não escreve** | escreve `ctx["_failed_at"]`, o workflow inteiro para neste step |
+| Falhou + `on_fail="skip"` | **não escreve** | continua para o próximo |
+| Falhou + `on_fail="continue"` | `result.text` (incompleto, **não passa por `reduce`**) | continua para o próximo |
 
-Passando ou não, `ctx["_results"][nome do passo]` é sempre escrito; se `result.session_id` não for vazio, ele também vai para
-`ctx["_sessions"]` e é registrado na linhagem.
+Passando ou não, `ctx["_results"][nome do step]` é sempre escrito; se `result.session_id` não for vazio, também é escrito em
+`ctx["_sessions"]` e registrado na linhagem.
 
-**Para saber se esta run do workflow deu certo, olhe `ctx.get("_failed_at")`**, não se o último passo produziu saída.
+**Para saber se o workflow foi bem-sucedido, olhe `ctx.get("_failed_at")`**, não se o último step produziu saída.
 
-As chaves iniciadas com underscore são todas colocadas pelo próprio `Workflow.run`: `_runtime`, `_on_event`, `_sessions`, `_results`,
-`_lineage`, `_woke`, `_aborted`, `_failed_at` — não use nenhuma delas como nome de passo. Cada mecanismo também coloca as suas
+As chaves iniciadas por underscore são colocadas pelo próprio `Workflow.run`: `_runtime`, `_on_event`, `_sessions`, `_results`,
+`_lineage`, `_woke`, `_aborted`, `_failed_at` — não use nenhuma delas como nome de step. Cada mecanismo também coloca as suas
 (`_brief` / `_goal` / `_verdict` etc.); a lista completa está na [API Python](../reference/api.md).
 
-Dentre elas, `_runtime` e `_on_event` existem para o `gate`: um gate pode despachar seu próprio agent para emitir um verdict,
-e esse processo continua sendo exibido na UI — caso contrário aqueles dez e poucos segundos ficariam com a tela preta, parecendo travamento.
-O [goal guard](goal.md) é implementado exatamente assim.
+Dentre elas, `_runtime` e `_on_event` são para o `gate`: um gate pode despachar um agent próprio para emitir um verdict,
+e esse processo continua sendo impresso na UI — senão a interface fica preta por uma dúzia de segundos e parece travada.
+É assim que o [goal guard](goal.md) é implementado.
 
-`ctx` é o mesmo dict: **se você rodar o mesmo objeto `Workflow` uma segunda vez, as chaves da vez anterior ainda estão lá**.
-Para começar limpo, crie um novo, ou passe `context={}` explicitamente.
+`ctx` é o mesmo dict: **se você rodar o mesmo objeto `Workflow` uma segunda vez, as chaves da primeira ainda estão lá**.
+Para recomeçar limpo, crie um novo, ou passe `context={}` explicitamente.
 
-!!! warning "com on_fail=skip, `ctx[nome do passo]` não é escrito"
-    Um passo a jusante que faça `lambda ctx: ctx["某步"]` vai levar `KeyError` direto. Para seguir adiante carregando o resultado incompleto, use
-    `on_fail="continue"`; se você realmente quer pular, o passo a jusante precisa se defender com `ctx.get(...)`.
+!!! warning "com on_fail=skip, `ctx[nome do step]` não é escrito"
+    Um step posterior que faça `lambda ctx: ctx["某步"]` estoura `KeyError` direto. Para seguir com o resultado incompleto, use
+    `on_fail="continue"`; se realmente quiser pular, os steps seguintes precisam se proteger com `ctx.get(...)`.
 
 ### Verdict e devolução: gate, on_reject, StepAbort {#判定与打回gateon_rejectstepabort}
 
-`gate(result, ctx) -> bool` julga "rodou até o fim, mas está aceitável?". Dois detalhes que você precisa saber:
+`gate(result, ctx) -> bool` julga "terminou, mas está aceitável?". Dois detalhes que você precisa saber:
 
-- **quando `result.ok` é falso o `gate` simplesmente não é chamado** (curto-circuito);
-- **é chamado uma única vez por tentativa**, e a conclusão fica guardada para depois — porque ele pode ter efeitos colaterais. O gate de `clarify_step` faz spill do
-  [brief](../reference/glossary.md#需求确认书) em disco; disparar de novo escreve o arquivo de novo.
+- **Quando `result.ok` é falso, o `gate` nem é chamado** (curto-circuito).
+- **É chamado uma única vez por tentativa**, e a conclusão fica guardada para uso posterior — ele pode ter efeitos colaterais. O gate de `clarify_step` faz o
+  [brief](../reference/glossary.md#需求确认书) ir para o disco; disparar de novo significa escrever no disco de novo.
 
-O que acontece depois que o gate reprova depende de você ter passado ou não `on_reject`:
+O que acontece depois de um gate reprovar depende de você ter fornecido ou não `on_reject`:
 
 | | Como roda a próxima rodada | Nome no manifest |
 |---|---|---|
 | Só `retries` | roda do zero, prompt original, `resume_from` original | `X#retry1` |
-| Com `on_reject` | **continua a sessão que acabou de ser reprovada**, o prompt vira o retorno de `on_reject`, `fork` forçado a False | `X#round2` |
+| Com `on_reject` | **continua a session que acabou de ser reprovada**, o prompt vira o retorno de `on_reject`, `fork` é forçado a False | `X#round2` |
 
-A segunda opção é "devolver, dizendo o que faltou, e deixar que complete" — o trabalho já feito e o contexto continuam lá.
-Se `on_reject` retornar string vazia, ou se aquela tentativa nem chegou a obter um `session_id`, o comportamento degrada para rodar do zero.
+O segundo caso é "devolver, dizendo o que faltou, e deixar continuar" — o trabalho já feito e o contexto continuam lá.
+Se `on_reject` retornar string vazia, ou se aquela tentativa simplesmente não obteve `session_id`, o comportamento degrada para rodar do zero.
 
-O `gate` também pode lançar `StepAbort`, o que significa **tentar de novo não adianta, não gaste os turnos restantes**:
+O `gate` também pode levantar `StepAbort`, que significa **não adianta tentar de novo, não gaste os turnos restantes**:
 
 ```python
 from flower import StepAbort
@@ -155,53 +155,53 @@ def gate(result, ctx):
     return "验收通过" in result.text
 ```
 
-Depois do lançamento: o motivo é registrado em `ctx["_aborted"]`, o passo é tratado como falha e segue o `on_fail` (padrão `"stop"`),
-o **loop de retry quebra na hora**, e nenhum dos `retries` restantes é consumido.
+Depois de levantado: o motivo é registrado em `ctx["_aborted"]`, o step é tratado como falha e segue o `on_fail` (padrão `"stop"`),
+o **loop de retry dá break na hora**, e nenhum dos `retries` restantes é consumido.
 
-Guarde a diferença: **retornar False é "desta vez não deu, mais uma rodada"; `StepAbort` é "outra rodada não resolve".**
-O caso típico é quando o objetivo foi julgado impossível neste ambiente e não há a quem perguntar — continuar girando em falso é a opção mais cara.
+Guarde bem a diferença: **retornar False é "desta vez não deu, mais uma rodada"; `StepAbort` é "mais uma rodada não resolve".**
+O caso típico é o objetivo ser julgado impossível neste ambiente e não haver a quem perguntar — continuar girando em falso é a opção mais cara.
 
 ### Não confunda as duas camadas de retry {#两层重试别混}
 
 | | `Step.retries` | `Runtime(resilience=...)` |
 |---|---|---|
-| Cuida do quê | falha de negócio: `gate` reprovou, `result.ok` falso | infraestrutura: oscilação de rede, queda, 5xx |
-| Como repete | **repete o passo inteiro**, mesmo prompt e mesmo `resume_from` | **resume a partir do ponto de interrupção**, o custo já gasto não se perde |
-| O que faz antes | nada | sondas DNS + TCP esperando a rede voltar (sem HTTP, sem credenciais; a sonda precisa ser gratuita) |
-| O que não é retriável | — | credencial errada ou parâmetro errado param imediatamente, sem espera |
+| Cobre o quê | falha de negócio: `gate` reprovou, `result.ok` falso | infraestrutura: oscilação de rede, queda, 5xx |
+| Como refaz | **refaz o step inteiro**, mesmo prompt e mesmo `resume_from` | **resume a partir do ponto de interrupção**, o custo anterior não é jogado fora |
+| O que faz antes | nada | sondas DNS + TCP esperando a rede voltar (sem HTTP, sem credencial; a sonda tem que ser gratuita) |
+| Não retentáveis | — | credencial errada ou parâmetro errado param imediatamente, sem espera |
 
-O prompt usado na continuação **propositalmente não contém nenhum detalhe do erro** — o modelo precisa saber "você foi interrompido, continue",
+O prompt usado na continuação **deliberadamente não contém nenhum detalhe do erro** — o modelo precisa saber "você foi interrompido, continue",
 não precisa saber se foi ENOTFOUND ou 503.
 
-### Encadear os passos {#把步骤串起来}
+### Encadear os steps {#把步骤串起来}
 
-Há três formas de passar estado entre passos, e a escolha define o que o próximo passo enxerga:
+Há três formas de passar estado entre steps; a escolha determina o que o próximo step enxerga:
 
-| Forma | O que o próximo passo enxerga | Onde usar |
+| Forma | O próximo step enxerga | Onde usar |
 |---|---|---|
-| `resume_from=None` (padrão) + injeção no prompt | só o texto que você injetou | passos independentes. Barato, evita contaminação |
-| `resume_from="nome do passo anterior"` | o histórico completo da sessão | quando é preciso memória contínua |
-| `resume_from="nome do passo anterior"` + `fork=True` | histórico completo, mas em outro ramo | revisão / propostas paralelas / retry sem sujar a linha original |
+| `resume_from=None` (padrão) + injeção no prompt | só o texto que você injetou | steps independentes. Barato, evita contaminação |
+| `resume_from="nome do step anterior"` | histórico completo da session | quando é preciso memória contínua |
+| `resume_from="nome do step anterior"` + `fork=True` | histórico completo, mas em outro ramo | revisão / múltiplas alternativas em paralelo / retry sem sujar a linha original |
 
-O passo apontado por `resume_from` **precisa ter realmente produzido uma sessão**. Se ele foi pulado por `when`, ou nem rodou,
-`Workflow.run` lança `ValueError` direto — sem degradar silenciosamente para uma sessão nova, porque isso faria a premissa de "memória contínua"
+O step apontado por `resume_from` **precisa ter realmente produzido uma session**. Se ele foi pulado por `when`, ou simplesmente não rodou,
+`Workflow.run` levanta `ValueError` direto — não degrada silenciosamente para uma session nova, porque isso faria a suposição de "memória contínua"
 falhar sem alarde.
 
-Algumas lições de projeto que já custaram caro mais de uma vez:
+Algumas lições de projeto pagas repetidamente:
 
-1. **Um objetivo aceitável por passo.** A fronteira do passo é a fronteira do contexto: onde há `resume_from=None`,
-   todos aqueles resultados de ferramenta anteriores deixam de ocupar espaço permanentemente. Veja [Economia de contexto](context.md).
-2. **Na dúvida, comece com `clarify_step`.** Em long-horizon, "entendi o objetivo errado" é o erro mais caro,
-   e é justamente o tipo que aquelas camadas de economia de contexto não conseguem limpar. Veja [Clarify](clarify.md).
-3. **A tarefa despachada precisa ser autossuficiente.** O subagent tem contexto limpo; ele não sabe o que o [coordinator](../reference/glossary.md#协调者)
-   sabe. Escreva o contexto necessário na task brief, ou diga a ele qual artifact ler.
-4. **Saída longa vai para o disco, não de volta pela conversa.** Isso já está escrito em `WORKER_RULES`; não deixe suas `instructions`
-   cancelarem essa regra ("cole o log completo de volta para eu ver").
-5. **`gate` primeiro barra condições duras.** Se o arquivo existe, se o exit code é 0 — o que uma linha de Python decide não deve ser despachado a um modelo.
-   Se você precisa mesmo do modelo para julgar, use o `with_goal` pronto — ele troca o gate por uma implementação que roda um
+1. **Um step, um objetivo aceitável.** A fronteira do step é a fronteira do contexto: onde há `resume_from=None`,
+   todos aqueles resultados de ferramenta anteriores deixam de ser residentes. Veja [Economia de contexto](context.md).
+2. **Na dúvida, comece por `clarify_step`.** Em long-horizon, "entendi o objetivo errado" é o erro mais caro,
+   e é justamente daquele tipo que nenhuma das camadas de economia de contexto consegue limpar. Veja [Clarify](clarify.md).
+3. **A tarefa despachada tem que ser autossuficiente.** O subagent tem contexto limpo; ele não sabe o que o [coordenador](../reference/glossary.md#协调者)
+   sabe. Escreva o contexto necessário no task brief, ou diga a ele qual artifact ler.
+4. **Saída longa vai para o disco, não para a conversa.** Isso já está escrito em `WORKER_RULES`; não anule com suas `instructions`
+   ("cole o log completo de volta para eu ver").
+5. **No `gate`, priorize condições duras.** Se o arquivo existe, se o exit code é 0 — coisas decidíveis em uma linha de Python não devem ser despachadas para um modelo.
+   Se precisar de um modelo para julgar, use o `with_goal` pronto — ele troca o gate por uma implementação que roda um
    [judge](../reference/glossary.md#判定者) independente; não improvise isso à mão dentro do gate.
-6. **Trabalho paralelo no mesmo repositório usa `worker(isolate=True)`.** O fechamento (merge, limpar worktree, abrir PR) hoje fica
-   por conta do seu workflow; o harness só garante que as alterações caiam cada uma na sua worktree.
+6. **Alterações paralelas no mesmo repositório: `worker(isolate=True)`.** O encerramento (merge, limpar worktree, abrir PR) hoje fica
+   por conta do seu workflow; o harness só garante que as alterações caiam cada uma no seu próprio worktree.
 
 ### O workbench precisa estar pendurado no Workflow {#工作台要挂在-workflow-上}
 
@@ -235,49 +235,49 @@ wf = Workflow(
 rt = Runtime(workspace=Path.cwd(), run_dir="runs", workbench=wb)
 ```
 
-Pendurar o `channel` no workflow tem duas razões: `run()` liga o `on_event` dele à mesma saída de eventos
-(apenas se `channel.on_event` ainda for `None`), e o driver também depende desse campo para saber a quem responder.
+Pendurar o `channel` no workflow tem duas razões: `run()` conecta o `on_event` dele à mesma saída de eventos
+(apenas se `channel.on_event` ainda for `None`), e o driver depende desse campo para saber a quem responder.
 
-!!! warning "Montar o caminho do workbench na mão falha silenciosamente"
-    A posição padrão de `Runtime(workbench=True)` é `<run_dir>/workbench`, enquanto a de `Workbench(ws)` é
-    `<ws>/.flower` — **não são o mesmo diretório**. Quando o workflow é invocado pela CLI, ele não enxerga `run_dir`; montar o caminho na mão
-    só aponta para outro lugar, e então o brief é escrito no diretório A enquanto o índice injetado varre o diretório B, **e nada acusa erro**.
-    Criar um único objeto e compartilhá-lo dos dois lados elimina o problema; quando `Workflow.workbench` existe, o `-W` da linha de comando é ignorado
-    e prevalece o do workflow.
+!!! warning "montar o caminho do workbench à mão falha em silêncio"
+    O local padrão de `Runtime(workbench=True)` é `<run_dir>/workbench`, enquanto o de `Workbench(ws)` é
+    `<ws>/.flower` — **não são o mesmo diretório**. Quando o workflow é chamado pela CLI, ele não enxerga `run_dir`; montar o caminho à mão
+    só o leva para outro lugar, e então o brief é escrito no diretório A enquanto o índice injetado varre o diretório B, **e não dá erro**.
+    Criar um objeto e compartilhá-lo dos dois lados elimina o problema; quando `Workflow.workbench` existe, o `-W` da linha de comando é ignorado
+    e ele prevalece.
 
-### `continuous=True`: rodar de novo no mesmo caminho {#continuoustrue同一个路径再跑一次}
+### `continuous=True`: rodar o mesmo caminho outra vez {#continuoustrue同一个路径再跑一次}
 
-As três formas acima falam de passo a passo **dentro de uma run**. Entre processos, o eixo é outro:
+As três formas acima falam de step a step **dentro de um único run**. Entre processos é outro eixo:
 
 ```python
-Workflow([...], continuous=True)     # valor padrão
+Workflow([...], continuous=True)     # 默认值
 ```
 
-Rodando de novo no mesmo workspace, cada passo continua falando na mesma sessão da vez anterior — via o mapeamento
-«nome do passo → session_id» em `<run_dir>/lineage.json`. No carregamento, cada registro passa por `runtime.has_session()` para verificar se a sessão ainda está no banco,
-e só é usada se estiver viva: o arquivo de linhagem pode sobreviver ao `sessions.db`, e dar resume em uma sessão inexistente só explode depois que o subprocesso sobe.
+Ao rodar de novo no mesmo workspace, cada step continua a session da vez anterior — via o mapeamento
+«nome do step → session_id» em `<run_dir>/lineage.json`. Ao carregar, cada registro passa por `runtime.has_session()` para verificar se a session ainda existe na base,
+e só é usada se estiver viva: o arquivo de linhagem pode sobreviver ao `sessions.db`, e dar resume numa session inexistente só estoura depois que o subprocesso sobe.
 
 Três consequências:
 
-- **`resume_from=None` não significa "sessão totalmente nova".** Na primeira run sim; na segunda, não. Para que seja sempre sessão nova,
+- **`resume_from=None` não significa "session totalmente nova".** Na primeira execução sim; na segunda, não. Para ter sempre session nova,
   escreva explicitamente `Workflow(..., continuous=False)`.
-- **Na [continuidade](../reference/glossary.md#接续), o contexto cresce sem parar.** Se quiser dizer outra coisa na continuação, use
+- **Na [continuidade](../reference/glossary.md#接续), o contexto só cresce.** Se quiser dizer outra coisa na continuidade, use
   `Step.resume_prompt` — o que já está no contexto do outro lado não deve ser reenviado.
-- Passos com `resume_from` explícito não são afetados; ele tem prioridade.
+- Steps com `resume_from` explícito não são afetados; ele tem prioridade.
 
-!!! warning "O nome do passo é a chave entre processos"
-    Renomear um passo equivale a cortar a linhagem daquele passo: na próxima run não há continuidade, **e nada acusa erro**. Nomes de retry com sufixo `#retry1` /
-    `#round2` **não entram na linhagem** (o que se registra é sempre o nome original), e essa é uma das formas de implementar "o judge é sempre uma sessão nova".
+!!! warning "o nome do step é a chave entre processos"
+    Mudar o nome de um step equivale a cortar a linhagem daquele step: na próxima execução ele não continua mais, e **não dá erro**. Os nomes de retry com sufixo `#retry1` /
+    `#round2` **não entram na linhagem** (o que se registra é sempre o nome original); essa é uma das formas de garantir que "o judge é sempre uma session nova".
 
-O projeto completo e o `--new` estão em [Continuidade](continuity.md).
+O design completo e `--new` estão em [Continuidade](continuity.md).
 
 ## Quando não usar {#什么时候不该用它}
 
-- **Um único agent e nenhum verdict necessário** — não envolva em `Workflow`. Chame `await rt.run(spec, "…")` direto,
-  ou use a linha de comando `flower once "读一眼这个仓库"`.
-- **O formato é exatamente "esclarecer requisito → definir objetivo → executar"** — use o
+- **Só um agent, sem necessidade de verdict** — não embrulhe em `Workflow`. Chame `await rt.run(spec, "…")` direto,
+  ou na linha de comando `flower once "读一眼这个仓库"`.
+- **O formato é exatamente "esclarecer requisito → definir objetivo → trabalhar"** — use o
   [`starter_flow()`](https://github.com/ChenyuHeee/flower/blob/main/flower/workflow/starter.py) pronto,
-  sem escrever nada:
+  sem escrever o seu:
 
     ```python
     from flower import starter_flow
@@ -286,18 +286,18 @@ O projeto completo e o `--new` estão em [Continuidade](continuity.md).
                       rounds=3, timeout_s=1800.0, isolate=False)
     ```
 
-    São **três passos**: `确认需求` → `设定目标` → `干活` (com loop de verdict; o passo de verdict se chama `干活·判定#N`).
-    Com `goal=False` não há o segundo passo nem o loop de verdict; com `clarify_only=True` só resta o primeiro passo.
-    Ele já traz seu próprio `HumanChannel` e `Workbench`, pendurados no workflow, então
-    `Runtime(workbench=wf.workbench)` é usar direto — não monte outro.
+    São **três steps**: `确认需求` → `设定目标` → `干活` (com loop de verdict; o step de verdict se chama `干活·判定#N`).
+    Com `goal=False` não há o segundo step nem o loop de verdict; com `clarify_only=True` fica só o primeiro step.
+    Ele já traz `HumanChannel` e `Workbench` pendurados no workflow, então
+    `Runtime(workbench=wf.workbench)` é usado direto — não monte outro.
 
-    Sem escrever código também funciona: entrar no diretório do projeto e rodar `flower "帮我做一个 X"` executa exatamente isso.
-    **Ele não é "o projeto de workflow recomendado"**, é só o que permite rodar com zero configuração.
+    Também dá para não escrever código: entre no diretório do projeto e rode `flower "帮我做一个 X"`, que é exatamente isso.
+    **Ele não é "o design de workflow recomendado"**, é só o que permite rodar com zero configuração.
 
-- **Passos cortados mais finos que "um objetivo aceitável"** — prejuízo líquido. Cada passo abre uma sessão nova,
-  e uma sessão nova tem piso de partida (no coordinator, medido em cerca de 34k de contexto), que não dilui.
-- **Querer voltar a uma mensagem específica depois do fato** — por `Workflow` não dá, ele nunca passa `resume_at`.
-  Chame direto `Runtime.run(spec, "从这里重来", resume=sid, resume_at=uuid)`.
+- **Steps cortados mais fino que "um objetivo aceitável"** — prejuízo líquido. Cada step abre uma session nova,
+  e uma session nova tem um piso de inicialização (medido em cerca de 34k de contexto para o coordenador) que não se dilui.
+- **Querer voltar a uma mensagem específica depois do fato** — por `Workflow` não dá; ele nunca passa `resume_at`.
+  Chame `Runtime.run(spec, "从这里重来", resume=sid, resume_at=uuid)` diretamente.
 
 Como escolher o papel (`coordinator` / `worker` / `clarify` / `judge` / `oracle`) e a semântica campo a campo de `Step` e `Workflow`
 estão na [API Python](../reference/api.md); os termos, no [Glossário](../reference/glossary.md).

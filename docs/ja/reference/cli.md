@@ -1,373 +1,346 @@
-# コマンドラインリファレンス
+# CLI reference
 
-`flower` はインストールしても実行ファイルが 1 つあるだけで、サブコマンドは 4 個、フラグは 23 個。
-このページではそれを全部並べる。各フラグの型、デフォルト値、正確な意味に加えて、実行途中でどう割り込むか、
-初回起動時に何を訊かれるか、終了コードは何番か、あなたのディレクトリにどんなファイルを置くか。
-このページを読み終えたらソースを開く必要はない。
+Once installed, `flower` is a single executable with 4 subcommands and 23 flags. This page lists them all: the type, default value, and exact semantics of every flag, plus how to talk to it mid-run, what it asks on first launch, what the exit codes are, and which files it puts in your directory. After reading this page you shouldn't need to open the source.
 
-ソース:[`flower/cli.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/cli.py)。
+Source: [`flower/cli.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/cli.py).
 
-| サブコマンド | 何をするか | 位置引数 | 専用フラグ |
+| Subcommand | What it does | Positional args | Own flags |
 |---|---|---|---|
-| `go` | 一気通貫:要件を訊く → 目標を立てる → 人を出して働かせる → 毎ラウンド判定。サブコマンドを書かないときのデフォルト | `ask`(任意) | 11 個 |
-| `run` | 自分で書いた[ワークフロー](glossary.md#流程)を走らせる | `target`(必須) | 0 個 |
-| `once` | 単一 agent を 1 回走らせる。ワークフローも判定もなし | `prompt`(必須) | 6 個 |
-| `setup` | 認証情報を設定し、`~/.config/flower/.env` に書く | なし | 0 個 |
+| `go` | The whole chain: clarify the request → set goals → dispatch workers → judge each round. The default when no subcommand is written | `ask` (optional) | 11 |
+| `run` | Run a [workflow](glossary.md#流程) you wrote yourself | `target` (required) | 0 |
+| `once` | Run a single agent once — no workflow, no verdict | `prompt` (required) | 6 |
+| `setup` | Configure credentials, written to `~/.config/flower/.env` | none | 0 |
 
-フラグ総数 23 = グローバル 5 個 + `go` 専用 11 個 + `once` 専用 6 個 + `-h/--help`。`run` と `setup`
-には自分のフラグがない。
+Total flags 23 = 5 global + 11 specific to `go` + 6 specific to `once` + `-h/--help`. `run` and `setup` have no flags of their own.
 
 ---
 
-## 呼び出しの形 {#调用形式}
+## Invocation forms {#调用形式}
 
-`flower` のすべての argv はまず `_with_default_cmd()` を通ってデフォルトサブコマンドが補われ、それから argparse に渡る
-(`cli.py:1253-1255`)。だから `flower "Xを作って"` が走る —— これは
-`flower go "Xを作って"` に書き換えられている。
+All of `flower`'s argv first passes through `_with_default_cmd()` to fill in the default subcommand, then goes to argparse (`cli.py:1437-1439`). That's why `flower "帮我做一个 X"` works — it gets rewritten into `flower go "帮我做一个 X"`.
 
-デフォルトサブコマンドを補うルール(`cli.py:761-797`):
+The rules for filling in the default subcommand (`cli.py:940-976`):
 
-1. グローバルフラグの集合は**メイン parser 自身から導出される**。ハードコードされたリストではない。`nargs == 0` のものは純粋なフラグ、
-   それ以外は値を取るフラグとみなす。
-2. 左から右へ走査し、グローバルフラグを飛ばす。値を取るものは値ごと飛ばす。`--workspace=/tmp` のような `=` 記法も認識する。
-3. 最初にグローバルフラグでない token で止まる。それが `go`、`run`、`once` のいずれかならそのまま argparse に渡す。
-   **そうでなければその前に `go` を挿入する**。すると、それが `go` の要求本文になる。
-4. 走査し終えても位置引数に出会わなかった(argv が空、あるいはグローバルフラグしかない)→ 末尾に `go` を足し、対話入力に入る。
-5. 例外:argv に `-h` か `--help` が含まれるときはそのまま返し、argparse にヘルプを出させる。
+1. The set of global flags is **derived from the main parser itself**, not a hardcoded list. Those with `nargs == 0` count as pure flags; the rest count as value-taking flags.
+2. Scan left to right, skipping global flags. Value-taking ones skip their value too, and the `=` form such as `--workspace=/tmp` is recognized as well.
+3. Stop at the first token that isn't a global flag. If it is one of `go`, `run`, `once`, hand it to argparse as-is; **otherwise insert a `go` before it**, so it becomes the body of `go`'s request.
+4. If the scan finishes without hitting a positional (empty argv, or only global flags) → append `go` at the end, and enter interactive input.
+5. Exception: when argv contains `-h` or `--help`, return it as-is and let argparse print help.
 
-判定に使う定数は `_CMDS = ("go", "run", "once")`(`cli.py:758`)—— **`setup` はここに入っていない**。
-その結末は [`setup`](#setup) を見よ。
+The constant used for the decision is `_CMDS = ("go", "run", "once")` (`cli.py:937`) — **`setup` is not in it**; see [`setup`](#setup) for the consequences.
 
-### 実際の書き換え結果 {#实际的改写结果}
+### What the rewriting actually produces {#实际的改写结果}
 
-| 打ったもの | 実際にパースされる形 | 効果 |
+| What you typed | What it actually parses into | Effect |
 |---|---|---|
-| `flower` | `["go"]` | 対話で「何をしますか?」と訊く |
-| `flower -v` | `["-v", "go"]` | 同上、verbose 付き |
-| `flower "帮我做一个 X"` | `["go", "帮我做一个 X"]` | そのまま走り出す |
-| `flower -w /tmp "做 X"` | `["-w", "/tmp", "go", "做 X"]` | グローバルフラグは前に書ける |
-| `flower --workspace=/tmp "做 X"` | `["--workspace=/tmp", "go", "做 X"]` | `=` 形式も認識する |
-| `flower "做 X" --timeout 0` | `["go", "做 X", "--timeout", "0"]` | サブコマンドのフラグは要求の後ろに書ける |
-| `flower --timeout 0 "做 X"` | `["go", "--timeout", "0", "做 X"]` | 前に書いてもよい |
-| `flower --new` | `["go", "--new"]` | フラグだけで要求なし → 対話入力 |
-| `flower once "hi"` | `["once", "hi"]` | そのまま |
-| `flower run flows:main` | `["run", "flows:main"]` | そのまま |
-| `flower run` | `["run"]` | argparse が `target` 欠如を報告。要求としては**扱われない** |
-| `flower go run` | `["go", "run"]` | 明示的な曖昧性解消:要求本文が `run` |
-| `flower setup` | `["go", "setup"]` | 走るのは `go`、要求は文字列 `setup` になる。[`setup`](#setup) 参照 |
-| `flower --help` | そのまま | argparse がヘルプを出す |
+| `flower` | `["go"]` | Interactively asks "要做什么?" |
+| `flower -v` | `["-v", "go"]` | Same, with verbose |
+| `flower "帮我做一个 X"` | `["go", "帮我做一个 X"]` | Starts right away |
+| `flower -w /tmp "做 X"` | `["-w", "/tmp", "go", "做 X"]` | Global flags may go in front |
+| `flower --workspace=/tmp "做 X"` | `["--workspace=/tmp", "go", "做 X"]` | The `=` form is recognized too |
+| `flower "做 X" --timeout 0` | `["go", "做 X", "--timeout", "0"]` | Subcommand flags may go after the request |
+| `flower --timeout 0 "做 X"` | `["go", "--timeout", "0", "做 X"]` | Or in front |
+| `flower --new` | `["go", "--new"]` | Flag only, no request → interactive input |
+| `flower once "hi"` | `["once", "hi"]` | As-is |
+| `flower run flows:main` | `["run", "flows:main"]` | As-is |
+| `flower run` | `["run"]` | argparse reports missing `target`; it will **not** be treated as a request |
+| `flower go run` | `["go", "run"]` | Explicit disambiguation: the request body is literally `run` |
+| `flower setup` | `["go", "setup"]` | Runs `go`, with the request becoming the string `setup`; see [`setup`](#setup) |
+| `flower --help` | As-is | argparse prints help |
 
-`run` と `once` というこの 2 語は**そのままでは要求本文にできない**。これは意図的に残した曖昧性だ(`cli.py:770-771`)。
-要求にしたければ `flower go run` と書く。
+The two words `run` and `once` **cannot** be used directly as a request body; this ambiguity is deliberately preserved (`cli.py:949-950`). To use them as a request, write `flower go run`.
 
-### 使える 6 通りの書き方 {#六种能用的写法}
+### Six usable forms {#六种能用的写法}
 
 ```bash
-flower                                    # 1. 素で走らせる:対話で「何をしますか?」または「前回の続き?」
-flower "帮我做一个 X"                       # 2. 位置引数で要求を渡す
-echo "帮我做一个 X" | flower --timeout 0    # 3. パイプで stdin に流す
-flower once "读一眼这个仓库"                 # 4. 単一 agent
-flower run flows.py:main                  # 5. 自作ワークフローを走らせる
-flower go setup                           # 6. 明示的な go、setup を要求本文として扱う
+flower                                    # 1. 裸跑:交互问“要做什么?”或“接着上次?”
+flower "帮我做一个 X"                       # 2. 位置参数给诉求
+echo "帮我做一个 X" | flower --timeout 0    # 3. 管道喂 stdin
+flower once "读一眼这个仓库"                 # 4. 单 agent
+flower run flows.py:main                  # 5. 跑自定义流程
+flower go setup                           # 6. 显式 go,把 setup 当诉求正文
 ```
 
-モジュール形式 `python -m flower.cli` は `flower` と等価(`cli.py:1263-1264`)。
-コンテナラッパー `docker/flowerbox` の引数は `flower` と完全に同じ。
+The module form `python -m flower.cli` is equivalent to `flower` (`cli.py:1451-1452`). The container wrapper `docker/flowerbox` takes exactly the same arguments as `flower`.
 
-### パイプで stdin に流す {#管道喂-stdin}
+### Feeding stdin through a pipe {#管道喂-stdin}
 
-`ask_for_prompt()` は `sys.stdin.isatty()` が偽のとき**プロンプトヘッダを出さず**、そのまま `input("> ")` で 1 行読む
-(`cli.py:814-822`)。だから `echo "..." | flower` が動く。
+When `sys.stdin.isatty()` is false, `ask_for_prompt()` **does not print the prompt header** and directly does `input("> ")` to read one line (`cli.py:993-1001`). So `echo "..." | flower` works.
 
-ただしその後に警告が 1 行出て、stdin スレッドはすぐ EOF を読んで終了する:
+But a warning line is printed afterwards, and the stdin thread immediately reads EOF and exits:
 
 ```text
 ! 标准输入不是终端,没人能回答提问。想让它自己判断就加 --timeout 0
 ```
 
-パイプで走らせるなら `--timeout 0` を付けるべきだ。質問は 30 分待つふりをやめ、即座に空振りに終わり、
-agent は自分で判断して前提を要件確認書の「未知と前提」の節に書き込む。
+A piped run should be paired with `--timeout 0`: questions no longer pretend to wait 30 minutes, they fail immediately, and the agent decides for itself and writes the assumptions into the "未知与假设" section of the brief.
 
 ---
 
-## サブコマンド {#子命令}
+## Subcommands {#子命令}
 
 ### `go` {#go}
 
-help テキスト:`一键跑:问清需求 → 派人干活(不写子命令时的默认)`(`cli.py:1096-1128`)。
+Help text: `一键跑:问清需求 → 派人干活(不写子命令时的默认)` (`cli.py:1275-1307`).
 
-位置引数 `ask`、`nargs="?"` —— 渡さなければ対話入力に入る。これが最もよく使う入口で、`flower "做 X"` はここを通る。
+Positional argument `ask`, `nargs="?"` — omit it and you get interactive input. This is the most common entry point; `flower "做 X"` goes through it.
 
-やること(`cli.py:1011-1042`):
+What it does (`cli.py:1190-1221`):
 
-1. `ensure_credentials()` —— 認証情報を確認し、実際に API プローブを 1 回打つ。[初回起動時の設定フロー](#首次运行的配置流程)を見よ。
-2. [ウェイク](glossary.md#唤醒)検出:このディレクトリが使われたことがあるかを読み取り専用で見るだけ。1 バイトも書かない。
-3. `ask` が渡されていなければプロンプトで 1 回訊く。`/new` の入力は `--new` と等価で、その後**もう 1 回**要求を訊く。
-4. [継続](glossary.md#接续)ならウェイクバナーを 1 行出す。
-5. 3 ステップの[ワークフロー](glossary.md#流程)を組む:`确认需求` → `设定目标` → `干活`。
-   各作業ラウンドの後ろに `干活·判定#N` が付く。`--clarify-only` は最初のステップだけ残す。
-6. 走り出す。
+1. `ensure_credentials()` — check credentials, and actually fire one API probe; see [First-run configuration flow](#首次运行的配置流程).
+2. [Wake](glossary.md#唤醒) detection: read-only glance at whether this directory has been used, without writing a single byte.
+3. If no `ask` was given, print a prompt and ask; typing `/new` is equivalent to `--new`, and then it **asks again** for the request.
+4. If this is a [continuity](glossary.md#接续), print a one-line wake banner.
+5. Build a three-step [workflow](glossary.md#流程): `确认需求` → `设定目标` → `干活`, with a `干活·判定#N` following each work round. `--clarify-only` keeps only the first step.
+6. Start running.
 
-ウェイクバナーはこんな見た目(パス中のホームディレクトリは `~` に置き換わる):
+The wake banner looks like this (the home directory in the path is replaced by `~`):
 
 ```text
 <- 在 ~/proj 接上上次  需求已确认 · 目标 7 条 · 干活上下文 71.4K · 第 3 次唤醒
 ```
 
-`需求已确认` は常にある。`目标 N 条` は判定リストがあるときだけ出る。`干活上下文 X` は
-`sessions.db` からその[セッション](glossary.md#会话)の最終ラウンドのコンテキストを引けることが条件で、引けなければ表示されない。
+`需求已确认` is always present; `目标 N 条` only appears when there is a verdict checklist; `干活上下文 X` requires that the last round's context for that [session](glossary.md#会话) can be looked up in `sessions.db` — if not found, it isn't shown.
 
-!!! warning "`-W` と `-T` は `go` 経路では黙って上書きされる"
-    この 2 つのグローバルフラグは `go` に書いても効かない。エラーも出ないし、何も知らせない:
+!!! warning "`-W` and `-T` are silently overridden on the `go` path"
+    Writing these two global flags on `go` has no effect — no error, no notice:
 
-    - `-W/--workbench`:`go` が組むワークフローは常に[ワークベンチ](glossary.md#工作台)を自前で持っており、
-      コードは `getattr(wf, "workbench", None) or args.workbench`(`cli.py:859`)を取る ——
-      ワークフロー自前のものが常に優先される。よってワークベンチは常に `<workspace>/.flower/`
-      (`--isolate` 時は `<workspace>.parent/.flower-<名前>/`)であり、`-W` では変えられない。
-    - `-T/--trim`:`go` は `_drive(wf, args, trim=not args.no_trim)`(`cli.py:1042`)を通り、
-      `--no-trim` の反転値をそのまま使う。**`args.trim` は一切見ない**。つまり `go` 経路では
-      [トリム](glossary.md#裁剪)はデフォルトでオンであり、切るには `--no-trim` しかない。
+    - `-W/--workbench`: the workflow `go` builds always comes with its own [workbench](glossary.md#工作台), and the code takes `getattr(wf, "workbench", None) or args.workbench` (`cli.py:1038`) — the workflow's own always wins. So the workbench is always `<workspace>/.flower/` (or `<workspace>.parent/.flower-<name>/` under `--isolate`), and `-W` cannot change it.
+    - `-T/--trim`: `go` goes through `_drive(wf, args, trim=not args.no_trim)` (`cli.py:1221`), directly using the inverse of `--no-trim` and **never looking at `args.trim` at all**. In other words, on the `go` path [trim](glossary.md#裁剪) is on by default, and the only way to turn it off is `--no-trim`.
 
-    この 2 つのフラグは `run`(ワークフローがワークベンチを自前で持たないとき)と `once` でのみ有効。
+    These two flags only take effect on `run` (when the workflow doesn't bring its own workbench) and `once`.
 
-#### `go` の 11 個のフラグ {#go-的-11-个开关}
+#### The 11 flags of `go` {#go-的-11-个开关}
 
-| フラグ | 型 | デフォルト | 説明 |
+| Flag | Type | Default | Description |
 |---|---|---|---|
-| `--asks N` | int | `-1` | 質問回数の枠。`-1` または任意の負数 = **無制限**。`0` = 質問禁止、最初の質問で即 `over_budget`。`N` = ハードな枠。超過時はツールが直接拒否し、実行はブロックしない |
-| `--rounds N` | int | `3` | 作業の**総ラウンド数**の上限。追加ラウンド数ではない。各ラウンドの終わりに独立した[ジャッジ](glossary.md#判定者)が「終わったか」を判定し、達していなければ差し戻して同じセッションを続けて走らせる |
-| `--no-goal` | フラグ | `False` | [ゴールガード](glossary.md#目标看守)を切る:`目标.md` を生成せず、[判定](glossary.md#判定)もせず、作業が終わったら完了とみなす |
-| `--judge-can-run` | フラグ | `False` | ジャッジがコマンドを実行できるようにする。判定は厳しくなるが、代償としてジャッジもワークスペースを変更できるようになる |
-| `--timeout 秒` | float | `1800.0` | 人の回答をどれだけ待つか。`0` または負数 = 全自動、すべての質問が**即座に**空振りに終わり、待つふりをしない。意味は[タイムアウト](#超时)を見よ |
-| `--isolate` | フラグ | `False` | 各 [subagent](glossary.md#subagent) に git worktree を 1 つずつ割り当てる、つまり[隔離](glossary.md#隔离)。**workspace が git リポジトリであることを要求する**。そうでなければ終了コード 1。同時にワークベンチをリポジトリ外へ移す |
-| `--window N` | int | なし(モデル名から推定) | モデルのコンテキストウィンドウ。渡さないとき:モデル名に `1m` を含むか `haiku` を含まない → 1,000,000。`haiku` を含む → 200,000。`ウィンドウ − 50000` に達したら[ハンドオフ文書](glossary.md#交接书)を書いて[ハンドオフ](glossary.md#换代)する |
-| `--no-handoff` | フラグ | `False` | ハンドオフを切り、SDK 内蔵の[コンパクト](glossary.md#压缩)に戻す |
-| `--new` | フラグ | `False` | 今回は前回の続きにしない。前の区間の `lineage.json` + `需求.md` + `目标.md` を `notes/archive/<YYYYmmdd-HHMMSS>/` へ**移動**し(削除ではない)、最初からやり直す |
-| `--clarify-only` | フラグ | `False` | [事前確認](../guide/clarify.md)だけを行い、その先の作業はしない —— ワークフローには `确认需求` の 1 ステップしか残らない |
-| `--no-trim` | フラグ | `False` | トリムを切る。`go` 経路ではトリムはデフォルトで**オン**であり、これが唯一の切り方 |
+| `--asks N` | int | `-1` | Question quota. `-1` or any negative number = **unlimited**; `0` = no questions allowed, the first question yields `over_budget`; `N` = a hard quota. When over quota the tool simply refuses, without blocking the run |
+| `--rounds N` | int | `3` | Cap on the **total number of rounds** of work, not extra rounds. At the end of each round an independent [judge](glossary.md#判定者) rules on "is it done", and if not it's sent back to continue on the same session |
+| `--no-goal` | flag | `False` | Turn off the [goal guard](glossary.md#目标看守): don't generate `目标.md`, don't produce a [verdict](glossary.md#判定); once the work finishes, it's done |
+| `--judge-can-run` | flag | `False` | Let the judge run commands. The verdict gets harder, at the cost of the judge also being able to modify the workspace |
+| `--timeout SECONDS` | float | `1800.0` | How long to wait for a human answer. `0` or negative = fully automatic, all questions fail **immediately** with no pretense of waiting. See [Timeout](#超时) for semantics |
+| `--isolate` | flag | `False` | Give each [subagent](glossary.md#subagent) its own git worktree, i.e. [isolation](glossary.md#隔离). **Requires the workspace to be a git repo**, otherwise exit code 1. Also moves the workbench outside the repo |
+| `--window N` | int | none (inferred from model name) | Model context window. When not given: model name containing `1m` or not containing `haiku` → 1,000,000; containing `haiku` → 200,000. At `window − 50000` it writes a [handoff document](glossary.md#交接书) and does a [handoff](glossary.md#换代) |
+| `--no-handoff` | flag | `False` | Turn off handoff, falling back to the SDK's own [compact](glossary.md#压缩) |
+| `--new` | flag | `False` | Don't continue from last time. **Move** (not delete) the previous segment's `lineage.json` + `需求.md` + `目标.md` into `notes/archive/<YYYYmmdd-HHMMSS>/`, then start over |
+| `--clarify-only` | flag | `False` | Only do the [clarify](../guide/clarify.md), no work afterwards — only the `确认需求` step remains in the workflow |
+| `--no-trim` | flag | `False` | Turn off trim. On the `go` path trim is **on** by default, and this is the only way to turn it off |
 
-値の端の挙動。いずれもエラーも通知も出ない:
+Edge cases in values — none of them error, none of them warn:
 
-- `--rounds 0` と `--rounds 1` は等価 —— 内部は `retries = max(0, rounds - 1)` で、どちらも 1 ラウンド走る。
-- `--asks` は任意の負数が無制限を意味する。`-1` だけではない。
-- `--timeout` は任意の負数が `0`、つまり全自動と同じ。
-- `--window 0` は**黙って無視される**(`0` は falsy で、そもそも下に渡らない)。モデル名から推定されるデフォルト値に戻る。
-  負数は下に渡され、その後 `10000` に丸められる。
-- `--clarify-only` は既に確認済みのディレクトリでは**何もしない** —— `确认需求` のステップは揃った `需求.md` を見ると
-  スキップし、ワークフローにはこのステップしかないので、何も起きない(ウェイク回数 +1 を除いて)。確認をやり直すには `--new` を併用する。
-- `go` の `--help` の末尾には「全局开关(-v/-w/-r/-T)见 `flower --help`」と書いてあるが、この行は**`-W` を落としている**。
+- `--rounds 0` and `--rounds 1` are equivalent — internally it's `retries = max(0, rounds - 1)`, both run 1 round.
+- Any negative value for `--asks` means unlimited, not just `-1`.
+- Any negative value for `--timeout` equals `0`, i.e. fully automatic.
+- `--window 0` is **silently ignored** (`0` is falsy and simply isn't passed down), falling back to the default inferred from the model name. Negative values do get passed down, and are then floored to `10000`.
+- `--clarify-only` is a **no-op** on an already-clarified directory — the `确认需求` step sees a complete `需求.md` and skips, and since that's the only step in the workflow, nothing happens (other than wake count +1). To re-clarify you need `--new`.
+- The end of `go`'s `--help` says "全局开关(-v/-w/-r/-T)见 `flower --help`" — this line **omits `-W`**.
 
 ### `run` {#run}
 
-help テキスト:`运行一个 workflow`(`cli.py:1130-1133`)。
+Help text: `运行一个 workflow` (`cli.py:1309-1312`).
 
-位置引数 `target`、書き方は `モジュール:属性`。2 つの形式に対応する(`cli.py:831-852`):
+Positional argument `target`, written as `module:attribute`. Both forms are supported (`cli.py:1010-1031`):
 
 ```bash
-flower run mypkg.flows:build     # モジュール名で import
-flower run flows.py:build        # ファイルパス。親ディレクトリを sys.path に入れてからファイル名で import
+flower run mypkg.flows:build     # 按模块名 import
+flower run flows.py:build        # 文件路径;会把父目录塞进 sys.path 再按文件名 import
 ```
 
-取得した属性が呼び出し可能なら 1 回呼び、戻り値を[ワークフロー](glossary.md#流程)として扱う。既にワークフローオブジェクトならそのまま使う。
+If the attribute obtained is callable, it is called once and the return value is used as the [workflow](glossary.md#流程); if it is already a workflow object, it is used directly.
 
-**`run` には自分のフラグが一切ない**。グローバルフラグ 5 個だけだ。したがって `--window`、`--no-handoff` などはこの経路では
-一律デフォルト値になる(コードは `getattr` でフォールバックしている、`cli.py:862-864`)。それらを調整したいなら、引数を自分のワークフローに書き込むこと。
+**`run` has no flags of its own**, only the 5 global flags. So on this path things like `--window` and `--no-handoff` all take their default values (the code falls back with `getattr`, `cli.py:1041-1043`). To adjust them, write the parameters into your own workflow.
 
 ### `once` {#once}
 
-help テキスト:`跑一次单 agent`(`cli.py:1135-1145`)。位置引数 `prompt` は必須。
+Help text: `跑一次单 agent` (`cli.py:1314-1324`). The positional argument `prompt` is required.
 
-`AgentSpec(name="ad-hoc", …)` を組んで直接走らせ、**`_drive` を通らない**。よって `once` には次のものがない:
+It constructs an `AgentSpec(name="ad-hoc", …)` and runs it directly, **without going through `_drive`**. So on `once` there is no:
 
-- Ctrl-C での割り込みと発言(押したら普通の `KeyboardInterrupt`)
-- stdin 応答スレッド、画面最下部に常駐する入力プロンプト
-- オラクル問答
-- SIGHUP / SIGTERM 時の救出記録
-- 締めの `总花费 … · 清单 …` の行
-- 認証失敗後の自動再設定ガイド
+- Ctrl-C interrupt-and-speak (pressing it is just a plain `KeyboardInterrupt`)
+- stdin answering thread, or the input prompt pinned to the bottom
+- oracle Q&A
+- SIGHUP / SIGTERM rescue accounting
+- closing line `总花费 … · 清单 …`
+- automatic reconfiguration guidance after credential failure
 
-[ランマニフェスト](glossary.md#运行清单)内でのこのステップの名前は固定で `ad-hoc`。
+In the [run manifest](glossary.md#运行清单), the name of this step is fixed as `ad-hoc`.
 
-| フラグ | 型 | デフォルト | 説明 |
+| Flag | Type | Default | Description |
 |---|---|---|---|
-| `-i`, `--instructions` | str | 空 | ドメイン指示。Claude Code ネイティブのシステムプロンプトの**後ろ**に[追記](glossary.md#叠加)され、置き換えはしない |
-| `-t`, `--tools` | str | `Read,Glob,Grep` | カンマ区切りのツールホワイトリスト。渡さなければこの読み取り専用 3 ツール |
-| `-p`, `--permission-mode` | str | `default` | 値は `default`、`acceptEdits`、`plan`、`bypassPermissions` のいずれかのみ。他の値を渡すと argparse がエラーで終了コード 2 |
-| `-b`, `--budget` | float | 上限なし | ドル建ての[予算](glossary.md#预算)上限。超えたら止まる |
-| `--resume SESSION_ID` | str | なし | 既存セッションの続きを走らせる |
-| `--fork` | フラグ | `False` | 続行ではなく分岐する。`--resume` と組み合わせて使う |
+| `-i`, `--instructions` | str | empty | Domain instructions, [appended](glossary.md#叠加) **after** Claude Code's native system prompt, not replacing it |
+| `-t`, `--tools` | str | `Read,Glob,Grep` | Comma-separated tool allowlist. When not given, it's these three read-only tools |
+| `-p`, `--permission-mode` | str | `default` | The value must be one of `default`, `acceptEdits`, `plan`, `bypassPermissions`; anything else makes argparse error out with exit code 2 |
+| `-b`, `--budget` | float | no cap | Dollar [budget](glossary.md#预算) cap; stops when exceeded |
+| `--resume SESSION_ID` | str | none | Continue an existing session |
+| `--fork` | flag | `False` | Fork instead of continue; used together with `--resume` |
 
-!!! warning "`once` が表示する所要時間と累計コストは常に 0"
-    `once` はイベントを受け取るたびにレンダラのインスタンスを新規生成しており(`cli.py:579-581`、`cli.py:1060`)、
-    計時の起点と累計コストはインスタンス上に保持される(`cli.py:393-394`)。したがって:
+!!! warning "The elapsed time and cumulative cost shown by `once` are always 0"
+    `once` creates a new renderer instance for every event it receives (`cli.py:688-690`, `cli.py:1239`), while the timing origin and cumulative cost live on the instance (`cli.py:500-501`). Therefore:
 
-    - 締めの行の `用时` は常に `0:00`
-    - ステータス行の `累计 $0.00` は常に 0、`上下文` も決して積み上がらない
+    - The `用时` on the closing line is always `0:00`
+    - The `累计 $0.00` in the status line is always 0, and `上下文` never accumulates either
 
-    単一ステップの実際のコストは `runs/manifest.json` の `cost_usd` フィールドで確認すること。`go` と `run` の経路は
-    同一のレンダラインスタンスを保持するので、この問題はない。
+    The real cost of the single step must be read from the `cost_usd` field in `runs/manifest.json`. The `go` and `run` paths hold the same renderer instance and don't have this problem.
 
 ### `setup` {#setup}
 
-help テキスト:`配置凭证(API key / 网关 / 模型),写到 ~/.config/flower/.env`(`cli.py:1147-1149`)。
-フラグは一切ない。
+Help text: `配置凭证(API key / 网关 / 模型),写到 ~/.config/flower/.env` (`cli.py:1326-1328`). It has no flags.
 
-やること:`.env` を読む → 設定済みかどうか判定する → 対話設定フローを起動する。`reason` は `重新配置。` または
-`还没配过凭证。`。画面の内容は[初回起動時の設定フロー](#首次运行的配置流程)を見よ。
+What it does: read `.env` → determine whether it's been configured → launch the interactive configuration flow, with `reason` being `重新配置。` or `还没配过凭证。`. For the screen contents see [First-run configuration flow](#首次运行的配置流程).
 
-!!! warning "`flower setup` は現在このサブコマンドに到達できない"
-    デフォルトサブコマンド判定の定数 `_CMDS = ("go", "run", "once")`(`cli.py:758`)が**`"setup"` を落としている**が、
-    parser には確かに `setup` が登録されている(`cli.py:1147`)。その結果 `flower setup` は
-    `flower go setup` に書き換えられる —— **走るのは完全な `go` フローで、要求本文は文字列 `setup`** だ。まず認証を検証し、
-    次に要件を訊き、そして本当に人を出して働かせ始める。グローバルフラグを足しても同じで、`flower -v setup` → `["-v", "go", "setup"]`。
+!!! warning "`flower setup` currently cannot reach this subcommand"
+    The constant used to decide the default subcommand, `_CMDS = ("go", "run", "once")` (`cli.py:937`), **omits `"setup"`**, even though `setup` is indeed registered in the parser (`cli.py:1326`). So `flower setup` gets rewritten into `flower go setup` — **it runs the full `go` workflow with the request body being the string `setup`**: first verify credentials, then clarify the request, then actually start dispatching workers. Adding global flags doesn't help either: `flower -v setup` → `["-v", "go", "setup"]`.
 
-    **`setup` サブコマンドに到達できる argv は一つも存在しない。**
+    **No argv whatsoever can reach the `setup` subcommand.**
 
-    認証情報を設定するには、今はこの 2 つの道しかない。どちらも同じ対話画面にたどり着く:
+    To configure credentials, there are currently only two routes, both of which reach the same interactive interface:
 
-    - 直接 `flower "何かひとこと要求"` を走らせる。認証未設定なら先に訊いてくる。
-    - あるいは `~/.config/flower/.env` を手書きする。キー名は[書き出されるキー](#写出来的键)を見よ。
+    - Just run `flower "随便一句诉求"`; if credentials haven't been configured it will ask first;
+    - Or hand-write `~/.config/flower/.env`; for the key names see [The keys it writes](#写出来的键).
 
-    巻き添えを食っている文言もいくつかある:認証が拒否されたときに出る ``跑 `flower setup` 重配。``、
-    `.env` の 1 行目のコメント ``由 `flower setup` 写`` —— どれも到達できないこのコマンドを指している。
+    A few pieces of copy are affected too: the ``跑 `flower setup` 重配。`` printed when credentials are rejected, and the comment on the first line of `.env`, ``由 `flower setup` 写``, both point at this unreachable command.
 
 ---
 
-## グローバルフラグ {#全局开关}
+## Global flags {#全局开关}
 
-5 個のグローバルフラグはメイン parser と各サブコマンドの両方に同時に付いている(`cli.py:1071-1087`)。サブコマンド側は
-`argparse.SUPPRESS` を使っており、渡さなければ属性を書かない。だから**サブコマンドの前に書いても後ろに書いても構わない**し、互いに上書きしない。
-副作用として、サブコマンドの `--help` にはこれらが出てこない —— 見るには `flower --help` を走らせる必要がある。
+The 5 global flags are attached to the main parser and to every subcommand at the same time (`cli.py:1250-1266`). The copies on subcommands use `argparse.SUPPRESS`, so when not given they don't write an attribute — which means **they can be written before or after the subcommand**, without overriding each other. The side effect is that they don't appear in a subcommand's `--help` — to see them run `flower --help`.
 
-| フラグ | 型 | デフォルト | 説明 |
+| Flag | Type | Default | Description |
 |---|---|---|---|
-| `-w`, `--workspace` | str | `.` | agent の作業ディレクトリ。`resolve()` で絶対パス化され `mkdir -p` される。[ワークベンチ](glossary.md#工作台) `.flower/` はこの中に作られる |
-| `-r`, `--run-dir` | str | `runs` | [セッションストア](glossary.md#会话存储)とランマニフェストのディレクトリ。**カレント CWD からの相対であり、workspace からの相対ではない** |
-| `-v`, `--verbose` | フラグ | `False` | 出力を増やす。下記参照 |
-| `-W`, `--workbench` | フラグ | `False` | ワークベンチを有効化する。**`go` では無効**で、`run`(ワークフローがワークベンチを自前で持たないとき)と `once` にのみ効く。その場合ワークベンチは `<run_dir>/workbench/` に置かれる |
-| `-T`, `--trim` | フラグ | `False` | resume 時に古い大きなツール結果をファイルポインタに置き換える、つまり[トリム](glossary.md#裁剪)。**`go` では無効**で、その経路は `--no-trim` で逆向きに制御する |
-| `-h`, `--help` | フラグ | — | すべての parser にある。argv に現れたときはデフォルトサブコマンドの書き換えを飛ばし、そのままヘルプを出す |
+| `-w`, `--workspace` | str | `.` | The agent's working directory. It gets `resolve()`d into an absolute path and `mkdir -p`'d. The [workbench](glossary.md#工作台) `.flower/` is created inside it |
+| `-r`, `--run-dir` | str | `runs` | Directory for the [session store](glossary.md#会话存储) and the run manifest. **Relative to the current CWD, not to the workspace** |
+| `-v`, `--verbose` | flag | `False` | Print more; see below |
+| `-W`, `--workbench` | flag | `False` | Enable the workbench. **No effect on `go`**; only takes effect on `run` (when the workflow doesn't bring its own workbench) and `once`, in which case the workbench lands at `<run_dir>/workbench/` |
+| `-T`, `--trim` | flag | `False` | On resume, replace old large tool results with file pointers, i.e. [trim](glossary.md#裁剪). **No effect on `go`**; that path controls it inversely via `--no-trim` |
+| `-h`, `--help` | flag | — | Every parser has it. When it appears in argv, the default-subcommand rewriting is skipped and help is printed directly |
 
-`-r/--run-dir` が CWD 相対だという点は噛みついてくる:`flower -w /other/proj "做 X"` は `runs/` を**コマンドを打ったディレクトリ**に作り、
-`.flower/` は `/other/proj/` の下に作る —— 2 つの状態が別れてしまう。一緒にしたいなら明示的に
-`-r /other/proj/runs` を渡すこと。
+The fact that `-r/--run-dir` is relative to CWD will bite you: `flower -w /other/proj "做 X"` creates `runs/` in **the directory where you typed the command**, while `.flower/` is created under `/other/proj/` — two pieces of state split apart. To keep them together, pass `-r /other/proj/runs` explicitly.
 
-`-v` の help には「显示思考与工具结果」と書いてあるが、[メインスレッド](glossary.md#主线程)の思考は**デフォルトで表示される**。
-`-v` が実際に追加で開くのは:
+The help for `-v` says "显示思考与工具结果", but the [main thread](glossary.md#主线程)'s thinking is **shown by default**. What `-v` actually additionally enables is:
 
-- subagent の本文(デフォルトでは非表示で、そのツール呼び出しだけが出る)
-- 正常なツール結果(デフォルトではエラーのものだけ)
-- `prompt` イベント
-- 起動前に現在有効な認証設定を一度出力する。token はマスクされ先頭 4 文字だけ残る
+- subagent body text (not shown by default, only its tool calls are)
+- normal tool results (by default only failing ones are shown)
+- `prompt` events
+- printing the currently effective credential configuration before startup, with tokens masked to the first 4 characters
 
-最後のものは素の `print()` を通っており、**出力のサニタイズを経ず、折り返しもせず、端末の書き込みロックにも守られない**。並列で複数の `flower` を
-走らせるとこの数行は引き裂かれることがある。
+That last one uses a bare `print()`, **bypassing output sanitization, without wrapping, and unprotected by the terminal write lock**; when running several `flower` processes in parallel these lines may get torn apart.
 
 ---
 
-## 実行中にどう話しかけるか {#运行中怎么和它说话}
+## How to talk to it mid-run {#运行中怎么和它说话}
 
-実行が始まると、端末は**ずっとあなたの入力を読んでいる**。質問を待つ必要はないし、何かキーを押して入力モードに入る必要もない ——
-最後の行は常にタイプできる行だ。
+Once the run has started, the terminal is **continuously reading your input**. You don't need to wait for it to ask, and you don't need to press anything to enter input mode — the last line is always the one you can type on.
 
-### 最下部に常駐する入力プロンプト {#常驻在最下面的输入提示符}
+### The input prompt pinned to the bottom {#常驻在最下面的输入提示符}
 
-`flower-stdin` という daemon スレッドが全期間 stdin を読んでいる(`cli.py:655-755`)。`select` で 0.2 秒ごとにポーリングしており、
-ブロッキング読みではない(こうすれば停止シグナルで起こせる。Windows のような `select` 非対応のストリームではブロッキング読みに退化する)。
+There is a daemon thread `flower-stdin` reading stdin the whole time (`cli.py:764-934`), polling with `select` every 0.2 seconds rather than doing a blocking read (so a stop signal can wake it; on streams that don't support `select`, such as on Windows, it degrades to a blocking read).
 
-**質問があるときだけでなく、ずっと読んでいる。** 理由はこうだ:質問時だけ読む方式だと、作業中の数時間にあなたが打ったものが
-端末バッファに残り、次の質問のときに回答として食われてしまう —— 質問を見る前に、質問が答えられてしまう。
+**It reads all the time, not only when there's a question.** The reason: if it only read while a question is pending, whatever you typed during those hours of work would sit in the terminal buffer and be swallowed as the answer to the next question — the question would be answered before you'd even seen it.
 
-表示については、`_say()` が唯一の出力口で、出力のたびに先にプロンプトを消し、出力後に描き直す(`cli.py:299-305`)。
-だからプロンプトがイベント出力に押し上げられることはない。プロンプトの文言は 2 種類あり、「未回答の質問があるか」で切り替わる:
+On the display side, `_say()` is the only output path; before each output it erases the prompt and redraws it afterwards (`cli.py:309-315`), so the prompt never gets pushed up the screen by event output. **On redraw, even the few characters you typed but haven't hit Enter on are drawn back** — they're kept in `_PROMPT["buf"]` (`cli.py:183-192`). Without this the content wouldn't actually be lost (it's still in the terminal's line buffer, and Enter still sends it), but you couldn't see it, so you'd be unsure and retype it.
 
-| 状態 | 画面の最終行 |
+The prompt has two wordings, switching on whether there's a pending question:
+
+| State | Last line on screen |
 |---|---|
-| 未回答の質問あり | `你的回答 (回车=跳过,让它自己判断) > ` |
-| 未回答の質問なし | `(直接说 = 加需求,下个检查点送达;? 开头 = 顺便问一句,不打扰它干活) > ` |
+| Question pending | `你的回答 (回车=跳过,让它自己判断) > ` |
+| No question pending | `(直接说 = 加需求,下个检查点送达;? 开头 = 顺便问一句,不打扰它干活) > ` |
 
-### 打ったものはどこへ行くか {#你敲的东西去哪了}
+### Character-by-character input mode and keybindings {#逐字符输入}
 
-| 入力 | 未回答の質問があるとき | 未回答の質問がないとき |
+To draw "the half-typed characters" back, flower has to take over input itself. When stdin is a terminal and `termios` can be imported, the terminal is set to `cbreak` **before** the `flower-stdin` thread is started (`cli.py:793-807`) — `cbreak` rather than `raw`, so that Ctrl+C still produces `SIGINT` and the whole [Ctrl-C](#ctrl-c) mechanism still exists. It must be set before the thread starts: doing it inside the thread is a genuine race, and characters typed in the instant before the thread gets CPU would be swallowed by line mode, showing up as "input lost" (reproduced reliably once in three tries in testing, `cli.py:928-934`).
+
+If it can't be set, it falls back to the original whole-line `readline()` (non-terminal, `termios` unavailable, `tcgetattr` failure). Both paths work; line mode just doesn't have the keybindings below (`cli.py:883-899`).
+
+The editing logic lives in `LineEditor` (`cli.py:320-414`) — a pure state machine that never touches the terminal:
+
+| Key | Effect |
+|---|---|
+| Printable characters | Inserted at the cursor. UTF-8 uses an incremental decoder, entering the buffer only once a full character is assembled |
+| Backspace / Ctrl+H | Delete **one character** before the cursor. In line mode the terminal deletes by byte, so a Chinese character takes three presses and leaves garbage; not here |
+| ← / → | Actually move the cursor. The whole escape sequence is consumed, so things like `[A` don't get inserted into the input |
+| Home / End (or `[1~` / `[4~`) | Jump to line start / line end |
+| Delete (`[3~`) | Delete one character forward |
+| Ctrl+A / Ctrl+E | Line start / line end |
+| Ctrl+U | Clear the whole line |
+| Ctrl+D | EOF only when the buffer is empty; ignored when there's content |
+| ↑ / ↓ | **Do nothing.** There is no history, and moving would make people think something was lost (`cli.py:335`) |
+| Other control characters | Ignored |
+
+Enter hands the buffer over and clears it, while moving down a line on screen — what you said stays above (`cli.py:811-827`).
+
+### Where what you typed goes {#你敲的东西去哪了}
+
+| Your input | With a question pending | With no question pending |
 |---|---|---|
-| **空行(そのまま Enter)** | この質問を飛ばし、自分で判断させる | 何もしない |
-| **`?` で始まる** | オラクル問答、下記参照 | 左に同じ |
-| **純粋な数字**で、選択肢の範囲内 | 対応する選択肢に変換して回答する | 通常のテキストとして扱う |
-| その他のテキスト | 質問した agent への回答として送る | インボックスに入り、追加要求として扱われる |
-| EOF(Ctrl-D またはパイプのクローズ) | この質問を回答拒否し、プロンプトを外し、スレッドが終了する | プロンプトを外し、スレッドが終了する |
+| **Empty line (just Enter)** | Skip this question, let it decide for itself | Nothing happens |
+| **Starting with `?`** | Oracle Q&A, see below | Same as left |
+| **Pure digits**, within the option range | Substituted with the corresponding option and answered | Treated as ordinary text |
+| Other text | Sent as the answer to the asking agent | Goes to the inbox as an additional requirement |
+| EOF (Ctrl-D or pipe closed) | Refuse this question, remove the prompt, thread exits | Remove the prompt, thread exits |
 
-インボックスに入るときは受領行が 1 行出る:
+When it goes to the inbox, a receipt line is printed:
 
 ```text
 + 收到 (它下次查收件箱时会看到;已追加进确认书)
 ```
 
-[要件確認書](glossary.md#需求确认书)がなくスピルできない場合、後半は
-`没有确认书可落盘 —— 它可能活不过下一个步骤` に変わる。インボックスは作業中のワーカーを**割り込まない**。
-ワーカーが次に自分からインボックスを見に行ったときに初めて取っていく。同じ文言は `notes/需求.md` にも追記される。スピルしなければステップ境界を越えられない ——
-次のステップは新しいセッションで、読めるのは凍結物だけだ。
+When there is no [brief](glossary.md#需求确认书) to spill to, the second half becomes `没有确认书可落盘 —— 它可能活不过下一个步骤`. The inbox **does not interrupt** the worker currently working; it's picked up only the next time the worker checks the inbox on its own. The same sentence is also appended to `notes/需求.md`; without spilling it wouldn't survive a step boundary — the next step is a new session that only reads frozen artifacts.
 
-### `?` で始まる = オラクル問答 {#旁路问答}
+### Starting with `?` = oracle Q&A {#旁路问答}
 
-`?` で始まる行は走行中の agent には送られず、[オラクル](glossary.md#旁路顾问)に渡される:
+A line starting with `?` is not sent to the running agent, but handed to the [oracle](glossary.md#旁路顾问):
 
 ```text
 ? 现在到哪一步了
 ```
 
-オラクルは**独立した** Runtime を起動し、`run_dir` は `<run_dir>/aside/` になる。だからそのコストとセッション血縁はメインの
-`manifest.json` に混ざらない。役割は読み取り専用で、ツールは `Read`、`Glob`、`Grep` のみ、最大 12 ラウンド、
-コスト上限は **$0.5**。見えるコンテキストは直近 **60** 件のイベント(`thinking` と `prompt` イベントはこのウィンドウに入らない)で、
-各件は 200 文字に切り詰められ、これにワークベンチのパス説明が加わる。
+It starts a **separate** Runtime with `run_dir` at `<run_dir>/aside/`, so its cost and session lineage don't get mixed into the main `manifest.json`. The role is read-only, its tools are only `Read`, `Glob`, `Grep`, at most 12 turns, with a cost cap of **$0.5**. The context it sees is the most recent **60** events (`thinking` and `prompt` events don't enter this window), each truncated to 200 characters, plus a description of the workbench paths.
 
-オラクルは**並行**で走るので、走行中の実行は 1 秒も待たない。回答はこんな見た目:
+It runs **concurrently**; the ongoing run doesn't wait a single second. The answer looks like this:
 
 ```text
 # 旁路
-  <回答本文>
+  <回答正文>
   ($0.0123,没有打扰正在跑的运行)
 ```
 
-失敗時は赤字で `# 旁路问答失败:<型>: <メッセージ>` が 1 行出るが、**メインフローには影響しない**。
-終了時にオラクルの後始末を最大 **120 秒**待ち、待つ前に `(等 N 条旁路问答收尾…)` を 1 行出す。
+On failure it prints a red line `# 旁路问答失败:<类型>: <消息>`, which **does not affect the main workflow**. On exit it waits at most **120 seconds** for the oracle to finish, printing `(等 N 条旁路问答收尾…)` before waiting.
 
-オラクルの発言はその実行のコンテキストには入らない —— 訊いても実行に影響せず、答えたら捨てられる。
+What it says never enters that run's context — asking doesn't affect the run, and the answer is discarded once given.
 
-!!! warning "全角 `?` はオラクル問答を起動しない —— 中国語入力メソッドのユーザーが踏む"
-    オラクル問答を判定する行のコードはこうだ(`cli.py:733`):
+!!! warning "A full-width `？` does not trigger oracle Q&A — Chinese IME users will hit this"
+    The line of code deciding oracle Q&A is (`cli.py:907`):
 
     ```python
     if raw.startswith("?") or raw.startswith("?"):
     ```
 
-    2 つの文字は**どちらも半角 ASCII `?`**(`0x3f`)だ —— バイト単位で確認済み。書き方から見て、意図は明らかに半角 `?` と
-    中国語入力メソッドが出す全角 `?`(U+FF1F)の両方を受け付けることだったが、実際には同じ文字になっている。
+    Both characters are **half-width ASCII `?`** (`0x3f`) — verified byte by byte. From the way it's written the intent was clearly to accept both the half-width `?` and the full-width `？` (U+FF1F) produced by a Chinese IME, but it ended up as the same character twice.
 
-    結果:**全角 `?` で始まる行はオラクルへの質問として扱われず**、「追加要求」として黙ってインボックスに送られ、
-    さらに `notes/需求.md` に追記される。あなたが見る受領行は `+ 收到` であり、`# 旁路` ではない。
+    Consequence: **a line starting with a full-width `？` is not treated as an oracle question**, but is silently sent to the inbox as an "additional requirement", and thereby appended to `notes/需求.md`. The receipt you see is `+ 收到`, not `# 旁路`.
 
-    オラクルに訊きたいなら**必ず半角 `?` を使うこと** —— 打つ前に入力メソッドを英語に切り替えるか、最初の 1 文字だけ半角で打つ。
+    To ask the oracle you **must use the half-width `?`** — switch your IME to English before typing, or at least type the first character half-width.
 
-### 画面に出るのは何か {#屏幕上都是什么}
+### What's on the screen {#屏幕上都是什么}
 
-アイコンは**すべて ASCII** であり、emoji ではない(`cli.py:49-67`)。理由はコードのコメントに書いてある:emoji と罫線・幾何学・矢印の
-文字は端末のグリフフォールバックを誘発し、過去に 2 回端末をクラッシュさせた。
+The icons are **all ASCII**, not emoji (`cli.py:51-69`). The reason is written in a code comment: emoji together with box-drawing, geometric, and arrow characters trigger terminal glyph fallback, which once caused two terminal crashes.
 
-| アイコン | 意味 | アイコン | 意味 |
+| Icon | Meaning | Icon | Meaning |
 |---|---|---|---|
-| `=` | ステップ区切り線 | `+` | 完了 / 回答済み / 受領 |
-| `~` | 思考、リトライ | `x` | 失敗 / エラー |
-| `>` | 人を出す | `#` | ハンドオフ、オラクル、タスク |
-| `*` | ツール呼び出し | `-` | ステータス行、リスト項目 |
-| `?` | 質問 | `<-` | 前回の続き、ハンドオフ着地点 |
-| `!` | 警告 / 割り込み | `.` | スキップ済み |
-| `\| ` | subagent のインデント縦線 | | |
+| `=` | Step separator | `+` | Done / answered / received |
+| `~` | Thinking, retry | `x` | Failure / error |
+| `>` | Dispatch | `#` | Handoff, oracle, task |
+| `*` | Tool call | `-` | Status line, list item |
+| `?` | Question | `<-` | Continue from last time, handoff landing point |
+| `!` | Warning / interrupt | `.` | Skipped |
+| `\| ` | Indentation bar for subagents | | |
 
-!!! warning "古いドキュメントの `❓` と `↩` は実際の端末には存在しない"
-    初期のドキュメントは `❓` で質問を、`↩` でウェイク行を表していた。**コードの中では一度もこの 2 文字ではなかった** ——
-    質問のアイコンは半角 `?` で、ウェイクとハンドオフ着地点のアイコンは 2 つの ASCII 文字 `<-` だ。
+!!! warning "The `❓` and `↩` in the old docs don't exist in a real terminal"
+    Early documentation used `❓` for questions and `↩` for the wake line. **The code never used those two characters** — the question icon is a half-width `?`, and the icon for wake and handoff landing points is the two ASCII characters `<-`.
 
-    だから実際の端末に出るのはこうだ:
+    So what a real terminal prints is:
 
     ```text
       ? 这个工具要做成 CLI 还是库?
@@ -377,21 +350,21 @@ help テキスト:`配置凭证(API key / 网关 / 模型),写到 ~/.config/flow
     <- 在 ~/proj 接上上次  需求已确认 · 目标 7 条 · 第 3 次唤醒
     ```
 
-    `❓ 这个工具……` でもなければ `↩ 在 ~/proj 接上上次` でもない。古いドキュメントに従ってログを grep しても何も出てこない。
+    Not `❓ 这个工具……`, and not `↩ 在 ~/proj 接上上次`. Grepping logs based on the old docs will find nothing.
 
-質問の 5 つの状態は、画面上ではそれぞれこうなる:
+The five states of a question appear on screen as:
 
-| 状態 | 画面出力 |
+| State | Screen output |
 |---|---|
-| 質問が出た | `  ? <質問>`、その後に `     1) 选项一` を 1 件ずつ列挙し、枠があればさらに `     (还能问 N 次)` |
-| 回答した | `  + <回答>` |
-| タイムアウト | `  ! 无人应答 —— 它会自己判断,把假设记进「未知与假设」` |
-| 枠を使い切った | `  ! 提问额度用完` |
-| スキップした | `  . 已跳过` |
+| Asked | `  ? <问题>`, followed by options listed one per line as `     1) 选项一`, plus `     (还能问 N 次)` when there's a quota |
+| Answered | `  + <答案>` |
+| Timed out | `  ! 无人应答 —— 它会自己判断,把假设记进「未知与假设」` |
+| Quota exhausted | `  ! 提问额度用完` |
+| You skipped | `  . 已跳过` |
 
-`--asks` が無制限(デフォルト)のときは、最後の「还能问 N 次」の行は表示されない。
+When `--asks` is unlimited (the default), the trailing "还能问 N 次" line is not shown.
 
-[ハンドオフ](glossary.md#换代)でハンドオフ文書を書き終えたときはブロックで出る:
+When [handoff](glossary.md#换代) finishes writing the handoff document, it's a whole block:
 
 ```text
 # 上下文 950.0K/1000K —— 写交接准备换代
@@ -403,15 +376,13 @@ help テキスト:`配置凭证(API key / 网关 / 模型),写到 ~/.config/flow
 <- 新会话接手,上下文从 950.0K 重新开始
 ```
 
-ハンドオフ文書が縮退したときは赤字で `交接没写成,用了降级版本 —— 接手的人会自己去现场看` が 1 行追加される。
+When the handoff document degrades, an extra red line is inserted: `交接没写成,用了降级版本 —— 接手的人会自己去现场看`.
 
-出力は、あなたには見えないことを 2 つやっている:すべての出力行はまずサニタイズを通り、**flower 自身の SGR カラーコードだけを通す**。
-モデルやツールが吐いた画面クリアやカーソル移動シーケンスは丸ごと飲み込まれる。幅は `max(40, min(端末の列数, 110))` を取るので、
-広い端末でも行いっぱいには広がらない。これは意図的だ。
+The output also does two things you don't see: every output line passes through sanitization that **only lets through flower's own SGR color codes**, while screen-clearing and cursor-moving sequences emitted by the model or tools are swallowed whole; and the width is taken as `max(40, min(terminal columns, 110))`, so on a wide terminal it doesn't fill the whole line — that's intentional.
 
-### 起動時のプロンプト {#起跑时的提示符}
+### The prompt at launch {#起跑时的提示符}
 
-素で `flower` を走らせた(要求なしの)ときはまず 1 回訊く。文言は 2 種類:
+Running bare `flower` (without a request) asks first. Two wordings:
 
 ```text
 要做什么? 一句话就够,回车开始(Ctrl-C 退出)
@@ -423,44 +394,43 @@ help テキスト:`配置凭证(API key / 网关 / 模型),写到 ~/.config/flow
 > 
 ```
 
-2 つ目はこのディレクトリで既に実行したことがあり、`需求.md` の 4 節が揃っているときにだけ出る。
+The second only appears when this directory has already been run in and `需求.md` has all four sections.
 
-このプロンプトは `input()` で読んでおり、**shell のパースを通らない**。全角引用符、スペース、感嘆符をそのまま打てる ——
-これがこのプロンプトの存在理由のすべてだ。zsh は中国語の閉じ引用符に出会うと `dquote>` の継続行に入り、固まったように見えるが、実際には一度も起動していない。
+This prompt reads via `input()`, **without going through shell parsing**. Chinese quotation marks, spaces, and exclamation marks can all be typed directly — that's the entire reason it exists. zsh, on hitting a Chinese closing quotation mark, drops into a `dquote>` continuation line, which looks like a hang, when in fact it never launched at all.
 
-- 空入力 + 初回 → 終了し、``诉求是空的。直接 `flower` 然后按提示输入,或者 flower "帮我做一个 X"。`` を出す
-- 空入力 + ウェイク → **正当**。「続きをやる」の意味
-- `/new` の入力 → `--new` と等価。前の区間をアーカイブしてから**もう 1 回**要求を訊く
-- Ctrl-C / Ctrl-D → 終了し、`已取消` を出す
+- Empty input + first time → exit, printing ``诉求是空的。直接 `flower` 然后按提示输入,或者 flower "帮我做一个 X"。``
+- Empty input + wake → **valid**, meaning "keep going"
+- Typing `/new` → equivalent to `--new`; archives the previous segment and then **asks again** for the request
+- Ctrl-C / Ctrl-D → exit, printing `已取消`
 
-### タイムアウト {#超时}
+### Timeout {#超时}
 
-`--timeout` は float、単位は秒、デフォルトは `1800.0`。値は 3 種類:
+`--timeout` is a float in seconds, defaulting to `1800.0`. Three kinds of values:
 
-| 値 | 挙動 |
+| Value | Behavior |
 |---|---|
-| `> 0` | その秒数だけ待つ。タイムアウトしたらその質問は `timeout` として決着し、agent が自分で判断する |
-| `0` または負数 | **全自動**。質問は待機キューに入らず、`asked` イベントも出さず、画面にも現れず、即座に `timeout` として決着する |
-| 永久に待つ | **コマンドラインでは不可能**。内部的には「永久に待つ」をサポートしているが、`--timeout` は float でデフォルト値があるため、それを生む書き方が一つもない。上限は非常に大きな秒数を渡すことだけ |
+| `> 0` | Wait this many seconds. On timeout the question settles as `timeout` and the agent decides for itself |
+| `0` or negative | **Fully automatic.** The question doesn't enter the wait queue, doesn't emit an `asked` event, doesn't appear on screen, and settles as `timeout` immediately |
+| Wait forever | **Not achievable from the command line.** Internally "wait forever" is supported, but `--timeout` is a float with a default value, and no way of writing it produces that. The ceiling is just passing a very large number of seconds |
 
-`--timeout 0` と `--timeout -1` は完全に等価。パイプ実行、CI 実行、無人実行で使うのはこれだ。
+`--timeout 0` and `--timeout -1` are exactly equivalent. Piped runs, CI runs, and unattended runs all use this.
 
-質問に回答が得られなかったとき、モデルに返すツール結果は固定文言で、4 種類ある:
+When a question gets no answer, the tool result fed back to the model is fixed copy, of four kinds:
 
-| 結果 | モデルに返す文言 |
+| Result | Copy fed back to the model |
 |---|---|
-| 枠を使い切った | `提问额度已用完。不要再问了 —— 把剩下的不确定项写进「未知与假设」那一段,按你自己的判断继续。` |
-| タイムアウト | `无人应答。按你自己的判断继续,并把这个问题和你采用的假设写进「未知与假设」那一段。不要重复提问,也不要停在这里。` |
-| スキップした | `对方跳过了这个问题。按你自己的判断继续,并把假设写进「未知与假设」。` |
-| 質問が空 | `问题是空的。把问题写清楚再问。` |
+| Quota exhausted | `提问额度已用完。不要再问了 —— 把剩下的不确定项写进「未知与假设」那一段,按你自己的判断继续。` |
+| Timeout | `无人应答。按你自己的判断继续,并把这个问题和你采用的假设写进「未知与假设」那一段。不要重复提问,也不要停在这里。` |
+| You skipped | `对方跳过了这个问题。按你自己的判断继续,并把假设写进「未知与假设」。` |
+| Question was empty | `问题是空的。把问题写清楚再问。` |
 
 ### Ctrl-C {#ctrl-c}
 
-**2 つの場所での Ctrl-C は意味がまったく違う。**
+**Ctrl-C means completely different things in two places.**
 
-**起動プロンプト `> ` の上で押した場合** —— そのままプログラムを終了し、`已取消` を出す。
+**Pressed at the launch prompt `> `** — exits the program immediately, printing `已取消`.
 
-**実行途中で押した場合** —— 現在のラウンドを割り込み、あなたに 1 回話す機会を与える:
+**Pressed mid-run** — interrupts the current round and gives you one chance to speak:
 
 ```text
 ! 已打断这一轮。正在跑的 subagent 会丢掉半成品。
@@ -468,36 +438,29 @@ help テキスト:`配置凭证(API key / 网关 / 模型),写到 ~/.config/flow
 > 
 ```
 
-ここでそのまま Enter を押せば、割り込むだけで何も言わずに続行する。そのとき未回答の質問があれば
-`  (有 N 个提问还等着,打断不影响它们)` が 1 行追加で出る。
+Just hitting Enter here means interrupt without saying anything, and keep going. If there were pending questions at the time, an extra line is printed: `  (有 N 个提问还等着,打断不影响它们)`.
 
-**もう一度 Ctrl+C を押すと本当に終了する**。しかもそれは捕捉されない `KeyboardInterrupt` なので —— 画面には Python の
-traceback が出る。きれいな終了ではない。
+**Pressing Ctrl+C a second time really exits**, and it's an uncaught `KeyboardInterrupt` — you'll get a Python traceback on screen, not a clean exit.
 
-割り込みは協調的だ:メッセージ境界できれいに切り、タスクを強制キャンセルしない。**失敗試行としてはカウントされず**、リトライ回数を消費しない。
-続行時には説明が付き、モデルに「飛行中のツール呼び出しが interrupted を返すのは割り込みの正常な副作用であり、環境の故障ではない」と伝える。
+The interrupt is cooperative: it breaks cleanly at a message boundary, without hard-cancelling tasks. It **does not count as a failed attempt** and doesn't consume a retry. On resume a note is attached telling the model that "in-flight tool calls returning interrupted is a normal side effect of the interrupt, not an environment failure".
 
-このカスタム Ctrl-C は `sys.stdin.isatty()` のときだけ仕掛けられる(`cli.py:918`)。パイプ実行時は Python のデフォルト挙動のまま、
-つまり 1 回目で終了する。`once` の経路はここを通らないので、`once` の Ctrl-C も 1 回目で終了する。
+This custom Ctrl-C is installed only when `sys.stdin.isatty()` (`cli.py:1097`). When running in a pipe, Python's default behavior is kept, i.e. it exits on the first press. The `once` path doesn't go through here, so Ctrl-C on `once` also exits on the first press.
 
 ### SIGHUP / SIGTERM {#sighup-sigterm}
 
-`go` と `run` の経路は `SIGHUP` と `SIGTERM` の両方にハンドラを仕掛けている:まず**飛行中のステップ**も
-`manifest.json` に書いて `killed-by-signal` と印を付け、それからデフォルト動作に戻して本当に去る。
+The `go` and `run` paths install handlers for both `SIGHUP` and `SIGTERM`: first write **the in-flight step** into `manifest.json` too, marked as `killed-by-signal`, then restore the default action and really leave.
 
-きっかけは、端末がクラッシュしたときカーネルが SIGHUP を送り、デフォルト動作でプロセスが即終了して `finally` が走らず、マニフェストが書かれなかったこと ——
-1 回の実行の帳簿が丸ごと失われた。OS のメインスレッドでない場合やプラットフォームが非対応の場合は黙ってスキップする。
+The cause was that when the terminal crashes the kernel sends SIGHUP, whose default action terminates the process outright — `finally` doesn't run, the manifest isn't written, and a whole run's accounting is lost. On a non-main OS thread, or on platforms without support, it's silently skipped.
 
 ---
 
-## 初回起動時の設定フロー {#首次运行的配置流程}
+## First-run configuration flow {#首次运行的配置流程}
 
-`go`、`run`、`once` の 3 つの入口はいずれも冒頭で `ensure_credentials()`(`cli.py:1213-1244`)を呼ぶ。**関門は 2 つ**。
+All three entry points `go`, `run`, `once` call `ensure_credentials()` at the start (`cli.py:1392-1428`), with **two gates**.
 
-### 第 1 の関門:認証情報があるか {#第一道-有没有凭证}
+### Gate one: are there credentials {#第一道-有没有凭证}
 
-優先順位に従って認証情報を探す。`ANTHROPIC_API_KEY` も `ANTHROPIC_AUTH_TOKEN` も見つからなければ対話設定を起動する。
-非対話(stdin が端末でない)ならブロックせず、この文面を出して終了する:
+It searches for credentials in priority order. If neither `ANTHROPIC_API_KEY` nor `ANTHROPIC_AUTH_TOKEN` is found, it launches the interactive configuration; when non-interactive (stdin is not a terminal) it doesn't block, and simply prints this and exits:
 
 ```text
 缺少凭证:需要 ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN。
@@ -506,14 +469,9 @@ traceback が出る。きれいな終了ではない。
 flower 不读 ~/.claude/settings.json —— 那是可移植性的代价。
 ```
 
-この文面には実装と食い違う箇所が 2 つある:2 行目の `flower setup` は現在到達できない([`setup`](#setup) 参照)。
-4 行目は**コードと逆だ** —— flower は確かに `~/.claude/settings.json` と `settings.local.json` の
-`env` ブロックを**最終段のフォールバック**として扱い、そのうち 9 個の認証キーだけを借りる。他の設定は一切引き継がない。この行を出しているのは
-`env.py:192`(関数 `check_credentials()` は `env.py:184` で定義)であり、実際にその 2 ファイルを読むのは
-`env.py:56-75` と `:109-111` だ。[issue #13](https://github.com/ChenyuHeee/flower/issues/13) に記録してある。
-**コードが正しい:読む。** 完全な探索優先順位とその 9 個のキーは[設定リファレンス](config.md#借用)を見よ。
+Two things in this copy don't match the implementation: the `flower setup` on the second line currently can't be reached (see [`setup`](#setup)); and the fourth line is **the opposite of the code** — flower does treat the `env` block of `~/.claude/settings.json` and `settings.local.json` as a **last-level fallback**, borrowing only 9 credential keys from it and taking over no other settings. The place that prints this line is `env.py:192` (the function `check_credentials()` is defined at `env.py:184`), while the code that actually reads those two files is `env.py:56-75` and `:109-111`; recorded as [issue #13](https://github.com/ChenyuHeee/flower/issues/13). **The code is authoritative: it does read them.** For the full lookup priority and those 9 keys, see the [configuration reference](config.md#借用).
 
-### 対話設定で何を訊かれるか {#交互配置问什么}
+### What the interactive configuration asks {#交互配置问什么}
 
 ```text
 == 配置 flower ========================================
@@ -532,162 +490,151 @@ flower 不读 ~/.claude/settings.json —— 那是可移植性的代价。
 + 存好了:/Users/you/.config/flower/.env
 ```
 
-- 第 1 問は**必須**。空のままだと赤字で `没给 token,取消。` を出して設定を諦める。
-- 第 2、3 問は空のままでよい。
-- stdin が端末でないときはフロー全体をスキップし、ブロックしない。
+- Question 1 is **required**. Leaving it blank prints the red line `没给 token,取消。` and abandons configuration.
+- Questions 2 and 3 may be left blank.
+- When stdin is not a terminal the whole flow is skipped outright, without blocking.
 
-### 書き出されるキー {#写出来的键}
+### The keys it writes {#写出来的键}
 
-| 入力したもの | 書かれるキー |
+| What you entered | The key it's written as |
 |---|---|
-| token が `sk-ant-` で始まる | `ANTHROPIC_API_KEY` |
-| その他の token | `ANTHROPIC_AUTH_TOKEN` |
-| ゲートウェイアドレスが非空 | `ANTHROPIC_BASE_URL` |
-| モデル名が非空 | `ANTHROPIC_MODEL`、`ANTHROPIC_DEFAULT_OPUS_MODEL`、`ANTHROPIC_DEFAULT_SONNET_MODEL` の 3 つを一緒に書く |
+| Token starting with `sk-ant-` | `ANTHROPIC_API_KEY` |
+| Any other token | `ANTHROPIC_AUTH_TOKEN` |
+| Non-empty gateway address | `ANTHROPIC_BASE_URL` |
+| Non-empty model name | `ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL` — all three written together |
 
-ファイルパスは `${XDG_CONFIG_HOME:-~/.config}/flower/.env`、親ディレクトリは自動で作られる。書き方は**丸ごと上書き**で、
-空値のキーはスキップし、書き終えたら `chmod 0600`、そして即座にロードして有効化する —— shell を開き直す必要はない。
-1 行目は固定のコメントで、バージョン管理にコミットしないよう注意を促す。
+The file path is `${XDG_CONFIG_HOME:-~/.config}/flower/.env`, and the parent directory is created automatically. The write is a **full overwrite**, keys with empty values are skipped, `chmod 0600` follows, and it's loaded into effect immediately — no need to reopen the shell. The first line is always a comment reminding you not to commit it into version control.
 
-### 第 2 の関門:認証情報が使えるか {#第二道-凭证能不能用}
+### Gate two: do the credentials work {#第二道-凭证能不能用}
 
-設定が揃った後、`- 验一下凭证…` を 1 行出し、そして**実際に API を 1 回叩く**。
+Once configuration is complete, it prints `- 验一下凭证…` and then **actually fires one API call**.
 
-プローブの詳細:`POST {BASE_URL}/v1/messages`、`max_tokens=16`、デフォルトタイムアウト 20 秒、stdlib の
-`urllib` を使い、依存を持ち込まない。モデルは `ANTHROPIC_DEFAULT_HAIKU_MODEL` → `ANTHROPIC_MODEL` →
-`claude-3-5-haiku-20241022` の順で取る。`ANTHROPIC_API_KEY` があれば `x-api-key` ヘッダを使い、
-なければ `authorization: Bearer <ANTHROPIC_AUTH_TOKEN>` を使う。
+Probe details: `POST {BASE_URL}/v1/messages`, `max_tokens=16`, default timeout 20 seconds, using stdlib `urllib`, no dependencies pulled in. The model is taken in the order `ANTHROPIC_DEFAULT_HAIKU_MODEL` → `ANTHROPIC_MODEL` → `claude-3-5-haiku-20241022`. If `ANTHROPIC_API_KEY` is present it uses the `x-api-key` header, otherwise `authorization: Bearer <ANTHROPIC_AUTH_TOKEN>`.
 
-`max_tokens` を 1 ではなく 16 にしているのは意図的だ:実測では、思考の連鎖を強制するモデルは思考すら収まらず、サーバ側が 30 秒までもがいてようやく返してくる。
-16 にすれば 3.6 秒で済む。
+`max_tokens` is deliberately 16 rather than 1: in testing, models with forced chain-of-thought can't even fit their thinking in, and the server struggles for 30 seconds before returning; with 16 it takes only 3.6 seconds.
 
-プローブの結論は 3 種類に分けて処理され、**その違いが重要だ**:
+The probe's conclusion is handled in three categories, and **the differences matter**:
 
-| 結論 | 発火条件 | flower がすること |
+| Conclusion | Trigger condition | What flower does |
 |---|---|---|
-| `auth` | HTTP 401 / 403、あるいはそもそも認証情報がない | `! 凭证被拒:<レスポンスボディ先頭 160 文字>` を出し、対話再設定を起動、設定後にもう一度検証する。非対話なら終了コード 1 |
-| `config` | HTTP 404、あるいは 400 かつレスポンスボディに `model` の言及がある | `! 网关地址或模型名不对:<…>` を出し、以下同上 |
-| `net` | 接続不可 / タイムアウト / DNS 失敗 / TLS 失敗 / 5xx | `  (探针没打通:<先頭 80 文字> —— 当作网络问题,照常开跑)` を出し、**再設定はさせず、そのまま走り出す** |
-| `ok` | 400 未満、あるいは判断がつかないものは一律通す | 黙って続行 |
+| `auth` | HTTP 401 / 403, or no credentials at all | Prints `! 凭证被拒:<响应体前 160 字>`, launches interactive reconfiguration, and verifies once more afterwards. Non-interactive → exit code 1 |
+| `config` | HTTP 404, or 400 **and** the response body explicitly says not found / doesn't exist (one of `not_found`, `not found`, `does not exist`, `unknown model`, `no such model`, `invalid model`) | Prints `! 网关地址或模型名不对:<…>`, then as above |
+| `net` | Can't connect / timeout / DNS failure / TLS failure / 5xx | Prints `  (探针没打通:<前 80 字> —— 当作网络问题,照常开跑)`, **doesn't make you reconfigure, just starts running** |
+| `ok` | Less than 400, or anything undecidable, is let through | Silently continues |
 
-`net` のこの扱いは意図的だ:ネットワークが一瞬揺れたくらいで token の再入力を強いるべきではないし、flower 自体に切断時のサスペンドと再接続の仕組みがある。
-「探针没打通」を見ても気にせず、そのまま走らせればいい。
+The criterion for `config` has been **tightened**: the word `model` almost inevitably appears in Anthropic-style error JSON, so using it as "wrong model name" would misjudge a transient 400 as a configuration error and then force a reconfiguration — it has to explicitly say "not found / doesn't exist" to count (`env.py:176-182`).
 
-再設定のチャンスは**最大 1 回**。2 回目も失敗したら終了する。
+The `net` case is deliberate: a network hiccup shouldn't force you to retype your token, and flower itself has a mechanism for hanging and reconnecting when the network goes down. If you see "探针没打通", ignore it and keep running.
 
-### 実行が落ちた後の自動再設定 {#跑挂了之后的自动重配}
+The chance to reconfigure is given **at most once**. A second failure exits.
 
-ワークフローが失敗すると、flower は失敗したステップのエラーメッセージを正規表現(401、`invalid api key`、
-`authentication`、`unauthorized`、`无效…key/token/密钥`)と照合する。マッチし、かつ stdin が端末なら、
-その場で `! 看起来是凭证不对:<先頭 120 文字>` を出して対話設定を起動し、設定できたらこう出す:
+**The probe is only fired in an interactive terminal.** `ensure_credentials()` returns immediately without making that one API call if any of the following holds (`cli.py:1413`): the caller passed `probe=False`, [`FLOWER_NO_PROBE`](config.md#行为开关) is set, or **stdin is not a terminal** (pipe / CI / offline tests). The reason is that in a non-interactive setting you can't fix what the probe finds anyway, so its only effect is "failing early" — and failing early is worse than not probing when the probe **misjudges**. If the credentials really are bad, the run will blow up on its own, and that path is caught by [automatic reconfiguration after a crash](#跑挂了之后的自动重配).
+
+### Automatic reconfiguration after a crash {#跑挂了之后的自动重配}
+
+When the workflow fails, flower matches the error message of the failing step against a regex (401, `invalid api key`, `authentication`, `unauthorized`, `无效…key/token/密钥`). On a match, and when stdin is a terminal, it prints `! 看起来是凭证不对:<前 120 字>` on the spot and launches interactive configuration; once configured it prints:
 
 ```text
 配好了。再跑一次刚才的命令 —— 同一目录会接着上次。
 ```
 
-その後いずれにせよ終了コード 1 で終了する。`once` の経路にはこの部分がない。
+Then it exits with code 1 regardless. The `once` path doesn't have this.
 
 ---
 
-## 終了コード {#退出码}
+## Exit codes {#退出码}
 
-| コード | いつ |
+| Code | When |
 |---|---|
-| `0` | 正常に走り切った |
-| `1` | すべての能動的な終了。メッセージは **stderr** に出て、traceback はない。一覧は下記 |
-| `2` | argparse の引数エラー:未知のフラグ、位置引数の欠如、`-p` に choices 外の値を渡した |
-| `130` | 実行途中で Ctrl+C を連続 2 回。捕捉されない `KeyboardInterrupt` であり、**Python の traceback が付く** |
-| シグナルで殺された | SIGHUP / SIGTERM:まず飛行中のステップをマニフェストに書き、それからデフォルト動作で去る |
+| `0` | Ran to completion normally |
+| `1` | All deliberate exits. The message goes to **stderr**, with no traceback. Full list below |
+| `2` | argparse argument error: unknown flag, missing positional, `-p` given a value outside its choices |
+| `130` | Two consecutive Ctrl+C presses mid-run. It's an uncaught `KeyboardInterrupt`, **with a Python traceback** |
+| Killed by signal | SIGHUP / SIGTERM: first write the in-flight step into the manifest, then leave via the default action |
 
-終了コード 1 のメッセージ全件:
+All exit-code-1 messages:
 
-| メッセージ | いつ |
+| Message | When |
 |---|---|
-| `已取消` | 起動プロンプトで Ctrl-C か Ctrl-D を押した |
-| ``诉求是空的。直接 `flower` 然后按提示输入,或者 flower "帮我做一个 X"。`` | まっさらなディレクトリ + そのまま Enter |
-| `缺少凭证:需要 ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN。…`(全 4 行) | 非対話 + 認証情報なし |
-| ``凭证被拒,且无法交互配置。跑 `flower setup` 重配。`` | 非対話 + プローブが `auth` と判定 |
-| ``网关地址或模型名不对,且无法交互配置。跑 `flower setup` 重配。`` | 非対話 + プローブが `config` と判定 |
-| `--isolate 要求 <路径> 是 git 仓库(每个 subagent 要分一份 worktree)。先 git init,或者去掉 --isolate。` | git でないディレクトリで `--isolate` を使った |
-| `要给一句诉求,例如 flower '帮我做一个 X'` | 要求が空で、かつディレクトリにウェイクがない |
-| `在步骤 '<步骤名>' 中止` | ワークフローのあるステップが失敗し、方針が停止だった |
-| `需要 模块:属性 形式,例如 flows:main` | `flower run flows`、コロンを落とした |
+| `已取消` | Ctrl-C or Ctrl-D at the launch prompt |
+| ``诉求是空的。直接 `flower` 然后按提示输入,或者 flower "帮我做一个 X"。`` | Brand-new directory + plain Enter |
+| `缺少凭证:需要 ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN。…` (4 lines total) | Non-interactive + no credentials |
+| ``凭证被拒,且无法交互配置。跑 `flower setup` 重配。`` | Non-interactive + probe ruled `auth` |
+| ``网关地址或模型名不对,且无法交互配置。跑 `flower setup` 重配。`` | Non-interactive + probe ruled `config` |
+| `--isolate 要求 <路径> 是 git 仓库(每个 subagent 要分一份 worktree)。先 git init,或者去掉 --isolate。` | `--isolate` used in a non-git directory |
+| `要给一句诉求,例如 flower '帮我做一个 X'` | Request empty and the directory has no wake |
+| `在步骤 '<步骤名>' 中止` | A step in the workflow failed and the policy is to stop |
+| `需要 模块:属性 形式,例如 flows:main` | `flower run flows`, missing the colon |
 | `找不到 <路径>(当前目录 <cwd>)。给的是文件路径就要能对上;要按模块名导入就别带 .py` | `flower run missing.py:main` |
-| `导入 '<模块>' 失败:<原始消息>` | 対象モジュールの import が失敗 |
-| `'<模块>' 里没有 '<属性>'` | モジュール内にその属性が見つからない |
+| `导入 '<模块>' 失败:<原始消息>` | Importing the target module failed |
+| `'<模块>' 里没有 '<属性>'` | The attribute isn't found in the module |
 
-走り終えると(`go` / `run` の経路)最後に 1 行出る:
+When it finishes (the `go` / `run` paths), the last line printed is:
 
 ```text
 总花费 $1.2345 · 清单 /abs/path/runs/manifest.json
 ```
 
-この金額は**このプロセス**の分だけで、前回の実行は含まない —— マニフェストファイル自体はプロセスをまたいで累積するにもかかわらず。
+This amount only counts **this process's** cost, not the previous run's — even though the manifest file itself accumulates across processes.
 
 ---
 
-## プロジェクトに何を作るか {#它在项目里创建了什么}
+## What it creates in your project {#它在项目里创建了什么}
 
-木は 2 本:`<run_dir>/`(デフォルト `./runs/`、CWD 相対)は帳簿とセッションを収め、`<workspace>/.flower/` は
-[ワークベンチ](glossary.md#工作台)を収める。
+Two trees: `<run_dir>/` (default `./runs/`, relative to CWD) holds accounting and sessions; `<workspace>/.flower/` holds the [workbench](glossary.md#工作台).
 
 ### `runs/` {#runs-目录}
 
-| パス | 何が入るか |
+| Path | What's in it |
 |---|---|
-| `runs/sessions.db` | SQLite、transcript の全量。[継続](glossary.md#接续)がつながる物質的基盤 |
-| `runs/manifest.json` | [ランマニフェスト](glossary.md#运行清单)。JSON 配列で、**プロセスをまたいで累積する**。ケースページの数字はすべてここで再計算できる |
-| `runs/lineage.json` | [血縁](glossary.md#血缘):`{"workspace": …, "woke": N, "steps": {"步骤名": "session_id"}}`。アトミック置換で書き込む |
-| `runs/aside/` | オラクル問答の独立 Runtime。自前の `sessions.db` と `manifest.json` を持つ。**コストと血縁はメインのマニフェストに混ざらない** |
-| `runs/workbench/` | `-W` を使い、かつワークフローがワークベンチを自前で持たないときだけ現れる(`run` / `once` の経路) |
+| `runs/sessions.db` | SQLite, the full transcript. This is the material basis that makes [continuity](glossary.md#接续) possible |
+| `runs/manifest.json` | The [run manifest](glossary.md#运行清单). A JSON array, **accumulated across processes**; all the numbers on the case pages can be recomputed from here |
+| `runs/lineage.json` | [Lineage](glossary.md#血缘): `{"workspace": …, "woke": N, "steps": {"步骤名": "session_id"}}`. Written by atomic replacement |
+| `runs/aside/` | The oracle Q&A's separate Runtime, with its own `sessions.db` and `manifest.json`. **Cost and lineage don't mix into the main manifest** |
+| `runs/workbench/` | Only appears when `-W` is used and the workflow doesn't bring its own workbench (`run` / `once` paths) |
 
-`manifest.json` の各レコードのフィールド:
+The fields of each record in `manifest.json`:
 
 ```text
 step  session_id  ok  cost_usd  num_turns  text  error  started_at  ended_at
 attempts  errors[]  resumed  retired[]  context  duration_s  run
 ```
 
-`run` はこのプロセスの印で、形式は `YYYYmmdd-HHMMSS-<6 桁 hex>`。書き込み方針は**追記であって上書きではない**:書く前に毎回
-ファイルを読み直し、`run` で重複を除く —— このプロセスに属する行は最新のものに置き換え、他のプロセスの行はそのまま残す。
+`run` is this process's marker, formatted as `YYYYmmdd-HHMMSS-<6 位 hex>`. The spill policy is **append, don't overwrite**: before each write it re-reads the file and deduplicates by `run` — rows belonging to this process are replaced with the latest, rows from other processes are left as they are.
 
-ステップ名は 4 つの形をとる:
+Step names come in four shapes:
 
-| 形 | いつ |
+| Shape | When |
 |---|---|
-| `<步骤名>` | 初回の試行 |
-| `<步骤名>#retry<N>` | 通常のリトライ |
-| `<步骤名>#round<N>` | 判定を通らず差し戻されて続きをやる |
-| `<步骤名>·判定#<N>` | [ジャッジ](glossary.md#判定者)のステップ |
+| `<步骤名>` | First attempt |
+| `<步骤名>#retry<N>` | Ordinary retry |
+| `<步骤名>#round<N>` | The verdict didn't pass, sent back to continue |
+| `<步骤名>·判定#<N>` | The [judge](glossary.md#判定者)'s step |
 
-シグナルで殺されたときは、飛行中のステップも書き込まれ、`error` フィールドは `killed-by-signal` になる。
+When killed by a signal, the in-flight step is written too, with the `error` field being `killed-by-signal`.
 
-**同じディレクトリで複数の flower を並列に走らせる場合**:`manifest.json` は安全(読み直し + `run` による統合)だが、
-`lineage.json` は丸ごと上書きなので、2 つのプロセスが同名ステップの血縁を互いに潰し合う。並列にするなら `-r` を分けること。
+**Running several flowers in parallel in the same directory**: `manifest.json` is safe (re-read + merge by `run`), but `lineage.json` is a full overwrite, and two processes will clobber each other's lineage for steps of the same name. To run in parallel, use different `-r`.
 
-`lineage.json` には workspace の絶対パスが保存される。合わなければ無いものとして扱い、**黙って**新規セッションに戻る。エラーは出さない ——
-ディレクトリをコピーして持ち出した後では、古い `session_id` はどのみち引けない。
+`lineage.json` stores the absolute path of the workspace. If it doesn't match, it's treated as absent and **silently** falls back to a new session without an error — after a directory has been copied elsewhere, the old `session_id` couldn't be looked up anyway.
 
 ### `.flower/` {#flower-目录}
 
-| パス | 何が入るか |
+| Path | What's in it |
 |---|---|
-| `.flower/scripts/` | 2 回目に走らせるスクリプト。1 行目に `# desc: 一句话` と書くと、その一文がインデックスに現れる |
-| `.flower/artifacts/` | 2000 文字を超える長い成果物:レポート、データ、ログ。会話にはパスしか現れない |
-| `.flower/notes/` | ステップをまたぐ意思決定の記録 |
-| `.flower/spill/` | [スピル](glossary.md#落盘):4000 文字を超えるツール結果はここに落ち、コンテキストにはポインタ 1 行と先頭 400 文字だけが残る。ファイル名は内容の sha256 先頭 16 桁 + `.txt` |
-| `.flower/INDEX.md` | 上記ディレクトリのインデックス。**コーディネータのシステムプロンプトに注入される**(subagent は継承しない) |
+| `.flower/scripts/` | Scripts meant to be run a second time. The first line reads `# desc: 一句话`, and that sentence appears in the index |
+| `.flower/artifacts/` | Long outputs over 2000 characters: reports, data, logs. Only the path appears in the conversation |
+| `.flower/notes/` | Cross-step decision records |
+| `.flower/spill/` | [Spill](glossary.md#落盘): tool results over 4000 characters land here, and the context keeps only a one-line pointer plus the first 400 characters. The file name is the first 16 digits of the content's sha256 plus `.txt` |
+| `.flower/INDEX.md` | An index of the directories above, **injected into the coordinator's system prompt** (subagents don't inherit it) |
 
-`go` の経路は `notes/` 配下に固定でこれらを生成する:
+The `go` path always generates these under `notes/`:
 
-| ファイル | 内容 |
+| File | Contents |
 |---|---|
-| `notes/需求.md` | 凍結された[要件確認書](glossary.md#需求确认书)。4 節:目標 / 受け入れ基準 / 境界 / 未知と前提 |
-| `notes/目标.md` | 凍結された目標。2 節:目標 / 判定リスト |
-| `notes/问答记录.md` | すべての質問と回答の追記記録(状態を含む)。あなたが自発的に言ったことも含む。**コンテキストには入らず、記録用のみ** |
-| `notes/交接-<步骤名>.md` | ハンドオフ時に書かれる[ハンドオフ文書](glossary.md#交接书)。前の代は `notes/archive/交接/<步骤名>-<时间戳>.md` に収められる |
-| `notes/archive/<YYYYmmdd-HHMMSS>/` | `--new` または `/new` でアーカイブされた `lineage.json`、`需求.md`、`目标.md`。**移動**であって削除ではない |
+| `notes/需求.md` | The frozen [brief](glossary.md#需求确认书), four sections: 目标 / 验收标准 / 边界 / 未知与假设 |
+| `notes/目标.md` | The frozen goals, two sections: 目标 / 判定清单 |
+| `notes/问答记录.md` | An appended record of all questions and answers (including status), also covering things you said on your own initiative. **Doesn't enter context, purely for the record** |
+| `notes/交接-<步骤名>.md` | The [handoff document](glossary.md#交接书) written at handoff time; the previous generation is filed into `notes/archive/交接/<步骤名>-<时间戳>.md` |
+| `notes/archive/<YYYYmmdd-HHMMSS>/` | The `lineage.json`, `需求.md`, `目标.md` archived by `--new` or `/new`. It's a **move**, not a delete |
 
-`--isolate` を使うとワークベンチはリポジトリの外へ移る:`<workspace>.parent/.flower-<workspace 名>/`。
-worktree は各 agent の私有コピーであり、ワークベンチは agent をまたぐ共有層だ。共有するものを私有の囲いの中に置くことはできない。
-このときモデルに渡されるワークベンチのパスは絶対パスになる。
+With `--isolate` the workbench moves outside the repo: `<workspace>.parent/.flower-<workspace 名>/`. A worktree is each agent's private copy, while the workbench is a shared layer across agents, and shared things can't be put inside a private fence. In this case the workbench path given to the model is an absolute path.

@@ -1,95 +1,144 @@
 # Configuration
 
-flower has no configuration file format, and no configuration subcommand that actually goes anywhere — all configuration is **environment variables** plus a **`.env` file**, plus a set of policy objects that can only be supplied from the Python side. This page collects what is scattered across five places into one: every variable, the order credentials are looked up in, what syntax `.env` accepts, what `setting_sources=[]` actually isolates, what a run leaves on disk, what each of the three session-store layers drops, and how it waits when the network is down. Terminology follows the [glossary](glossary.md) throughout.
+flower has no config file format, and no config subcommand that actually goes anywhere — all
+configuration is **environment variables** plus **`.env` files**, plus a batch of policy objects
+that can only be supplied from the Python side. This page gathers what's scattered across five
+places into one: every variable, the order credentials are looked up in, what syntax `.env`
+accepts, what `setting_sources=[]` actually isolates, what a single run leaves on disk, what each
+of the three session store layers drops, and how it waits when the network is down. Terminology
+follows the [glossary](glossary.md) throughout.
 
-| What you want to know | Where |
+| Want to know | Go to |
 |---|---|
-| Which environment variables flower reads | [Full environment variable table](#环境变量) |
-| Where my token actually came from | [Credential lookup priority](#凭证查找优先级) |
-| Why that line in `.env` had no effect | [`.env` parsing rules](#env-解析) |
-| What to carry to another machine | [The price of portability](#可移植性) |
-| What is inside `.flower/` and `runs/` | [Disk layout](#磁盘布局) |
-| Which messages never get fed back to the model | [The three session-store layers](#会话存储) |
-| What it is waiting for when the network is down | [Offline resilience](#韧性) |
+| Which env vars flower reads | [Full environment variable table](#环境变量) |
+| Where my token actually comes from | [Credential lookup priority](#凭证查找优先级) |
+| Why that line in `.env` didn't take effect | [`.env` parsing rules](#env-解析) |
+| What to carry when switching machines | [The cost of portability](#可移植性) |
+| What's in `.flower/` and `runs/` | [Disk layout](#磁盘布局) |
+| Which messages aren't fed back to the model | [The three session store layers](#会话存储) |
+| What it's waiting for when the network's down | [Network resilience](#韧性) |
 
 ## Full environment variable table {#环境变量}
 
-Four groups: credentials and endpoint that flower reads directly, model selection, path lookup, and what flower **writes to** the agent subprocess. You do not set the last group — if you do, it gets overwritten.
+Five groups: credentials and endpoints flower reads directly, model selection, path lookup,
+behavior switches, and what flower **writes to** the agent subprocess. You don't set the last
+group — set it and it gets overwritten anyway.
 
-### Credentials and endpoint {#凭证变量}
+### Credentials and endpoints {#凭证变量}
 
-| Variable | Purpose | Default | Required | Source |
+| Variable | Effect | Default | Required | Source |
 |---|---|---|---|---|
-| `ANTHROPIC_API_KEY` | Official Anthropic key. If present, requests go out with the `x-api-key` header | none | **one of** this or `ANTHROPIC_AUTH_TOKEN` is required | `env.py:28`, `:146`, `:157-158` |
-| `ANTHROPIC_AUTH_TOKEN` | Token issued by a gateway. Used as `authorization: Bearer` when `ANTHROPIC_API_KEY` is absent | none | same as above | `env.py:28`, `:147`, `:159-160` |
-| `ANTHROPIC_BASE_URL` | API endpoint root. A third-party gateway puts its own address here, **without `/v1`** — the probe assembles `<BASE_URL>/v1/messages` | `https://api.anthropic.com` | no | `env.py:151`, `:162`, `:210`; `resilience.py:70` |
+| `ANTHROPIC_API_KEY` | Anthropic's official key. If present, requests go out with an `x-api-key` header | none | **exactly one of it and `ANTHROPIC_AUTH_TOKEN` is required** | `env.py:28`, `:146`, `:157-158` |
+| `ANTHROPIC_AUTH_TOKEN` | Token issued by a gateway. Used with `authorization: Bearer` when there's no `ANTHROPIC_API_KEY` | none | same as above | `env.py:28`, `:147`, `:159-160` |
+| `ANTHROPIC_BASE_URL` | The API endpoint root. A third-party gateway fills in its own address, **without `/v1`** — the probe assembles `<BASE_URL>/v1/messages` | `https://api.anthropic.com` | no | `env.py:151`, `:162`, `:210`; `resilience.py:70` |
 
-If neither is set (or both are empty strings), `check_credentials()` returns that four-line error and `Runtime.__init__` raises `RuntimeError` (`env.py:184-194`; `runtime.py:156-158`).
+If neither is set (or both are empty strings), `check_credentials()` returns that four-line error,
+and `Runtime.__init__` also raises `RuntimeError` (`env.py:184-194`; `runtime.py:156-158`).
 
 ### Model selection {#模型变量}
 
-flower reads only three of these for its own decisions; the rest are loaded and passed through to the SDK.
+flower reads only three of these for its own decisions; the rest are loaded and passed straight
+through to the SDK.
 
-| Variable | Purpose | Default | Required | Source |
+| Variable | Effect | Default | Required | Source |
 |---|---|---|---|---|
-| `ANTHROPIC_MODEL` | Main model name. Also determines the default [handoff](glossary.md#换代) window: name contains `1m`, or does not contain `haiku` → 1,000,000; contains `haiku` → 200,000 | none (endpoint decides) | no | `env.py:153`; `agent.py:77-81` |
-| `ANTHROPIC_DEFAULT_OPUS_MODEL` | Model mapping for the opus tier. When `ANTHROPIC_MODEL` is empty, the window decision falls back to this | none | no | `agent.py:78`; `cli.py:1205` |
-| `ANTHROPIC_DEFAULT_SONNET_MODEL` | Model mapping for the sonnet tier. flower does not read it, only loads and borrows it | none | no | `env.py:34`; `cli.py:1206` |
+| `ANTHROPIC_MODEL` | The main model name. Also decides the default [handoff](glossary.md#换代) window: `1m` in the name or no `haiku` → 1M, `haiku` present → 200K | none (decided on the server side) | no | `env.py:153`; `agent.py:77-81` |
+| `ANTHROPIC_DEFAULT_OPUS_MODEL` | Model mapping for the opus tier. When `ANTHROPIC_MODEL` is empty, the window decision falls back to it | none | no | `agent.py:78`; `cli.py:1384` |
+| `ANTHROPIC_DEFAULT_SONNET_MODEL` | Model mapping for the sonnet tier. flower doesn't read it itself, only loads and lends it | none | no | `env.py:34`; `cli.py:1385` |
 | `ANTHROPIC_DEFAULT_HAIKU_MODEL` | Model mapping for the haiku tier. **The credential probe prefers it** | probe falls back to `ANTHROPIC_MODEL`, then to `claude-3-5-haiku-20241022` | no | `env.py:152-153` |
-| `CLAUDE_CODE_SUBAGENT_MODEL` | Which model [subagents](glossary.md#subagent) use. flower does not interpret it; the SDK consumes it | none | no | `env.py:35`; `.env.example` |
-| `CLAUDE_CODE_EFFORT_LEVEL` | Thinking level. Same as above, loaded but not interpreted | none | no | `env.py:35` |
+| `CLAUDE_CODE_SUBAGENT_MODEL` | Which model [subagents](glossary.md#subagent) use. flower doesn't interpret it; the SDK consumes it | none | no | `env.py:35`; `.env.example` |
+| `CLAUDE_CODE_EFFORT_LEVEL` | Thinking tier. Same as above, only loaded, not interpreted | none | no | `env.py:35` |
 
-If you gave `flower setup` a model name, it writes `ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL` and `ANTHROPIC_DEFAULT_SONNET_MODEL` **all three together** (`cli.py:1204-1206`).
+If `flower setup` filled in a model name, `ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, and
+`ANTHROPIC_DEFAULT_SONNET_MODEL` **all three get written together** (`cli.py:1383-1385`).
 
 ### Paths and lookup {#路径变量}
 
-| Variable | Purpose | Default | Required | Source |
+| Variable | Effect | Default | Required | Source |
 |---|---|---|---|---|
-| `FLOWER_ENV` | Points at one `.env` file, placed **before** all other files | none | no | `env.py:48-49` |
-| `XDG_CONFIG_HOME` | Determines where the global credential file lives: `$XDG_CONFIG_HOME/flower/.env` | `~/.config` | no | `env.py:41-42` |
-| `HOME` | Source of `Path.home()`; both `~/.config` and `~/.claude` are derived from it | given by the system | no | `env.py:41`, `:67` |
+| `FLOWER_ENV` | Points at a `.env` file path, placed **before** all others | none | no | `env.py:48-49` |
+| `XDG_CONFIG_HOME` | Determines the location of the global credential file `$XDG_CONFIG_HOME/flower/.env` | `~/.config` | no | `env.py:41-42` |
+| `HOME` | The source of `Path.home()`; both `~/.config` and `~/.claude` are derived from it | given by the system | no | `env.py:41`, `:67` |
+
+### Behavior switches {#行为开关}
+
+Both are escape hatches: not setting them is the norm, setting them makes flower do one thing
+less. **Any non-empty value takes effect**; the value itself isn't parsed (`update.py:121`;
+`cli.py:1413`).
+
+| Variable | Effect | Default | Required | Source |
+|---|---|---|---|---|
+| `FLOWER_NO_UPDATE` | Turns off [auto-update](../getting-started/install.md#自动更新). When unset, a flower installed via pip / pipx / uv spins up a background thread at startup to check for a new version, installs it if found, and it **takes effect on the next `flower` run**; checks at most once every 24 hours, timestamp recorded in `~/.config/flower/.update` | none (auto-update on) | no | `update.py:32-33`, `:121-124` |
+| `FLOWER_NO_PROBE` | Skips the startup [credential probe](cli.md#第二道-凭证能不能用). Non-interactive runs (pipe / CI / redirected stdin) don't probe anyway; this variable is the escape hatch left for interactive terminals | none (probes under interactive) | no | `cli.py:1413` |
+
+A flower run from git source isn't affected by auto-update; `FLOWER_NO_UPDATE` is a no-op for it —
+the update command recognizes a `.git` in the repo at that step and returns `None` immediately
+(`update.py:83-87`).
 
 ### What flower writes to the agent subprocess {#写出的变量}
 
-These three are produced by `CompactPolicy.env()` and injected into `ClaudeAgentOptions.env` (`agent.py:48-58`, `:241-245`), controlling the harness's built-in [compaction](glossary.md#压缩). **Setting them in your shell means nothing** — what takes effect is the copy flower passes to the subprocess.
+These three are generated by `CompactPolicy.env()` and stuffed into `ClaudeAgentOptions.env`
+(`agent.py:48-58`, `:241-245`), controlling the harness's built-in [compact](glossary.md#压缩).
+**Setting them in your shell means nothing** — what actually takes effect is the copy flower
+passes to the subprocess.
 
-| Variable | Purpose | Default | Required | Source |
+| Variable | Effect | Default | Required | Source |
 |---|---|---|---|---|
-| `DISABLE_AUTO_COMPACT` | `=1` turns off auto-compaction. **Forced on** whenever [handoff](glossary.md#换代) is enabled — with both mechanisms running you cannot tell which one caused a context drop | handoff is on by default, so this is effectively always `1` | no (flower writes it) | `agent.py:51`; `runtime.py:444-447` |
-| `DISABLE_COMPACT` | `=1` disables `/compact` as well. Only written for `CompactPolicy(mode="off")` | not written | no (flower writes it) | `agent.py:52-53` |
-| `CLAUDE_CODE_AUTO_COMPACT_WINDOW` | Auto-compaction window (tokens). Only written for `CompactPolicy(window=N)` | not written | no (flower writes it) | `agent.py:56-57` |
+| `DISABLE_AUTO_COMPACT` | `=1` turns off auto-compact. **Force-written** when [handoff](glossary.md#换代) is on — with both mechanisms running at once you can't tell which one caused a context rollback | handoff is on by default, so in practice always `1` | no (flower writes) | `agent.py:51`; `runtime.py:444-447` |
+| `DISABLE_COMPACT` | `=1` turns off `/compact` too. Only written by `CompactPolicy(mode="off")` | not written | no (flower writes) | `agent.py:52-53` |
+| `CLAUDE_CODE_AUTO_COMPACT_WINDOW` | The auto-compact window (tokens). Only written by `CompactPolicy(window=N)` | not written | no (flower writes) | `agent.py:56-57` |
 
 ### What the container wrapper reads {#容器变量}
 
-These two are not read by flower itself but by the `docker/flowerbox` shell wrapper. Full usage in [Deployment](deploy.md).
+These two aren't read by flower proper; they're read by the `docker/flowerbox` shell wrapper. See
+[Deployment](deploy.md) for full usage.
 
-| Variable | Purpose | Default | Required | Source |
+| Variable | Effect | Default | Required | Source |
 |---|---|---|---|---|
-| `FLOWER_HOME` | Where to find the `.env` used for `--env-file` | the parent directory of the script's own location | no | `docker/flowerbox:12` |
+| `FLOWER_HOME` | Where to find the `.env` for `--env-file` | the parent directory of the script's own location | no | `docker/flowerbox:12` |
 | `FLOWER_IMAGE` | Which image to use | `flower-box` | no | `docker/flowerbox:13` |
 
-**The keys in `.env` are not limited to the ones above.** The parser loads **every** `k=v` line into `os.environ` with no allowlist (`env.py:30`, `:102-107`). The `KNOWN` set of those 9 credential keys matters in only two places: as the allowlist when borrowing `~/.claude` configuration (`env.py:72`), and as the field range printed by `describe()` under `-v` (`env.py:205`).
+**The keys in `.env` aren't limited to the above.** The parser loads **every** `k=v` line into
+`os.environ`, with no allowlist (`env.py:30`, `:102-107`). The `KNOWN` set made up of the 9
+credential keys above only does two things: acts as an allowlist when borrowing `~/.claude`
+config (`env.py:72`), and bounds the fields printed by `describe()` when starting with `-v`
+(`env.py:205`).
 
 ## Credential lookup priority {#凭证查找优先级}
 
-When `load_dotenv()` is called without a path, it reads **every file that exists** in this order (`env.py:45-53`, `:78-112`):
+When `load_dotenv()` is called with no path, it reads **every file that exists** in the following
+order (`env.py:45-53`, `:78-112`):
 
-1. **Process environment variables** — always highest. No `.env` can override an already-exported value. (`env.py:91`)
-2. **The file pointed at by `$FLOWER_ENV`** — only if it is set. (`env.py:48-49`)
-3. **`$PWD/.env`** — the current working directory. Whichever project you `cd` into, that one is read. (`env.py:50`)
-4. **`${XDG_CONFIG_HOME:-~/.config}/flower/.env`** — the per-user global location; this is what `flower setup` writes. (`env.py:51`, `:39-42`)
-5. **`.env` at the source repository root** — three levels up from `flower/core/env.py`. Exists only when running from source; a flower installed with pip / pipx / uv lives in site-packages and has no such file. (`env.py:52`)
-6. **The `env` block of `~/.claude/settings.json`, then `~/.claude/settings.local.json`** — the last fallback, **only the 9 credential keys**. (`env.py:56-75`, `:109-111`)
+1. **Process environment variables** — always highest. No `.env` can override an already-exported
+   value. (`env.py:91`)
+2. **The file `$FLOWER_ENV` points at** — only present if set. (`env.py:48-49`)
+3. **`$PWD/.env`** — the current working directory. `cd` into a project and it reads the nearest
+   one. (`env.py:50`)
+4. **`${XDG_CONFIG_HOME:-~/.config}/flower/.env`** — the per-user global location, the one
+   `flower setup` writes. (`env.py:51`, `:39-42`)
+5. **The `.env` at the source repo root** — three levels up from `flower/core/env.py`. Only
+   present when running from source; a flower installed via pip / pipx / uv lives in
+   site-packages and has no such file. (`env.py:52`)
+6. **The `env` block of `~/.claude/settings.json`, then `~/.claude/settings.local.json`** — the
+   last fallback, **takes only the 9 credential keys**. (`env.py:56-75`, `:109-111`)
 
-**Which file wins**: item 3 (project `.env`) beats item 4 (global `.env`), item 4 beats item 5 (repo-root `.env`), all three beat item 6 (Claude Code's configuration), and none of them beats item 1 (the process environment).
+**Which file wins**: entry 3 (project `.env`) beats entry 4 (global `.env`), entry 4 beats entry 5
+(repo-root `.env`), all three beat entry 6 (Claude Code's config), and none of them beat entry 1
+(the process environment).
 
-The mechanism is "**a key that already has a value is never overwritten**" (`env.py:90-93`): earlier entries claim keys first, later ones only fill gaps. So priority is **computed per key, not per file** — if the project `.env` only sets `ANTHROPIC_BASE_URL`, the token can still come from the global one. The first value seen for a given key is final.
+The mechanism is "**don't overwrite a key that already has a value**" (`env.py:90-93`): the ones
+earlier in the order claim keys first, the later ones only fill gaps. So priority is **computed
+per key, not per file** — if the project `.env` only writes `ANTHROPIC_BASE_URL`, the token can
+still come from the global one. The first value that appears for a given key is settled for life.
 
-Item 6 is enabled only during **automatic lookup**. Given an explicit path (`load_dotenv("/path/to/.env")`), only that one file is read, with no fallback at all (`env.py:86-87`, `:109`).
+Entry 6 is only enabled during **automatic lookup**. Give an explicit path
+(`load_dotenv("/path/to/.env")`) and it reads only that one file, with no fallback whatsoever
+(`env.py:86-87`, `:109`).
 
-### Item 6: borrowing Claude Code's token {#借用}
+### Entry 6: borrowing Claude Code's token {#借用}
 
-`~/.claude/settings.json` and then `~/.claude/settings.local.json` are read in order, `data["env"]` is taken as a dict, and these 9 keys are picked out of it (`env.py:31-36`, `:65-74`):
+It reads `~/.claude/settings.json` then `~/.claude/settings.local.json` in order, takes the
+`data["env"]` dict, and picks out these 9 keys (`env.py:31-36`, `:65-74`):
 
 ```text
 ANTHROPIC_API_KEY   ANTHROPIC_AUTH_TOKEN   ANTHROPIC_BASE_URL
@@ -97,159 +146,212 @@ ANTHROPIC_MODEL     ANTHROPIC_DEFAULT_OPUS_MODEL    ANTHROPIC_DEFAULT_SONNET_MOD
 ANTHROPIC_DEFAULT_HAIKU_MODEL    CLAUDE_CODE_SUBAGENT_MODEL    CLAUDE_CODE_EFFORT_LEVEL
 ```
 
-If the file does not exist, cannot be read, or is not valid JSON (`OSError` / `ValueError`), an empty dict is returned and execution continues — **a broken fallback must not take the run down with it** (`env.py:62-63`, `:66-69`).
+If the file doesn't exist, can't be read, or isn't valid JSON (`OSError` / `ValueError`), it
+returns an empty dict and moves on — **a broken fallback shouldn't take the run down with it**
+(`env.py:62-63`, `:66-69`).
 
-The position taken in the code is: what is borrowed is only "where to find the token". Nothing else in settings.json (permission rules, hooks, model settings) is taken over, so this does not violate the portability promise of `setting_sources=[]` (`env.py:17-19`, `:59-61`). `install.sh:77` advertises it as a feature: someone with Claude Code already configured on the machine never even sees a configuration screen.
+The stance in the code: all it borrows is "where to find the token"; nothing else in
+settings.json (permission rules, hooks, model settings) is taken over, so this doesn't violate the
+portability promise of `setting_sources=[]` (`env.py:17-19`, `:59-61`). `install.sh:77` pitches it
+as a feature: someone with Claude Code already configured on the machine won't even see the config
+screen.
 
-!!! warning "The in-product error text says the opposite of the actual behavior"
-    When no credentials can be found at all, the last line of the error flower prints is:
+!!! warning "The in-product error text contradicts the actual behavior"
+    When credentials can't be found at all, the last line of the error flower prints is:
 
     ```text
     flower 不读 ~/.claude/settings.json —— 那是可移植性的代价。
     ```
 
-    (`env.py:184-194`, the line itself at `:192`; the same claim also appears in `.env.example:2`, `env.py:3-4`, `agent.py:10-12`.) **The code is authoritative: it does read them.** `env.py:56-75` plus `:109-111` explicitly read those two files, and `install.sh:77` sells it as a feature. That message is currently misleading — on a machine that has Claude Code configured, your token very likely came from exactly there.
+    (`env.py:184-194`, that line at `:192`; the same claim also appears in `.env.example:2`,
+    `env.py:3-4`, `agent.py:10-12`.) **Trust the code: it does read it.** `env.py:56-75` plus
+    `:109-111` explicitly reads those two files, and `install.sh:77` even sells this as a
+    selling point. That text is currently misleading — on a machine that has Claude Code
+    configured, your token very likely comes from exactly there.
 
 ## `.env` parsing rules {#env-解析}
 
-The parsing rules are short enough to memorize (`env.py:95-107`, 13 lines): `strip` each line, skip empty lines, lines starting with `#`, and lines without `=`; split what remains at the **first** `=` into key and value, `strip` both sides, then run the value through `.strip("'\"")` — leading and trailing single or double quotes are removed unconditionally, **they do not have to be paired**.
+The parsing rules are short enough to memorize (`env.py:95-107`, 13 lines): `strip` each line,
+skip blank lines, lines starting with `#`, and lines with no `=`; split the rest at the **first**
+`=` into key and value, `strip` each side, then run the value through `.strip("'\"")` once — any
+leading or trailing single or double quotes are stripped, **without requiring them to be paired**.
 
-**These forms are accepted**:
+**Accepted forms**:
 
 | Form | Result |
 |---|---|
-| `KEY=VALUE` | fine |
-| `KEY = VALUE` | fine — spaces around the equals sign are stripped |
-| `KEY="VALUE"` / `KEY='VALUE'` | fine — surrounding quotes are removed |
-| `KEY=a=b` | the value is `a=b` — split at the first `=`, later equals signs stay in the value |
+| `KEY=VALUE` | normal |
+| `KEY = VALUE` | normal — spaces around the equals sign are stripped |
+| `KEY="VALUE"` / `KEY='VALUE'` | normal — leading and trailing quotes stripped |
+| `KEY=a=b` | value is `a=b` — split at the first `=`, later equals signs stay in the value verbatim |
 | `# comment` | whole line skipped |
 | blank line | skipped |
 
-**These are not**. Writing them raises no error; you silently get an unexpected value:
+**Not accepted**. Writing these raises no error, you just silently get an unexpected value:
 
 | Form | Actual result |
 |---|---|
-| `export KEY=VALUE` | the key becomes `export KEY`; `KEY` itself still has no value |
-| `KEY=value # note` | the value is `value # note` — trailing comments are not stripped |
-| `KEY=$OTHER` | the literal `$OTHER`; no variable interpolation |
-| multi-line value (quoted across lines) | processed line by line; the second line has no `=` and is skipped entirely |
+| `export KEY=VALUE` | key becomes `export KEY`, `KEY` itself still has no value |
+| `KEY=value # note` | value is `value # note` — trailing comments aren't stripped |
+| `KEY=$OTHER` | the literal `$OTHER`, no variable interpolation |
+| multi-line value (quoted across lines) | processed line by line; the second line has no `=` and gets skipped wholesale |
 
-**An empty value claims the key.** If `ANTHROPIC_AUTH_TOKEN=` appears in a higher-priority file, `take()` executes `os.environ["ANTHROPIC_AUTH_TOKEN"] = ""`, so later files cannot fill it in because "the key already exists" (`env.py:90-93`); meanwhile `check_credentials()` tests truthiness, and an empty string still counts as unconfigured (`env.py:186`). **The result is no credential and no fallback.** If you do not want a key, delete the whole line; do not leave an empty one.
+**An empty value claims the key.** If `ANTHROPIC_AUTH_TOKEN=` appears in a higher-priority file,
+`take()` runs `os.environ["ANTHROPIC_AUTH_TOKEN"] = ""`, and then later files can't fill it in
+because "the key already exists" (`env.py:90-93`); meanwhile `check_credentials()` tests for
+truthiness, so an empty string still counts as unconfigured (`env.py:186`). **The result is
+neither credentials nor a fallback.** If you don't want a key, delete the whole line — don't leave
+an empty one.
 
-## The price of portability {#可移植性}
+## The cost of portability {#可移植性}
 
-That one line in `build_options()` is the entire mechanism (`agent.py:207`):
+That one line in `build_options()` is the whole mechanism (`agent.py:207`):
 
 ```python
 "setting_sources": [] if portable else ["project"],
 ```
 
-`portable=True` is `Runtime`'s default, and **no command-line flag can turn it off** — turning it off requires the Python API, `Runtime(portable=False)`, which makes it `["project"]`, i.e. the project's `.claude/` is read.
+`portable=True` is the default for `Runtime`, and **no command-line switch can turn it off** — to
+turn it off you have to go through the Python API and write `Runtime(portable=False)`, which
+becomes `["project"]`, i.e. reads the project's `.claude/`.
 
-### What gets isolated
+### What gets isolated {#被隔绝的东西}
 
 | Isolated | Consequence |
 |---|---|
-| The host's `~/.claude/` settings | Permission rules, hooks and model settings there have no effect. **Credentials are the one exception**, see [borrowing](#借用) |
-| The project's `.claude/` | Same; only read when `portable=False` |
+| The host's `~/.claude/` settings | The permission rules, hooks, and model settings there take no effect. **Credentials are the sole exception**, see [borrowing](#借用) |
+| The project's `.claude/` | Same as above; only read when `portable=False` |
 
-Domain capability does not travel this path — it ships with the repository and is loaded via `plugins=[{"type": "local", "path": PLUGIN_DIR}]` (`agent.py:26`, `:210-212`), see [Deployment](deploy.md). Domain instructions are **appended** after Claude Code's native system prompt rather than replacing it (`agent.py:198-202`), so specialization does not cost general capability.
+Domain capability doesn't go through this path — it ships with the repo, loaded via
+`plugins=[{"type": "local", "path": PLUGIN_DIR}]` (`agent.py:26`, `:210-212`), see
+[Deployment](deploy.md). Domain instructions are **appended** after the native Claude Code system
+prompt, not a replacement (`agent.py:198-202`), so specialization doesn't cost you general
+capability.
 
-### What to carry to another machine
+### What to carry when switching machines {#换台机器要带什么}
 
-- **Credentials: one file.** Copy `~/.config/flower/.env` over, or configure it again on the new machine. Without it nothing runs — nothing is inherited automatically.
-- **Continuity state: whole directories.** `runs/` (session store, manifest, lineage) and `.flower/` (workbench).
-- **But the paths must match.** `lineage.json` stores the absolute path of the workspace; if it does not match, it is treated as absent and silently falls back to a new session, **with no error** (`lineage.py:65-66`). The reason is that the SDK derives `project_key` from the workspace path (`/`, `_`, `.` all become `-`, `runtime.py:40-41`), so once the directory moves, old `session_id`s can no longer be found.
+- **Credentials: one file**. Copy `~/.config/flower/.env` over, or reconfigure once on the new
+  machine. Don't bring it and nothing runs — nothing gets inherited automatically.
+- **Continuity state: the whole directory**. `runs/` (session store, manifest, lineage) and
+  `.flower/` (workbench).
+- **But paths must match**. `lineage.json` stores the workspace's absolute path; if it doesn't
+  match it's treated as absent, silently falling back to a new session, **with no error**
+  (`lineage.py:65-66`). The reason is that the SDK's `project_key` is derived from the workspace
+  path (`/`, `_`, `.` all replaced with `-`, `runtime.py:40-41`); move the directory and the old
+  `session_id` can no longer be found.
 
 ## Disk layout {#磁盘布局}
 
-One flower run writes two trees: `<run_dir>/` holds the accounting and the sessions, `<workspace>/.flower/` holds the [workbench](glossary.md#工作台). Both default to the current directory, but **their base points differ**.
+A single flower run writes two trees: `<run_dir>/` holds the ledger and sessions, and
+`<workspace>/.flower/` holds the [workbench](glossary.md#工作台). Both default to under the
+current directory, but **their bases differ**.
 
 !!! warning "`runs/` follows the current directory, not `-w`"
-    `-r/--run-dir` defaults to `"runs"`, and what `Runtime` does with it is `Path(run_dir).resolve()` (`runtime.py:93-94`) — relative to the **current working directory**, not to the workspace given by `-w`. Running `flower -w /path/to/proj` from `~` puts the session store in `~/runs/`, not in the project.
+    `-r/--run-dir` defaults to `"runs"`, and what `Runtime` does with it is
+    `Path(run_dir).resolve()` (`runtime.py:93-94`) — relative to the **current working
+    directory**, not to the workspace given by `-w`. Run `flower -w /path/to/proj` from `~` and
+    the session store lands in `~/runs/`, not in the project.
 
 ### `<run_dir>/` — default `./runs/` {#run-dir}
 
 ```text
 runs/
-  sessions.db        SQLite, the full transcript (including each subagent's own)
-  manifest.json      Run manifest: session_id / cost / retries / failure reason per step, accumulated across processes
-  lineage.json       Lineage: step name → session_id; how a second run in the same directory picks up
-  aside/             A separate Runtime for oracle Q&A, with its own sessions.db + manifest.json
-  workbench/         Only on the run / once path when -W was given
+  sessions.db        SQLite, full transcript (including each subagent's own)
+  manifest.json      run manifest: each step's session_id / cost / retries / failure reason, accumulated across processes
+  lineage.json       lineage: step name → session_id, reconnecting a re-run in the same directory relies on it
+  aside/             the oracle's separate Runtime, its own sessions.db + manifest.json
+  workbench/         only when going through the run / once path and given -W
 ```
 
-| Path | Content | Source |
+| Path | Contents | Source |
 |---|---|---|
-| `runs/sessions.db` | The full transcript. Written by `PruningSessionStore`; the three-layer policy is [below](#会话存储) | `runtime.py:109-112` |
-| `runs/manifest.json` | A JSON array, the [run manifest](glossary.md#运行清单), **accumulated across processes**. Fields in the table below | `runtime.py:532-533`, `:564-586` |
-| `runs/lineage.json` | `{"workspace": "…", "woke": N, "steps": {"步骤名": "session_id"}}`. Written to `.tmp` first, then `replace`d — atomic | `lineage.py:31`, `:87-97` |
-| `runs/aside/` | The separate Runtime for the [oracle](glossary.md#旁路顾问). **Its cost and lineage do not mix into the main manifest** | `cli.py:632-634` |
-| `runs/workbench/` | The default workbench location for `Runtime(workbench=True)`, outside the workspace. The `go` path does not use it | `runtime.py:148-151` |
+| `runs/sessions.db` | Full transcript. Written by `PruningSessionStore`, the three-layer policy is described [below](#会话存储) | `runtime.py:109-112` |
+| `runs/manifest.json` | A JSON array, the [run manifest](glossary.md#运行清单) **accumulated across processes**. Fields in the table below | `runtime.py:532-533`, `:564-586` |
+| `runs/lineage.json` | `{"workspace": "…", "woke": N, "steps": {"步骤名": "session_id"}}`. Writes to `.tmp` first then `replace`, atomic swap | `lineage.py:31`, `:87-97` |
+| `runs/aside/` | The [oracle](glossary.md#旁路顾问)'s separate Runtime. **Its cost and lineage aren't mixed into the main manifest** | `cli.py:741-743` |
+| `runs/workbench/` | The default workbench location for `Runtime(workbench=True)`, outside the workspace. The `go` path doesn't use it | `runtime.py:148-151` |
 
-Each row of `manifest.json` is `asdict(StepResult)` plus two patches (`runtime.py:44-71`, `:579-582`):
+Each line of `manifest.json` is `asdict(StepResult)` plus two patches (`runtime.py:44-71`,
+`:579-582`):
 
 | Field | Type | Meaning |
 |---|---|---|
-| `step` | `str` | Step name. Four forms: `<name>`, `<name>#round<N>` (sent back for rework), `<name>#retry<N>` (plain retry), `<name>·判定#<N>` ([judge](glossary.md#判定者)) |
-| `session_id` | `str \| None` | The [session](glossary.md#会话) still alive at the end of this step |
+| `step` | `str` | Step name. Four shapes: `<name>`, `<name>#round<N>` (sent back for redo), `<name>#retry<N>` (plain retry), `<name>·判定#<N>` ([judge](glossary.md#判定者)) |
+| `session_id` | `str \| None` | The last live [session](glossary.md#会话) of this step |
 | `ok` | `bool` | Whether it succeeded |
-| `cost_usd` | `float` | What this step cost |
-| `num_turns` | `int` | How many turns it took |
+| `cost_usd` | `float` | How much this step cost |
+| `num_turns` | `int` | How many turns it ran |
 | `text` | `str` | The final reply of this step |
-| `error` | `str \| None` | Failure reason. `killed-by-signal` when killed by SIGHUP / SIGTERM (`runtime.py:556-558`) |
-| `started_at` / `ended_at` | `float` | Epoch seconds |
+| `error` | `str \| None` | Failure reason. When killed by SIGHUP / SIGTERM it's `killed-by-signal` (`runtime.py:556-558`) |
+| `started_at` / `ended_at` | `float` | epoch seconds |
 | `attempts` | `int` | Actual number of attempts. `>1` means it retried |
-| `errors` | `list[str]` | Failure reasons across attempts. **Only here; the model never sees them** |
-| `resumed` | `bool` | Whether it resumed from the interruption point rather than starting over |
-| `retired` | `list[str]` | The session_ids burned during [handoff](glossary.md#换代) in this step, in order |
+| `errors` | `list[str]` | The failure reasons over the attempts. **Only here — the model can't see them** |
+| `resumed` | `bool` | Whether it reconnected from the interruption point via resume rather than running from scratch |
+| `retired` | `list[str]` | The session_ids burned during this step's [handoff](glossary.md#换代), in order |
 | `context` | `int` | The context size the [main thread](glossary.md#主线程) actually saw on the last turn |
-| `duration_s` | `float` | Patched in by hand — it is a `@property`, so `asdict()` misses it |
-| `run` | `str` | Marker for this process, `YYYYmmdd-HHMMSS-<6 hex digits>`. **Must be unique per instance** |
+| `duration_s` | `float` | Patched in by hand — it's a `@property`, `asdict()` can't collect it |
+| `run` | `str` | This process's marker `YYYYmmdd-HHMMSS-<6-digit hex>`. **Must be unique per instance** |
 
-The write strategy is **append, never overwrite**: before each flush the file is re-read, rows whose `run` equals this process's are replaced with the latest version, and everyone else's rows are left untouched (`runtime.py:564-586`). So several flowers running in parallel in the same directory do not clobber each other's books.
+The write policy is **append, don't overwrite**: each flush re-reads the file, replaces the lines
+whose `run` equals its own with the latest, and leaves other lines untouched (`runtime.py:564-586`).
+So running multiple flowers in parallel in the same directory won't have their ledgers clobber
+each other.
 
-Everything under `runs/` is plain data; you can browse it offline at any time with sqlite3 or [`tools/analyze_run.py`](https://github.com/ChenyuHeee/flower/blob/main/tools/analyze_run.py).
+The stuff in `runs/` is pure data, readable offline anytime with sqlite3 or
+[`tools/analyze_run.py`](https://github.com/ChenyuHeee/flower/blob/main/tools/analyze_run.py).
 
 ### `<workspace>/.flower/` — the workbench {#工作台目录}
 
 ```text
 .flower/
-  INDEX.md      Auto-generated index, injected into the main agent's system prompt
-  scripts/      Scripts meant to be run a second time. The first line `# desc: one sentence` shows up in the index
-  artifacts/    Long outputs over 2000 characters: reports, data, logs
-  notes/        Decision records that cross steps
-  spill/        Spilled large tool results; filename = first 16 chars of the content's sha256 + `.txt`
+  INDEX.md      auto-generated index, injected into the main agent's system prompt
+  scripts/      scripts to be run a second time. The first line `# desc: 一句话` appears in the index
+  artifacts/    long outputs over 2000 characters: reports, data, logs
+  notes/        cross-step decision records
+  spill/        spilled large tool results, filename = first 16 chars of the content sha256 + `.txt`
 ```
 
-The three subdirectories and the index are created by `Workbench` (`workbench.py:73-92`). `INDEX.md` goes through the session-level `system_prompt.append`, so **subagents do not inherit it** — which means the rule "write long output to `artifacts/`" must be restated by the [coordinator](glossary.md#协调者) in the [task brief](glossary.md#任务书); that is the only channel.
+The three subdirectories plus the index are created by `Workbench` (`workbench.py:73-92`).
+`INDEX.md` goes through the session-level `system_prompt.append`, which **subagents can't
+inherit** — so the rule "write long outputs to `artifacts/`" must be relayed by the
+[coordinator](glossary.md#协调者) in the [task brief](glossary.md#任务书), that being the only
+channel.
 
 The `go` path always generates these under `notes/`:
 
-| File | Content | Source |
+| File | Contents | Source |
 |---|---|---|
 | `notes/需求.md` | The frozen [brief](glossary.md#需求确认书), four sections: goal / acceptance criteria / boundaries / unknowns and assumptions | `brief.py:44-45`; `clarify.py:105` |
 | `notes/目标.md` | Two frozen sections: goal / verdict checklist | `workflow/goal.py:124` |
-| `notes/问答记录.md` | An appended record of every Q&A, including inbox entries the human volunteered. **Never enters context; archival only** | `human.py:421-433` |
-| `notes/交接-<步骤名>.md` | The [handoff document](glossary.md#交接书). The previous generation is filed into `notes/archive/交接/<步骤名>-<时间戳>.md` | `runtime.py:388-403` |
-| `notes/archive/<YYYYmmdd-HHMMSS>/` | `lineage.json` + `需求.md` + `目标.md` archived by `--new` / `/new` (**moved, not deleted**) | `lineage.py:100-117` |
+| `notes/问答记录.md` | An appended record of all the Q&A, including inbox entries from "the human speaking up unprompted". **Doesn't enter context, kept only for the record** | `human.py:421-433` |
+| `notes/交接-<步骤名>.md` | The [handoff document](glossary.md#交接书). The previous generation gets filed into `notes/archive/交接/<步骤名>-<时间戳>.md` | `runtime.py:388-403` |
+| `notes/archive/<YYYYmmdd-HHMMSS>/` | The `lineage.json` + `需求.md` + `目标.md` archived by `--new` / `/new` (**moved, not deleted**) | `lineage.py:100-117` |
 
-**With `--isolate` the workbench moves outside the repository**: `<parent of workspace>/.flower-<workspace name>/` (`starter.py:47-55`). A worktree is each agent's private copy; the workbench is the layer shared across agents, and shared things cannot live inside a private fence. In that case the paths handed to the model are absolute (`workbench.py:69-71`, `:142-145`).
+**With `--isolate` the workbench moves outside the repo**: `<parent of workspace>/.flower-<workspace name>/`
+(`starter.py:47-55`). A worktree is each agent's private copy, the workbench is a shared layer
+across agents, and shared things can't go inside a private fence. In this case the path given to
+the model is absolute (`workbench.py:69-71`, `:142-145`).
 
-**`spill/` has two writers with different placement rules**:
+**`spill/` has two writers, with different landing algorithms**:
 
-| Who writes | When | Where | Threshold |
+| Who writes | When | Where to | Threshold |
 |---|---|---|---|
-| `spill_guard` (`PostToolUse` hook) | **before** the tool result reaches the model | `<workbench root>/spill/` (`guard.py:130`) | `spill_threshold`, default 4000 characters |
-| `TrimPolicy` (at `load`) | when replaying history before a resume | `<workspace>/.flower/spill/` — a fixed string relative to the workspace (`trim.py:49`, `:303`) | `min_chars`, default 2000 characters |
+| `spill_guard` (`PostToolUse` hook) | **before** a tool result enters the model | `<workbench root>/spill/` (`guard.py:130`) | `spill_threshold`, default 4000 characters |
+| `TrimPolicy` (at `load`) | when replaying history before resume | `<workspace>/.flower/spill/` — a fixed string relative to the workspace (`trim.py:49`, `:303`) | `min_chars`, default 2000 characters |
 
-Under the default layout these are the same directory. But once the workbench moves (with `-W` putting it in `runs/workbench/`, or `--isolate` putting it outside the repository) they split — `TrimPolicy`'s copy always stays inside the workspace, because the agent's `Read` has to be able to reach it.
+Under the default layout these are the same directory. But when the workbench is moved away
+(`-W` lands it in `runs/workbench/`, or `--isolate` lands it outside the repo) the two split apart
+— the `TrimPolicy` copy is always inside the workspace, because the agent's `Read` must be able to
+reach it.
 
-What `spill_guard` substitutes is not one line but a pointer line plus the **first 400 characters** (`guard.py:132-140`). Calls that read the spill file itself are let through, otherwise "use Read for the full text when you need it" would be empty words — the read comes back over threshold, gets spilled again, forever (`guard.py:155-170`).
+What `spill_guard` swaps in isn't one line, it's one line of pointer plus the **first 400
+characters** (`guard.py:132-140`). Calls that read the spill file itself are let through,
+otherwise "use Read to read the full text" is an empty phrase — read it back and it's over
+threshold again, spilled again, an infinite loop (`guard.py:155-170`).
 
-### The schema of `sessions.db` {#sessions-db}
+### The `sessions.db` schema {#sessions-db}
 
-Three tables; the DDL is at `stores/sqlite.py:27-51`:
+Three tables, the CREATE statements are in `stores/sqlite.py:27-51`:
 
 ```sql
 CREATE TABLE entries (
@@ -275,15 +377,18 @@ CREATE TABLE summaries (
 );
 ```
 
-| Table | What one row is | Notes |
+| Table | What a row is | Key point |
 |---|---|---|
-| `entries` | One transcript entry; `payload` is the raw JSON | `uid` is the entry's `uuid`, used as an **idempotency key**: failed batches are retried 3 times and the replay must not produce duplicate rows. Entries without a `uuid` (titles, labels, mode markers) are not deduplicated, hence the unique index carries `WHERE uid IS NOT NULL` |
-| `meta` | The cursor for one session | `next_seq` is the next sequence number; `mtime` is a millisecond timestamp and is **strictly monotonic** (`sqlite.py:72-79`) — `list_sessions` and the summaries share this clock, and non-monotonicity makes the SDK's newer/older check take the wrong fast path |
-| `summaries` | The summary sidecar for one main thread | **Only main transcripts participate**; subagents' do not (`sqlite.py:122-123`) |
+| `entries` | One entry in the transcript, `payload` is the raw JSON | `uid` is the entry's `uuid`, serving as an **idempotency key**: a failed batch gets retried 3 times, and the replay must not produce duplicate rows. Entries with no `uuid` (titles, tags, mode markers) aren't deduped, so the unique index carries `WHERE uid IS NOT NULL` |
+| `meta` | A session's cursor | `next_seq` is the next sequence number, `mtime` is a millisecond timestamp and **strictly monotonic** (`sqlite.py:72-79`) — `list_sessions` and summaries share this clock, and non-monotonicity would send the SDK's new/old judgment down the wrong fast path |
+| `summaries` | A main-thread summary sidecar | **Only the main transcript participates**, subagents' don't (`sqlite.py:122-123`) |
 
-How `store_key` is built (`sqlite.py:54-58`): `<project_key>/<session_id>`, with a further `subpath` segment for subagents. `project_key` is derived by the SDK from the workspace path — `/`, `_`, `.` all become `-`.
+`store_key` is built (`sqlite.py:54-58`) as `<project_key>/<session_id>`, with subagents adding a
+further `subpath`. `project_key` is derived by the SDK from the workspace path — `/`, `_`, `.` all
+replaced with `-`.
 
-A look at a real sample ([`human-test/HT002/runs/sessions.db`](https://github.com/ChenyuHeee/flower/blob/main/human-test/HT002/runs/sessions.db)):
+Look at a real sample
+([`human-test/HT002/runs/sessions.db`](https://github.com/ChenyuHeee/flower/blob/main/human-test/HT002/runs/sessions.db)):
 
 ```bash
 sqlite3 runs/sessions.db "select store_key, next_seq from meta;"
@@ -295,29 +400,36 @@ sqlite3 runs/sessions.db "select store_key, next_seq from meta;"
 -Users-hechenyu-explore-test-ide/47395075-…/subagents/agent-a99a6ce30a5471f44|104
 ```
 
-That one has 956 `entries`, 10 `meta`, 4 `summaries` — of the 10 sessions, 4 are main transcripts and 6 belong to subagents, and `summaries` is exactly the number of main transcripts.
+That one has 956 `entries`, 10 `meta`, and 4 `summaries` — of the 10 sessions 4 are main
+transcripts, 6 are subagents', and `summaries` exactly equals the number of main transcripts.
 
-## The three session-store layers {#会话存储}
+## The three session store layers {#会话存储}
 
 !!! note "The three layers are an inheritance chain, not an optional combination"
-    `PruningSessionStore` extends `TrimmingSessionStore` extends `SqliteSessionStore`. `Runtime` **always** constructs the outermost one (`runtime.py:109-112`), and its constructor has no entry point for swapping the backend. The way to "turn off a layer" is to set its policy object's `enabled` to `False`, not to swap the class.
+    `PruningSessionStore` inherits `TrimmingSessionStore` inherits `SqliteSessionStore`.
+    `Runtime` **always** constructs the outermost one (`runtime.py:109-112`); there's no
+    entry point in the constructor arguments to swap the backend. The way to "turn off a layer"
+    is to set its policy object's `enabled` to `False`, not to swap the class.
 
-`append` (the write path) always persists everything, unchanged. The three layers only affect `load` (the copy fed back to the model). The actual order of `load` is:
+`append` (write) is always a full spill to disk, not a word changed. The three layers only affect
+`load` (the copy read back and fed to the model). The actual order of `load` is:
 
 ```text
-SqliteSessionStore.load     read everything from the entries table, ordered by seq
-  → TrimmingSessionStore.expire()   time-sensitive Bash results → replaced with "expired"
-  → TrimmingSessionStore.trim()     old large tool_results → spilled + replaced with a pointer
-    → PruningSessionStore.prune()   synthetic error messages / old denied calls → dropped whole and the chain relinked
+SqliteSessionStore.load     read out all entries from the entries table by seq
+  → TrimmingSessionStore.expire()   time-sensitive Bash results → swapped for "expired"
+  → TrimmingSessionStore.trim()     old large tool_results → spilled + swapped for a pointer
+    → PruningSessionStore.prune()   synthetic error messages / old denied calls → removed wholesale and the chain relinked
 ```
 
-| Layer | Class | What it drops | Criterion |
+| Layer | Class | Drops what | Criterion |
 |---|---|---|---|
-| 1 | `SqliteSessionStore` | nothing | — |
-| 2 | `TrimmingSessionStore` | the bodies of large tool results, expired ephemeral command results | size + freshness |
-| 3 | `PruningSessionStore` | disconnect residue, old denied calls | whether it is an error |
+| 1 | `SqliteSessionStore` | drops nothing | —— |
+| 2 | `TrimmingSessionStore` | large tool result bodies, expired ephemeral command results | size + timeliness |
+| 3 | `PruningSessionStore` | disconnection debris, old denied calls | whether it's an error |
 
-Layer 2 is [trimming](glossary.md#裁剪), layer 3 is [pruning](glossary.md#剪除) — **trim drops by size and value, prune drops by whether something is an error**; do not conflate them. Full signatures in [Python API](api.md).
+Layer 2 is [trim](glossary.md#裁剪), layer 3 is [prune](glossary.md#剪除) — **trim drops by size
+and value, prune drops by "is it an error"**, don't conflate them. Full signatures in the
+[Python API](api.md).
 
 ### `SqliteSessionStore` — the foundation {#sqlite-store}
 
@@ -325,15 +437,18 @@ Layer 2 is [trimming](glossary.md#裁剪), layer 3 is [pruning](glossary.md#剪�
 SqliteSessionStore(path: str | Path)
 ```
 
-A SQLite implementation with zero external dependencies. To switch to Postgres / S3 / Redis, implement the same protocol; the SDK ships a conformance suite, `claude_agent_sdk.testing.session_store_conformance`, that verifies it directly (`sqlite.py:1-8`).
+A SQLite implementation with zero external dependencies. To swap in Postgres / S3 / Redis,
+implement the same protocol; the SDK ships a conformance test suite
+`claude_agent_sdk.testing.session_store_conformance` you can validate against directly
+(`sqlite.py:1-8`).
 
-Besides the protocol methods there are three **synchronous** queries for flower's own use:
+Besides the protocol methods, there are three **synchronous** queries, for flower's own use:
 
-| Method | Returns | Purpose |
+| Method | Returns | Use |
 |---|---|---|
-| `projects()` | `list[str]` | The `project_key`s that actually exist in the database. The SDK derives it from cwd; confirm with this before querying instead of guessing |
-| `has_session(project_key, session_id)` | `bool` | Reads one row of `meta` only, no payload. Check before [continuity](glossary.md#接续) starts — resuming a nonexistent session only blows up after the subprocess is already up, by which point money and time are spent |
-| `last_context(project_key, session_id, scan=60)` | `int` | How large a context this session saw on its last turn. Scans backwards over the last 60 entries only. `input_tokens` plus both `cache_*` counts — looking at the first alone is near 0 on a cache hit and badly underestimates |
+| `projects()` | `list[str]` | The `project_key`s that actually exist in the store. The SDK derives it from cwd; confirm with this before querying rather than guessing |
+| `has_session(project_key, session_id)` | `bool` | Queries only one `meta` row, doesn't read the payload. Query before starting [continuity](glossary.md#接续) — resuming a session that doesn't exist blows up only after the subprocess starts, by which point money and time are spent |
+| `last_context(project_key, session_id, scan=60)` | `int` | How large a context the last turn of this session saw. Scans only the last 60 entries backward. `input_tokens` plus the two `cache_*` all count — looking at only the former, which is near 0 on a cache hit, would badly underestimate |
 
 ### `TrimmingSessionStore` + `TrimPolicy` / `EphemeralPolicy` {#trimming-store}
 
@@ -342,35 +457,50 @@ TrimmingSessionStore(path, workspace, policy: TrimPolicy | None = None,
                      ephemeral: EphemeralPolicy | None = None)
 ```
 
-Two orthogonal rules. `TrimPolicy` governs **size**:
+Two orthogonal rules. `TrimPolicy` handles **size**:
 
-| Parameter | Type | Default | Meaning |
+| Parameter | Type | Default | Semantics |
 |---|---|---|---|
-| `keep_recent` | `int` | `20` | The most recent N `tool_result`s keep their original text — context in active use should not be trimmed |
-| `min_chars` | `int` | `2000` | Anything shorter is not trimmed. Replacing it with a pointer would cost more tokens |
-| `spill_dirname` | `str` | `".flower/spill"` | Archive directory, **relative to workspace**. Must be inside the workspace or the agent's `Read` cannot reach it |
-| `enabled` | `bool` | `True` | `False` under `Runtime(trim=False)` (the default) |
+| `keep_recent` | `int` | `20` | The most recent N `tool_result`s keep their original text — the context in active use shouldn't be trimmed |
+| `min_chars` | `int` | `2000` | Anything shorter isn't trimmed. Swapping in a pointer would cost more tokens instead |
+| `spill_dirname` | `str` | `".flower/spill"` | The archive directory, **relative to workspace**. Must be inside the workspace, otherwise the agent's `Read` can't reach it |
+| `enabled` | `bool` | `True` | `False` when `Runtime(trim=False)` (the default) |
 
-The trimmed body is written as `<first 16 chars of sha256>.txt`, and the original position is replaced with `[工具结果已归档:N 字符。完整内容在 <路径>,需要时用 Read 读取]` (`trim.py:54-57`, `:308-317`).
+The trimmed body is written as `<first 16 chars of sha256>.txt`, and the original position is
+swapped for
+`[工具结果已归档:N 字符。完整内容在 <路径>,需要时用 Read 读取]` (`trim.py:54-57`, `:308-317`).
 
-`EphemeralPolicy` governs **freshness**: results from `git status`, `ls`, `ps` and the like are short and would never be trimmed on size grounds, but their correctness decays with time — a `git status` from 20 turns ago is not "useless", it is **misleading**.
+`EphemeralPolicy` handles **timeliness**: results from `git status`, `ls`, `ps` and the like are
+short, and by size would never get their turn to be trimmed, but their correctness decays over
+time — a `git status` from 20 turns ago isn't "useless", it's **misleading**.
 
-| Parameter | Type | Default | Meaning |
+| Parameter | Type | Default | Semantics |
 |---|---|---|---|
-| `enabled` | `bool` | `True` | Converted from `Runtime(ephemeral=…)`; **on by default** |
-| `keep_recent` | `int` | `6` | The most recent N keep their original text. Much smaller than `TrimPolicy`'s 20 — for this kind of thing the "recent" window is inherently short |
-| `max_chars` | `int` | `2000` | Above this it is handed to `TrimPolicy` to spill and archive, and does not go down this path |
+| `enabled` | `bool` | `True` | Converted from `Runtime(ephemeral=…)`, **on by default** |
+| `keep_recent` | `int` | `6` | The most recent N keep their original text. Much smaller than `TrimPolicy`'s 20 — the "recent" window for this kind of thing is inherently short |
+| `max_chars` | `int` | `2000` | Beyond this it's handed to `TrimPolicy` to spill and archive, not this path |
 | `text` | `str` | `"[{cmd} 的结果已过期(第 {age} 轮前),当前状态可能已变。需要请重新执行]"` | Replacement text |
 
-Applies only to results of the **Bash** tool, and only when the command matches `EPHEMERAL_CMD`. `Read` is not included: file content does not decay with time to the point of being misleading, and it may be exactly what the model's reasoning rests on (`trim.py:153-160`). Expired content is **not spilled** — archiving a stale `git status` is pointless; rerunning it gives you a fresh one.
+Applies only to **Bash** tool results, and the command must match `EPHEMERAL_CMD`. `Read` isn't
+included: file contents don't distort into being misleading merely because time passes, and it may
+be exactly what the model's reasoning rests on (`trim.py:153-160`). Expired content is **not
+spilled** — archiving an expired `git status` is pointless, rerun it once and you have it.
 
-The predicate is `is_ephemeral(cmd)`, and it **is simultaneously the permission list handed back to the coordinator**: `delegate_guard(allow_glance=True)` uses the same function (`trim.py:63-68`, `:128-150`). The two sets must stay identical — allowed but not trimmed, and a stale `git status` occupies context forever; trimmed but not allowed, and the coordinator dispatches a subagent for a single `ls`, paying 4.3k of startup cost for a few dozen characters. Adding a command to the allowlist says both of these things at once.
+The judging function is `is_ephemeral(cmd)`, and it is **also the permission list handed back to
+the coordinator**: `delegate_guard(allow_glance=True)` uses the same function (`trim.py:63-68`,
+`:128-150`). The two sets must always be equal — allow it but don't trim it and an expired
+`git status` occupies context forever; trim it but don't allow it and the coordinator dispatches a
+subagent for a single `ls`, trading 4.3k of startup cost for a few dozen characters. Adding one
+command to the allowlist says both of those things at once.
 
-**Which to use when**:
+**When to use which**:
 
-- You only want disconnect residue kept out of context → do nothing; `Runtime` already defaults to `PruningSessionStore`. `trim=False` only stops large results from being trimmed; pruning still happens.
-- Long runs with large tool output → `trim=True`. The CLI on the `go` path has it on by default; use `--no-trim` to turn it off.
-- The [coordinator](glossary.md#协调者) has `glance=True` → `ephemeral` must stay on, for the reason in the previous paragraph.
+- Want only disconnection debris kept out of context → do nothing, `Runtime` defaults to
+  `PruningSessionStore`. `trim=False` just doesn't trim large results; removal still happens.
+- Long runs, large tool output → `trim=True`. The `go` path CLI has it on by default, use
+  `--no-trim` to turn it off in reverse.
+- The [coordinator](glossary.md#协调者) has `glance=True` on → `ephemeral` must stay on, reasons in
+  the previous paragraph.
 
 ### `PruningSessionStore` + `PrunePolicy` {#pruning-store}
 
@@ -380,42 +510,74 @@ PruningSessionStore(path, workspace, policy: TrimPolicy | None = None,
                     ephemeral: EphemeralPolicy | None = None)
 ```
 
-| Parameter | Type | Default | Meaning |
+| Parameter | Type | Default | Semantics |
 |---|---|---|---|
-| `drop_api_errors` | `bool` | `True` | Drop synthetic messages with `isApiErrorMessage=true` or `message.model == "<synthetic>"` |
-| `neutralize_interrupts` | `bool` | `True` | For `[Request interrupted …]` `tool_result`s, **replace the body, do not drop the block** |
-| `interrupt_text` | `str` | `"[上一轮在此处被中断,该工具结果未产生]"` | Replacement text for the row above |
-| `keep_denials` | `int` | `1` | Keep the most recent N tool calls denied by the permission hook; earlier ones are dropped **call and result together** |
+| `drop_api_errors` | `bool` | `True` | Removes synthetic messages with `isApiErrorMessage=true` or `message.model == "<synthetic>"` |
+| `neutralize_interrupts` | `bool` | `True` | For a `[Request interrupted …]` `tool_result`, **swap the body, don't remove the block** |
+| `interrupt_text` | `str` | `"[上一轮在此处被中断,该工具结果未产生]"` | Replacement text for the previous entry |
+| `heal_orphans` | `bool` | `True` | **Adds** a synthetic result for orphaned calls that "have a `tool_use` but no `tool_result`" |
+| `orphan_text` | `str` | `"[这一步被打断了,没有结果。需要的话重做。]"` | The body of the `tool_result` added |
+| `keep_denials` | `int` | `1` | Keep the most recent N tool calls denied by the permission hook, remove earlier ones **call and result together** |
 
-`keep_denials` is the only `Runtime` constructor parameter passed straight through to this layer (`Runtime(keep_denials=N)`). Why the default is 1 and not 0: the most recent denial is a useful signal that stops the model from retrying the same blocked command over and over within a turn. **Do not raise it** — a denied call was never executed, so its result carries no information; measured, one costs 273 characters (93 characters of refusal text plus 180 characters of the dead command verbatim), and it **misleads**: in practice, after reading a few "do not use Bash directly" messages, the coordinator stops even trying an allowed `git status` and just says "Bash is restricted, dispatch an agent to look" (`prune.py:135-148`).
+`keep_denials` is the only `Runtime` constructor argument passed straight through to this layer
+(`Runtime(keep_denials=N)`). The reason for defaulting to 1 rather than 0: the most recent denial
+is a valid signal, preventing the model from repeatedly retrying the same blocked command within a
+single turn. **Don't raise it** — a denied call was never executed, its result carries no
+information, and in measurement one occupies 273 characters (a 93-character refusal plus 180
+characters of the dead command's text), and it **misleads**: in measurement, after the coordinator
+reads a few "don't use Bash directly" lines, it stops even trying an allowed `git status` and just
+says "Bash is restricted, dispatch an agent to look" (`prune.py:135-148`).
 
-Three structural red lines; violating them makes the API error out immediately:
+`heal_orphans` cures **resume 400-ing every time after an interruption**: the interruption breaks
+at a message boundary, the `tool_use` in flight at the time may have no `tool_result` following it
+at all, while the API requires the two to be paired. This bad history left in the transcript won't
+go away on its own, so every subsequent resume gets bounced by it. The fix is to insert a `user`
+entry after the assistant entry containing the orphan, filling in the results for all orphans in
+that entry at once, then reroute the `parentUuid` that originally pointed at that assistant to
+point at this inserted one (`prune.py:95-147`). **Add, don't delete**: deleting an orphan requires
+relinking the parent-child chain, and the same assistant entry may still hold valid blocks, text,
+and thinking that would get caught in the crossfire (`prune.py:195-204`).
 
-1. **The `tool_result` block itself must remain**, only `content` may be replaced. One missing block is a "Missing Tool Result Block" (`trim.py:20-22`; `prune.py:79-92`).
-2. **`isCompactSummary` / `isMeta` entries must not be touched** — they are the only surviving form of the history that was compacted away (`trim.py:179-181`).
-3. **Dropping an entry means reattaching its children to its parent.** The transcript is a single `parentUuid` chain; the harness walks back from the leaf, and wherever the chain breaks, all earlier history is lost (`prune.py:95-122`). This is why `relink()` must receive the complete list **including** the entries to be dropped, and does the filtering itself.
+Three structural red lines, violating which makes the API error out directly:
 
-**Not one character of the original in SQLite is changed** — the three layers only affect "the copy fed back to the model" (`trim.py:18`; `prune.py:8`).
+1. **The `tool_result` block itself must be present**, only `content` can be swapped. Miss one and
+   it's "Missing Tool Result Block" (`trim.py:20-22`; `prune.py:79-92`).
+2. **`isCompactSummary` / `isMeta` entries can't be touched** — that's the only form in which the
+   compacted history exists (`trim.py:179-181`).
+3. **Remove an entry and you must reattach its children to its parent**. The transcript is a
+   single `parentUuid` chain, the harness walks back from the leaf, and wherever the chain breaks
+   all the history before it is lost (`prune.py:95-122`). So `relink()` must receive the full list
+   **including** the entry to be removed, and does the filtering itself.
 
-## Offline resilience {#韧性}
+**Not one word of the original in SQLite is changed** — the three layers only affect "the copy fed
+back to the model" (`trim.py:18`; `prune.py:8`).
 
-A long-horizon workflow runs for hours, so the network will drop at least once. The default behavior is bad: the moment it drops, the harness stuffs a synthetic assistant message into the transcript (`model="<synthetic>"`, `isApiErrorMessage=true`) with the body `API Error: Can't reach the API server …`; it becomes the leaf of the session, so a later resume feeds it back as "what the model just said" and the model thinks it is discussing a network failure; it also leaks into `StepResult.text` and rides the workflow into the next step's prompt (`resilience.py:1-22`).
+## Network resilience {#韧性}
 
-The [resilience](glossary.md#韧性) layer does three things, all of them required: probe, resume instead of restart, and keep errors out of context.
+A long-horizon workflow runs for hours at a stretch, and the network will drop at least once. The
+default behavior is bad: the moment it drops, the harness stuffs a synthetic assistant message
+into the transcript (`model="<synthetic>"`, `isApiErrorMessage=true`), with the body
+`API Error: Can't reach the API server …`; it becomes the session's leaf, so a later resume feeds
+it back as "what the model said last", and the model thinks it's discussing a network failure; it
+also mixes into `StepResult.text` and passes down the workflow to the next step's prompt
+(`resilience.py:1-22`).
+
+The [resilience](glossary.md#韧性) layer does three things, none optional: probe, resume instead of
+restart, keep errors out of context.
 
 ### `Resilience` parameters {#resilience}
 
-| Parameter | Type | Default | Meaning |
+| Parameter | Type | Default | Semantics |
 |---|---|---|---|
 | `enabled` | `bool` | `True` | Converted from `Runtime(resilience=…)` |
-| `max_attempts` | `int` | `6` | Maximum attempts for one [step](glossary.md#步骤), **including the first** |
-| `base_delay` | `float` | `4.0` | Exponential backoff base, seconds |
+| `max_attempts` | `int` | `6` | How many times a [step](glossary.md#步骤) can be attempted at most, **including the first** |
+| `base_delay` | `float` | `4.0` | Exponential backoff starting point, seconds |
 | `max_delay` | `float` | `120.0` | Backoff ceiling, seconds |
-| `probe_timeout` | `float` | `5.0` | Timeout for a single probe, seconds |
+| `probe_timeout` | `float` | `5.0` | Single-probe timeout, seconds |
 | `probe_interval` | `float` | `15.0` | How often to probe while offline, seconds |
-| `max_offline_wait` | `float` | `3600.0` | Maximum time to wait while offline. Default 1 hour — longer than that is usually not jitter, something is genuinely broken |
-| `retry_unknown` | `bool` | `True` | Retry errors that cannot be classified. Most unknown errors are transient, and fatal ones are already blocked separately |
-| `resume_prompt` | `str` | `"上一轮在中途被打断,没有跑完。检查一下工作台里已经落盘的东西,从中断处接着做,不要重头来过。"` | What is said to the model when resuming |
+| `max_offline_wait` | `float` | `3600.0` | Maximum wait while offline. Default 1 hour — longer than that is usually not jitter, it's something actually wrong |
+| `retry_unknown` | `bool` | `True` | Retry errors that can't be classified too. Most unknown errors are transient, and fatal errors are already blocked separately |
+| `resume_prompt` | `str` | `"上一轮在中途被打断,没有跑完。检查一下工作台里已经落盘的东西,从中断处接着做,不要重头来过。"` | What to say to the model when resuming |
 
 The backoff formula (`resilience.py:119-121`):
 
@@ -423,40 +585,65 @@ The backoff formula (`resilience.py:119-121`):
 min(base_delay * 2 ** (attempt - 1), max_delay) * (0.75 + random() * 0.5)
 ```
 
-That is `±25%` jitter, so a crowd of processes does not charge in the instant the network recovers. With the defaults: the 1st backoff is 4 seconds (3~5 in practice), the 2nd is 8 seconds (6~10), and from the 5th on it caps at 120 seconds (90~150).
+That is `±25%` jitter, avoiding a bunch of processes rushing in together the instant the network
+recovers. At defaults: the 1st backoff is 4 seconds (actually 3–5), the 2nd is 8 seconds (6–10),
+and from the 5th it caps at 120 seconds (90–150).
 
 ### Probe strategy {#探针}
 
-- **It probes the host:port of `ANTHROPIC_BASE_URL`**, not `api.anthropic.com` (`resilience.py:67-72`). With a self-hosted gateway, the latter being reachable says nothing about the former.
-- **DNS plus a TCP handshake only**: `getaddrinfo`, then `connect_tcp`, then close immediately. No HTTP, no credentials, no cost (`resilience.py:75-85`). The probe must be free, otherwise "probe every 15 seconds while offline" becomes the failure itself.
+- **What it probes is the host:port of `ANTHROPIC_BASE_URL`**, not `api.anthropic.com`
+  (`resilience.py:67-72`). With a self-hosted gateway, the latter being reachable says nothing
+  about the former.
+- **DNS plus a TCP handshake only**: `getaddrinfo` then `connect_tcp` then close immediately. No
+  HTTP, no credentials, no cost (`resilience.py:75-85`). The probe must be free, otherwise
+  "probing every 15 seconds while offline" itself becomes a failure.
 - Any failure counts as unreachable — no distinction between DNS being down and TCP being refused.
-- `wait_online()` blocks there: returns `True` when it comes back, returns `False` after `max_offline_wait` elapses. On the first unreachable result it prints one notification line, `<host>:<port> 不可达,等待恢复(最多 60 分钟)`, and on recovery one more, `<host>:<port> 恢复,继续`, with **nothing in between** (`resilience.py:126-140`).
+- `wait_online()` hangs there waiting: returns `True` when reachable, returns `False` after a full
+  `max_offline_wait`. On the first unreachability it notifies one line
+  `<host>:<port> 不可达,等待恢复(最多 60 分钟)`, and on recovery notifies one more line
+  `<host>:<port> 恢复,继续`, **without flooding the screen in between** (`resilience.py:126-140`).
 
-The credential probe before a run starts is a different thing: it really does send one `POST <BASE_URL>/v1/messages` with `max_tokens=16` and a default timeout of 20 seconds (`env.py:126-181`). **Do not set `max_tokens` to 1** — measured, a model with forced chain-of-thought cannot even fit its thinking in, and the server struggles for 30 seconds before returning; 16 takes only 3.6 seconds (`env.py:120-123`).
+The credential probe before the run starts is a separate matter: it actually sends one
+`POST <BASE_URL>/v1/messages`, `max_tokens=16`, with a default timeout of 20 seconds
+(`env.py:126-181`). **Don't set `max_tokens` to 1** — in measurement a model with forced
+chain-of-thought can't even fit its thinking, and the server struggles until 30 seconds before
+returning; set it to 16 and it takes only 3.6 seconds (`env.py:120-123`).
 
 ### Error classification {#错误分类}
 
-`classify(text)` returns one of three. **Fatal is checked first**: text for things like a 401 often also contains a word like "connection", and the reverse order would wait forever (`resilience.py:53-64`).
+`classify(text)` returns one of three. **Judge fatal first**: a 401 and the like often carry words
+like "connection" in their text too, and getting the order backwards causes a deadlock wait
+(`resilience.py:53-64`).
 
-| Class | What it matches (regexes at `resilience.py:37-50`) | Behavior |
+| Class | What it matches (regex in `resilience.py:37-50`) | Behavior |
 |---|---|---|
-| `fatal` | `400` `401` `403` `404`, `invalid api key`, `authentication`, `unauthorized`, `permission denied`, `invalid_request`, `credit balance`, `quota exceeded`, `budget`, `max_turns`, `CLINotFound` | Stop immediately, no retry. The result is the same however many times you retry, and each one costs money |
-| `transient` | `ENOTFOUND` `EAI_AGAIN` `ECONNRESET` `ECONNREFUSED` `ETIMEDOUT` `EPIPE` `EHOSTUNREACH` `ENETDOWN`, `socket hang up`, `fetch failed`, `Can't reach the API server`, `429` `500` `502` `503` `504` `529`, `overloaded`, `rate limit`, `timeout`, `service unavailable` | Wait for the network, then resume |
-| `unknown` | matches nothing | Retried as well when `retry_unknown=True` (the default) |
+| `fatal` | `400` `401` `403` `404`, `invalid api key`, `authentication`, `unauthorized`, `permission denied`, `invalid_request`, `credit balance`, `quota exceeded`, `budget`, `max_turns`, `CLINotFound` | Stop immediately, no retry. However many times you retry the result is the same, and each one costs money |
+| `transient` | `ENOTFOUND` `EAI_AGAIN` `ECONNRESET` `ECONNREFUSED` `ETIMEDOUT` `EPIPE` `EHOSTUNREACH` `ENETDOWN`, `socket hang up`, `fetch failed`, `Can't reach the API server`, `429` `500` `502` `503` `504` `529`, `overloaded`, `rate limit`, `timeout`, `service unavailable` | Wait for the network to come back, then resume |
+| `unknown` | matches none | Retried too when `retry_unknown=True` (the default) |
 
-Separating retryable from non-retryable is the core of this layer: **network jitter deserves waiting, a bad credential deserves an immediate stop** — waiting forever is right when the network is down, and pure wasted time when the key is wrong.
+Distinguishing retryable from non-retryable is the core of this layer: **network jitter should
+wait, a credential error should stop immediately** — deadlock-waiting while offline is right, but
+deadlock-waiting on a mistyped key is just burning time.
 
-### What is kept out of context {#错误不进上下文}
+### What gets held out of context {#错误不进上下文}
 
-1. **Synthetic error messages.** `PruningSessionStore` drops them whole at `load` time and relinks `parentUuid` (`prune.py:27-32`, `:191-195`). **They stay in SQLite untouched**; they are simply not fed back.
-2. **In the event stream they carry `kind="error"` rather than `"text"`**, so they never reach `StepResult.text` and thus never ride the workflow into the next step's prompt (`resilience.py:17-18`).
-3. **`resume_prompt` deliberately contains no error detail.** The model needs to know "you were interrupted, keep going"; it does not need to know whether it was `ENOTFOUND` or a `503`. **That belongs in the log, not in context** (`resilience.py:112-113`). For the log, look at the `errors` field in `manifest.json`.
+1. **Synthetic error messages**. `PruningSessionStore` removes them wholesale at `load` and
+   relinks `parentUuid` (`prune.py:27-32`, `:191-195`). **Kept verbatim in SQLite**, just not fed
+   back.
+2. **In the event stream it's `kind="error"`, not `"text"`**, so it doesn't enter
+   `StepResult.text`, and therefore doesn't pass down the workflow into the next step's prompt
+   (`resilience.py:17-18`).
+3. **`resume_prompt` deliberately contains no error detail**. The model needs to know "you were
+   interrupted, keep going", not whether it was `ENOTFOUND` or `503`. **That belongs in the log,
+   not the context** (`resilience.py:112-113`). For the log, look at the `errors` field of
+   `manifest.json`.
 
-Resume instead of restart: by the time a failure happens the `session_id` is already in hand, so resume picks up from the interruption point and the cost already spent is not wasted.
+Resume instead of restart: by the time the failure occurs the `session_id` is already in hand, use
+resume to reconnect from the interruption point, and the earlier cost isn't wasted.
 
 ## Related {#相关}
 
-- [Command line](cli.md) — how each flag maps onto the configuration on this page.
-- [Python API](api.md) — the full signatures of `Runtime`, the three stores, and `Resilience`.
-- [Deployment](deploy.md) — running in a container, distributing domain capability as a plugin.
+- [Command line](cli.md) — how each switch maps to the configuration on this page.
+- [Python API](api.md) — full signatures of `Runtime`, the three stores, and `Resilience`.
+- [Deployment](deploy.md) — running in a container, distributing domain capability via a plugin.
 - [Glossary](glossary.md) — the precise meaning of every term used on this page.

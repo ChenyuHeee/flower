@@ -2,11 +2,11 @@
 
 <div class="fl-hero" markdown>
 
-<p class="fl-hero__tagline">Claude Agent SDK 上に構築した、ポータブルな long-horizon agent フレームワーク。</p>
+<p class="fl-hero__tagline">Claude Agent SDK 上に作られた、ポータブルなロングホライズン agent フレームワーク。</p>
 
-<p class="fl-hero__sub">Claude Code の能力を犠牲にせず、持ち出せて、インタラクションをカスタマイズでき、何日でも走り続けられる専用 agent に変える。
-main thread 上の agent は判断だけを行い、手を動かす作業はすべて subagent に委ねる。要件は先に問い詰めてから着手し、完了したかどうかは別の役割が判定する。
-別のマシンに移しても挙動は同じ —— ホストマシンの設定は読まず、認証情報は自分で持ち歩く。</p>
+<p class="fl-hero__sub">Claude Code の能力を犠牲にせず、持ち出せて、対話をカスタマイズでき、何日でも走り続けられる専用 agent にする。
+メインスレッド上の agent は決定だけを行い、手を動かす作業はすべて subagent に投げる。要件は先に聞き切ってから着手し、できているかどうかは別の役割が判定する。
+別のマシンに移しても挙動は同じ —— ホストマシンの設定を読まず、認証情報は自分で持ち歩く。</p>
 
 [クイックスタート](getting-started/quickstart.md){ .md-button .md-button--primary }
 [GitHub](https://github.com/ChenyuHeee/flower){ .md-button }
@@ -14,85 +14,85 @@ main thread 上の agent は判断だけを行い、手を動かす作業はす�
 </div>
 
 <div class="fl-stats">
-<div class="fl-stat"><b>$171.62</b><span>1 回の run の費用</span></div>
-<div class="fl-stat"><b>10.4 hours</b><span>連続稼働。途中でネットが切れても自力で復帰</span></div>
-<div class="fl-stat"><b>185.9K</b><span>main thread のコンテキスト最大値。全行程で compact なし</span></div>
+<div class="fl-stat"><b>$171.62</b><span>1 回の実行のコスト</span></div>
+<div class="fl-stat"><b>10.4 時間</b><span>連続実行。途中でネットワークが切れても自力で復帰</span></div>
+<div class="fl-stat"><b>185.9K</b><span>メインスレッドのコンテキスト最大値。全期間で圧縮なし</span></div>
 <div class="fl-stat"><b>94.8%</b><span>本文文字数が subagent 側に落ちた割合</span></div>
 </div>
 
-4 つの数字は [HT001](cases/ht001.md) —— ある agent が flower の下でゼロからターミナル IDE を書き上げた、あの run のもの。
+4 つの数字は [HT001](cases/ht001.md) から —— 1 つの agent が flower の上でゼロから端末 IDE を書き上げた、あの実行のものだ。
 
-## インストール {#装}
+## コマンド 1 本で導入、Node 不要 {#装}
 
 ```bash
 curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
 ```
 
-`uv` / `pipx` / `pip` を自動で探して `flower` コマンドを入れる。Python ≥ 3.10 さえあればよく、Node も
-Claude Code CLI も要らない。インストール後は任意のプロジェクトディレクトリに `cd` して `flower` と一言叩く。初回は API key
-かゲートウェイのアドレスを訊かれる。一度設定すれば `~/.config/flower/.env` に保存され、どこでも効く。すでに Claude Code をインストールして設定済みなら、
-そのトークンをそのまま借りるので、何も訊かれない。詳しい手順とトラブルシューティングは[インストール](getting-started/install.md)を参照。
+スクリプトが `uv` / `pipx` / `pip` を自動で探して `flower` コマンドを入れる。必要なのは Python ≥ 3.10 だけで、
+Claude Code CLI も入れなくていい。入れ終わったら任意のプロジェクトディレクトリに `cd` して `flower` と打つ。初回は API key
+かゲートウェイのアドレスを聞かれる。一度設定すれば `~/.config/flower/.env` に保存され、どこでも効く。ローカルにすでに Claude Code が入っていて設定済みなら、
+その token をそのまま借りるので、何も聞かれない。手順の全体とトラブルシューティングは[インストール](getting-started/install.md)を参照。
 
-## 4 種類の失敗を肩代わりする {#四类失败}
+## 4 種類の失敗を防ぐ {#四类失败}
 
 <div class="fl-grid" markdown>
 
 <div class="fl-card" markdown>
-### [clarify](guide/clarify.md) {#前置确认}
+### [事前確認](guide/clarify.md) {#前置确认}
 
-出来上がったものが望んだものと違うのが怖い —— 着手前に、質問だけして手を動かさない役割が、明確になるまで問い詰め、要件を 1 通の文書に凍結する。
-以降のすべての step はそれを読んで開始する。
+作ったものが欲しかったものと違う、という失敗 —— 着手する前に、質問だけして手を動かさない役割が、はっきりするまで聞き切る。要件は 1 通の文書に凍結され、
+以降の各ステップはそれを読んで始まる。
 </div>
 
 <div class="fl-card" markdown>
-### [goal guard](guide/goal.md) {#目标看守}
+### [ゴールガード](guide/goal.md) {#目标看守}
 
-「完了しました」と言われても実は終わっていないのが怖い —— 各ラウンドの作業が終わるたびに別の役割が独立に 1 回判定する。達成なら先へ進み、未達成なら差し戻す。
-その環境では検証できない場合は止まって人に訊く。
+「できました」と言うが実際にはできていない、という失敗 —— 1 ラウンドの作業が終わるたびに別の役割が独立に一度判定する。達成なら次へ、未達成なら差し戻し、
+この環境では検証できないなら止まって人に聞く。
 </div>
 
 <div class="fl-card" markdown>
-### [continuity](guide/continuity.md) {#接续}
+### [継続](guide/continuity.md) {#接续}
 
-数時間走ったあとにクラッシュしてゼロからやり直しになるのが怖い —— 同じディレクトリでもう一度 `flower` と叩けば前回の進捗に接続する。プロセスが kill されても、
-マシンが再起動しても同じ。id を覚えておく必要はない。
+数時間走ってからクラッシュして最初からやり直し、という失敗 —— 同じディレクトリでもう一度 `flower` と打てば前回の続きから再開する。プロセスが kill されても、
+マシンが再起動しても同じで、id を覚えておく必要はない。
 </div>
 
 <div class="fl-card" markdown>
-### [handoff](guide/handoff.md) {#换代}
+### [世代交代](guide/handoff.md) {#换代}
 
-コンテキストが満杯になって要約 1 段落に潰されるのが怖い —— 現在の session が自分で、人が読めて編集もできる handoff document を書き、新しい session が引き継ぐ。
+コンテキストが埋まって 1 段落の要約に圧縮される、という失敗 —— いまのセッションが自分で、人が読めて手も入れられる引き継ぎ書を書き、新しいセッションが引き継ぐ。
 compact は使わない。
 </div>
 
 </div>
 
-## なぜ "long-horizon" なのか {#长程}
+## なぜ「ロングホライズン」なのか {#长程}
 
-main thread 上の [coordinator](reference/glossary.md#协调者) には判断だけを載せ、`Write` と `Edit` は渡さない ——
-コードを書く、テストを走らせる、資料を調べるはすべて [subagent](reference/glossary.md#subagent) に委ねる。
-subagent の試行錯誤が入るのは**別の** transcript であり、main thread は 30 行を超えないレポートを 1 通受け取るだけだ。
-HT001 の 10.4 hours の run では、**本文文字数の 94.8% が subagent 側に落ちた**。
-手を動かす 1,893 回のツール呼び出しのうち、coordinator の視野に入ったのは 32 回だけ。
-だから main thread は 70 ラウンドかけてようやく 185.9K に達し、全行程で compact は一度も起きなかった —— この層をどう作ったのか、残る 3 層は何かは、
-[コンテキスト経済学](guide/context.md)を参照。
+メインスレッド上の[コーディネーター](reference/glossary.md#协调者)は決定だけを積み、`Write` と `Edit` は持たない ——
+コードを書く、テストを走らせる、資料を調べるは全部 [subagent](reference/glossary.md#subagent) に投げる。
+subagent の試行錯誤は**別の** transcript に入り、メインスレッドは 30 行を超えないレポートを 1 通受け取るだけだ。
+HT001 の 10.4 時間の実行では、**本文文字数の 94.8% が subagent 側に落ち**、
+手を動かすツール呼び出し 1,893 回のうちコーディネーターの視界に入ったのは 32 回だけだった。
+だからメインスレッドは 70 ターンかけて 185.9K までしか伸びず、全期間で圧縮は一度も起きなかった —— この層をどう作ったか、残り 3 層が何かは、
+[コンテキストの経済学](guide/context.md)を参照。
 
-## 実際に走らせた {#真的跑过}
+## 実際の長時間実行 2 回の生記録 {#真的跑过}
 
-- **[HT001](cases/ht001.md)** —— ゼロからターミナル IDE を書く。$171.62 / 10.4 hours /
-  main thread のコンテキストは 185.9K まで伸び、12,212 行のプロダクトコードを提出。途中で一度ネットが切れたが、自力で最後まで走り切った。
-- **[HT002](cases/ht002.md)** —— それを macOS 上にインストールして動かす。$38.24 / 約 1 時間、初めて goal guard を有効化。
-  プログラムは確かに起動したが、verdict は**達成不能**で、人に訊くために浮上した。
+- **[HT001](cases/ht001.md)** —— ゼロから端末 IDE を書く。$171.62 / 10.4 時間 /
+  メインスレッドのコンテキストは 185.9K まで伸び、12,212 行のプロダクトコードを出した。途中で一度ネットワークが切れたが、自力で最後まで走り切った。
+- **[HT002](cases/ht002.md)** —— それを macOS に入れて動かす。$38.24 / 約 1 時間、初めてゴールガードを付けた回。
+  プログラムは実際に動いたが、判定の結論は**達成不能**で、人に聞くために浮上した。
 
-どちらのページにも、成立していない箇所を書いてある。HT001 では agent が自分の受け入れ判定を 1 件誤り、
-HT002 では `git clone && make && ./cppide` に 1 時間かけた。すべての数字は `runs/manifest.json`
-と `sessions.db` で再計算できる —— これは生の記録であって、宣伝ではない。
+どちらのページにも、成立していない箇所を書いた。HT001 では agent が自分の受け入れ判定を 1 件間違えている。
+HT002 は `git clone && make && ./cppide` に 1 時間かけている。どの数字も `runs/manifest.json`
+と `sessions.db` から再計算できる —— 宣伝ではなく記録だ。
 
 ## どこから読むか {#从哪读起}
 
-- **すぐ動かしたい** —— [クイックスタート](getting-started/quickstart.md):まず 0.2 元ぶんだけ使って認証情報を一発検証し、
-  次にコードを書かずに 3 step の workflow を最後まで走らせる。
-- **先に概念を掴みたい** —— [コアコンセプト](getting-started/concepts.md):run、step、session、5 つの役割を、
-  5 分で一度に説明する。
+- **すぐ動かしたい** —— [クイックスタート](getting-started/quickstart.md):コマンド 3 本で動かし、
+  そのあと画面を流れていくものの読み方を説明する。
+- **先に概念を押さえたい** —— [コアコンセプト](getting-started/concepts.md):実行、ステップ、セッション、5 つの役割を、
+  5 分で一通り。
 - **自分のコードに組み込みたい** —— [Python API](reference/api.md):`Runtime`、`Step`、5 つの役割ファクトリ、
-  公開シンボル 62 個のシグネチャとデフォルト値。
+  62 個の公開シンボルのシグネチャとデフォルト値。

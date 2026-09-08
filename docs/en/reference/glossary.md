@@ -71,8 +71,13 @@ plus a tool set plus a set of hooks. All five roles are factory functions; see t
 *Chinese: 协调者* · `coordinator()`
 
 The agent on the [main thread](#主线程). It decomposes the task, delegates, reads reports and
-makes decisions — but it never does the work itself: it has no `Bash`, `Write` or `Edit`. Its
-only tools are `Agent`, `TodoWrite` and `Read`.
+makes decisions — but it never does the work itself: it has no `Write` or `Edit`. Its base tools
+are `Agent`, `TodoWrite` and `Read` (`roles.py:27`), though that is not the final list — three
+things get added on top depending on the arguments. `glance=True` (the default) adds a
+restricted `Bash`, enough for a `git status` or an `ls` and no more, policed by `delegate_guard`.
+Giving it a channel adds `inbox` and `ask`. And if its [workers](#执行者) carry `WebFetch` or
+`WebSearch`, those get merged in too — `allowed_tools` is **session-level**, so leaving them out
+strands the subagent's own calls in a permission prompt nobody answers (`roles.py:513-526`).
 
 Its brief is to act like *a person who is good at using Claude Code*, not like an executor.
 

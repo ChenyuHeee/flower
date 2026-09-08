@@ -5,7 +5,11 @@ repo_url: https://github.com/ChenyuHeee/flower
 repo_name: ChenyuHeee/flower
 edit_uri: edit/main/docs/
 docs_dir: docs
-copyright: flower · MIT · 基于 Claude Agent SDK
+copyright: >-
+  flower · MIT · 基于 Claude Agent SDK ·
+  <span title="文档以这个提交的代码为准。行号引用在这个提交上精确。">对应代码
+  <a href="https://github.com/ChenyuHeee/flower/commit/c87fce392b3097429ec6462b9b342e73d968f7f8"><code>c87fce3</code></a>
+  (2026-09-08)</span>
 
 theme:
   name: material
@@ -93,6 +97,11 @@ markdown_extensions:
   - pymdownx.tilde
 
 extra:
+  # 文档描述的代码版本。文档不追着每次提交更新,大版本时统一刷新 ——
+  # 所以每条 `file.py:NNN` 引用都以这个提交为基准,而不是以 main 的当前状态。
+  docs_commit: c87fce3
+  docs_commit_full: c87fce392b3097429ec6462b9b342e73d968f7f8
+  docs_commit_date: "2026-09-08"
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/ChenyuHeee/flower
@@ -121,6 +130,11 @@ plugins:
         - locale: en
           name: English
           build: true
+          copyright: >-
+            flower · MIT · built on the Claude Agent SDK ·
+            <span title="These docs describe the code at this commit; every file:line citation is exact there.">documented at
+            <a href="https://github.com/ChenyuHeee/flower/commit/c87fce392b3097429ec6462b9b342e73d968f7f8"><code>c87fce3</code></a>
+            (2026-09-08)</span>
           site_description: A portable, long-horizon agent framework built on the Claude Agent SDK
           nav_translations:
               "首页": "Home"
@@ -149,6 +163,11 @@ plugins:
         - locale: ja
           name: 日本語
           build: true
+          copyright: >-
+            flower · MIT · built on the Claude Agent SDK ·
+            <span title="このドキュメントはこのコミットのコードに対応します。file:line の参照はこの時点で正確です。">対象コミット
+            <a href="https://github.com/ChenyuHeee/flower/commit/c87fce392b3097429ec6462b9b342e73d968f7f8"><code>c87fce3</code></a>
+            (2026-09-08)</span>
           nav_translations:
               "首页": "ホーム"
               "入门": "はじめに"
@@ -176,6 +195,11 @@ plugins:
         - locale: ko
           name: 한국어
           build: true
+          copyright: >-
+            flower · MIT · built on the Claude Agent SDK ·
+            <span title="이 문서는 이 커밋의 코드를 설명합니다. file:line 참조는 이 시점 기준으로 정확합니다.">기준 커밋
+            <a href="https://github.com/ChenyuHeee/flower/commit/c87fce392b3097429ec6462b9b342e73d968f7f8"><code>c87fce3</code></a>
+            (2026-09-08)</span>
           nav_translations:
               "首页": "홈"
               "入门": "시작하기"
@@ -203,6 +227,11 @@ plugins:
         - locale: fr
           name: Français
           build: true
+          copyright: >-
+            flower · MIT · built on the Claude Agent SDK ·
+            <span title="Cette documentation décrit le code à ce commit ; les références file:line y sont exactes.">code documenté
+            <a href="https://github.com/ChenyuHeee/flower/commit/c87fce392b3097429ec6462b9b342e73d968f7f8"><code>c87fce3</code></a>
+            (2026-09-08)</span>
           nav_translations:
               "首页": "Accueil"
               "入门": "Démarrage"
@@ -230,6 +259,11 @@ plugins:
         - locale: de
           name: Deutsch
           build: true
+          copyright: >-
+            flower · MIT · built on the Claude Agent SDK ·
+            <span title="Diese Dokumentation beschreibt den Code zu diesem Commit; jede file:line-Angabe stimmt dort.">dokumentierter Stand
+            <a href="https://github.com/ChenyuHeee/flower/commit/c87fce392b3097429ec6462b9b342e73d968f7f8"><code>c87fce3</code></a>
+            (2026-09-08)</span>
           nav_translations:
               "首页": "Startseite"
               "入门": "Erste Schritte"
@@ -257,6 +291,11 @@ plugins:
         - locale: es
           name: Español
           build: true
+          copyright: >-
+            flower · MIT · built on the Claude Agent SDK ·
+            <span title="Esta documentación describe el código en este commit; las referencias file:line son exactas ahí.">código documentado
+            <a href="https://github.com/ChenyuHeee/flower/commit/c87fce392b3097429ec6462b9b342e73d968f7f8"><code>c87fce3</code></a>
+            (2026-09-08)</span>
           nav_translations:
               "首页": "Inicio"
               "入门": "Introducción"
@@ -284,6 +323,11 @@ plugins:
         - locale: ru
           name: Русский
           build: true
+          copyright: >-
+            flower · MIT · built on the Claude Agent SDK ·
+            <span title="Документация описывает код на этом коммите; ссылки file:line точны именно там.">документируемый коммит
+            <a href="https://github.com/ChenyuHeee/flower/commit/c87fce392b3097429ec6462b9b342e73d968f7f8"><code>c87fce3</code></a>
+            (2026-09-08)</span>
           nav_translations:
               "首页": "Главная"
               "入门": "Начало работы"
@@ -311,6 +355,11 @@ plugins:
         - locale: pt-BR
           name: Português (BR)
           build: true
+          copyright: >-
+            flower · MIT · built on the Claude Agent SDK ·
+            <span title="Esta documentação descreve o código neste commit; as referências file:line são exatas nele.">código documentado
+            <a href="https://github.com/ChenyuHeee/flower/commit/c87fce392b3097429ec6462b9b342e73d968f7f8"><code>c87fce3</code></a>
+            (2026-09-08)</span>
           nav_translations:
               "首页": "Início"
               "入门": "Primeiros passos"

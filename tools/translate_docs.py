@@ -23,7 +23,10 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+log = logging.getLogger(__name__)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
@@ -104,6 +107,16 @@ def build_term_table() -> str:
     translation is held to is generated from them rather than kept in a second
     place that can drift.
     """
+    # These two are hand-written and gatekept, not generated — en/glossary.md is
+    # excluded from translation below. Deleting it to force a retranslation takes
+    # the term table with it, so say so plainly instead of dying on a traceback.
+    missing = [p for p in (DOCS / "zh/reference/glossary.md", DOCS / "en/reference/glossary.md")
+               if not p.exists()]
+    if missing:
+        raise SystemExit(
+            "missing hand-written glossary: " + ", ".join(str(p) for p in missing)
+            + "\nThese are the terminology contract, not generated output."
+            + " Restore with: git checkout HEAD -- " + " ".join(str(p) for p in missing))
     zh = (DOCS / "zh/reference/glossary.md").read_text(encoding="utf-8")
     en = (DOCS / "en/reference/glossary.md").read_text(encoding="utf-8")
     zh_terms = re.findall(r"^### (.+?) \{#(.+?)\}\n\n\*\*(.+?)\*\*", zh, re.M)
@@ -165,6 +178,48 @@ def call(base: str, tok: str, system: list[dict], text: str, *, tries: int = 6) 
             if attempt < tries - 1:
                 time.sleep(2 ** attempt * 3)
     raise RuntimeError(f"failed after {tries} tries: {type(last).__name__}: {last}")
+
+
+def _headings(text: str) -> list[tuple[int, int, str, str]]:
+    """(offset, length, hashes, title) for every heading outside a fenced block."""
+    out, fence, pos = [], False, 0
+    for line in text.split("\n"):
+        if line.startswith("```"):
+            fence = not fence
+        elif not fence:
+            m = re.match(r"^(#{2,4})\s+(.+?)\s*$", line)
+            if m:
+                out.append((pos, len(line), m.group(1), m.group(2)))
+        pos += len(line) + 1
+    return out
+
+
+def sync_anchors(rel: str, lang: str) -> bool:
+    """Copy the source's `{#anchor}` onto the translated headings, positionally.
+
+    Nine locales share one set of anchors, so a link written once resolves in all
+    of them. A translation will happily re-derive an anchor from its own heading
+    text — usually a near-miss, like keeping a comma the slug drops — and that
+    silently breaks every inbound link to that section in that language. The
+    structure is preserved, so heading N matches heading N; just overwrite.
+    """
+    src = DOCS / "zh" / rel
+    dst = DOCS / lang / rel
+    if not src.exists() or not dst.exists():
+        return False
+    want = [re.search(r"\{#([^}]+)\}$", t) for _, _, _, t in _headings(src.read_text(encoding="utf-8"))]
+    text = dst.read_text(encoding="utf-8")
+    got = _headings(text)
+    if len(want) != len(got):
+        log.warning(f"{lang}/{rel}: {len(got)} headings vs {len(want)} in source, anchors not synced")
+        return False
+    for (start, length, hashes, title), m in zip(reversed(got), reversed(want)):
+        if not m:
+            continue
+        clean = re.sub(r"\s*\{#[^}]+\}$", "", title).strip()
+        text = text[:start] + f"{hashes} {clean} {{#{m.group(1)}}}" + text[start + length:]
+    dst.write_text(text, encoding="utf-8")
+    return True
 
 
 def split_page(text: str, budget: int = 24000) -> list[str]:
@@ -292,6 +347,8 @@ def main() -> int:
             out = "\n\n".join(p.strip() for p in pieces)
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_text(out.rstrip() + "\n", encoding="utf-8")
+        sync_anchors(rel.as_posix(), lang)
+        out = dst.read_text(encoding="utf-8")
         return lang, rel, len(out.splitlines()), check(text, out)
 
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
