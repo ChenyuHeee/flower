@@ -298,7 +298,7 @@ rt = Runtime(workspace="repo", workbench=True); wb = rt.workbench
 `Workflow(workbench=wb)` 和 `Runtime(workbench=wb)`。`tests/trial_offline.py`
 第 5 项直接断言"确认书出现在 `prompt_block()` 里",第 11 项确认这条断言抓得到回归。
 
-### 验证状态
+### 哪些验证跑过,哪些没跑过 {#验证状态}
 
 **离线全绿**(`tests/clarify.py`,**52 项**,不花钱):提问通道的五种语义(阻塞等答案 /
 额度用尽 / 超时落空 / 跳过 / 跨线程回答)、四段解析(含"贴了代码进来"的样本)、

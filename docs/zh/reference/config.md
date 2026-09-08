@@ -17,7 +17,7 @@ flower 没有配置文件格式,也没有配置子命令能真的跑到 —— �
 
 ## 环境变量完整表 {#环境变量}
 
-分四组:flower 直接读的凭证与端点、模型选择、路径查找、以及 flower **写给** agent 子进程的。
+分五组:flower 直接读的凭证与端点、模型选择、路径查找、行为开关,以及 flower **写给** agent 子进程的。
 最后一组不用你设 —— 设了也会被覆盖。
 
 ### 凭证与端点 {#凭证变量}
@@ -38,14 +38,14 @@ flower 只读其中三个用来做自己的判断,其余是加载进来透传给
 | 变量 | 作用 | 默认 | 必需 | 出处 |
 |---|---|---|---|---|
 | `ANTHROPIC_MODEL` | 主模型名。同时决定[换代](glossary.md#换代)窗口的默认值:名字里带 `1m` 或不带 `haiku` → 100 万,带 `haiku` → 20 万 | 无(端侧决定) | 否 | `env.py:153`;`agent.py:77-81` |
-| `ANTHROPIC_DEFAULT_OPUS_MODEL` | opus 档的模型映射。`ANTHROPIC_MODEL` 为空时,窗口判断退到它 | 无 | 否 | `agent.py:78`;`cli.py:1205` |
-| `ANTHROPIC_DEFAULT_SONNET_MODEL` | sonnet 档的模型映射。flower 自己不读,只负责加载和借用 | 无 | 否 | `env.py:34`;`cli.py:1206` |
+| `ANTHROPIC_DEFAULT_OPUS_MODEL` | opus 档的模型映射。`ANTHROPIC_MODEL` 为空时,窗口判断退到它 | 无 | 否 | `agent.py:78`;`cli.py:1384` |
+| `ANTHROPIC_DEFAULT_SONNET_MODEL` | sonnet 档的模型映射。flower 自己不读,只负责加载和借用 | 无 | 否 | `env.py:34`;`cli.py:1385` |
 | `ANTHROPIC_DEFAULT_HAIKU_MODEL` | haiku 档的模型映射。**凭证探针优先用它** | 探针退到 `ANTHROPIC_MODEL`,再退到 `claude-3-5-haiku-20241022` | 否 | `env.py:152-153` |
 | `CLAUDE_CODE_SUBAGENT_MODEL` | [subagent](glossary.md#subagent) 用哪个模型。flower 不解释它,由 SDK 消费 | 无 | 否 | `env.py:35`;`.env.example` |
 | `CLAUDE_CODE_EFFORT_LEVEL` | 思考档位。同上,只加载不解释 | 无 | 否 | `env.py:35` |
 
 `flower setup` 填了模型名的话,`ANTHROPIC_MODEL`、`ANTHROPIC_DEFAULT_OPUS_MODEL`、
-`ANTHROPIC_DEFAULT_SONNET_MODEL` **三个一起写**(`cli.py:1204-1206`)。
+`ANTHROPIC_DEFAULT_SONNET_MODEL` **三个一起写**(`cli.py:1383-1385`)。
 
 ### 路径与查找 {#路径变量}
 
@@ -54,6 +54,19 @@ flower 只读其中三个用来做自己的判断,其余是加载进来透传给
 | `FLOWER_ENV` | 指定一个 `.env` 文件路径,排在所有其它文件**之前** | 无 | 否 | `env.py:48-49` |
 | `XDG_CONFIG_HOME` | 决定全局凭证文件的位置 `$XDG_CONFIG_HOME/flower/.env` | `~/.config` | 否 | `env.py:41-42` |
 | `HOME` | `Path.home()` 的来源,`~/.config` 和 `~/.claude` 两条路径都从它推 | 系统给 | 否 | `env.py:41`、`:67` |
+
+### 行为开关 {#行为开关}
+
+这两个都是逃生口:不设是常态,设了是为了让 flower 少做一件事。**设成任意非空值即生效**,
+值本身不解析(`update.py:121`;`cli.py:1413`)。
+
+| 变量 | 作用 | 默认 | 必需 | 出处 |
+|---|---|---|---|---|
+| `FLOWER_NO_UPDATE` | 关掉[自动更新](../getting-started/install.md#自动更新)。不设时,pip / pipx / uv 装出来的 flower 在启动时起一条后台线程查有没有新版,查到就装,**下次跑 `flower` 才生效**;每 24 小时最多查一次,时间戳记在 `~/.config/flower/.update` | 无(自动更新开着) | 否 | `update.py:32-33`、`:121-124` |
+| `FLOWER_NO_PROBE` | 跳过启动时那次[凭证探针](cli.md#第二道-凭证能不能用)。非交互(管道 / CI / 重定向的 stdin)本来就不探,这个变量是给交互式终端留的口子 | 无(交互式下会探) | 否 | `cli.py:1413` |
+
+从 git 源码跑的 flower 不受自动更新影响,`FLOWER_NO_UPDATE` 对它是空操作 —— 更新命令那一步
+认出仓库里有 `.git` 就直接返回 `None`(`update.py:83-87`)。
 
 ### flower 写给 agent 子进程的 {#写出的变量}
 
@@ -220,7 +233,7 @@ runs/
 | `runs/sessions.db` | 全量 transcript。写它的是 `PruningSessionStore`,三层策略见[下文](#会话存储) | `runtime.py:109-112` |
 | `runs/manifest.json` | JSON 数组,**跨进程累积**的[运行清单](glossary.md#运行清单)。字段见下表 | `runtime.py:532-533`、`:564-586` |
 | `runs/lineage.json` | `{"workspace": "…", "woke": N, "steps": {"步骤名": "session_id"}}`。先写 `.tmp` 再 `replace`,原子替换 | `lineage.py:31`、`:87-97` |
-| `runs/aside/` | [旁路顾问](glossary.md#旁路顾问)的独立 Runtime。**花费和血缘不混进主清单** | `cli.py:632-634` |
+| `runs/aside/` | [旁路顾问](glossary.md#旁路顾问)的独立 Runtime。**花费和血缘不混进主清单** | `cli.py:741-743` |
 | `runs/workbench/` | `Runtime(workbench=True)` 的默认工作台位置,在工作区之外。`go` 路径不用它 | `runtime.py:148-151` |
 
 `manifest.json` 每一行是 `asdict(StepResult)` 加两个补丁(`runtime.py:44-71`、`:579-582`):
@@ -447,6 +460,8 @@ PruningSessionStore(path, workspace, policy: TrimPolicy | None = None,
 | `drop_api_errors` | `bool` | `True` | 摘掉 `isApiErrorMessage=true` 或 `message.model == "<synthetic>"` 的合成消息 |
 | `neutralize_interrupts` | `bool` | `True` | `[Request interrupted …]` 的 `tool_result` **换正文,不摘块** |
 | `interrupt_text` | `str` | `"[上一轮在此处被中断,该工具结果未产生]"` | 上一条的替换文案 |
+| `heal_orphans` | `bool` | `True` | 给"有 `tool_use` 却没有 `tool_result`"的孤儿调用**补**一条合成结果 |
+| `orphan_text` | `str` | `"[这一步被打断了,没有结果。需要的话重做。]"` | 补出来那条 `tool_result` 的正文 |
 | `keep_denials` | `int` | `1` | 保留最近 N 次被 permission hook 拒掉的工具调用,更早的**连调用带结果一起**摘掉 |
 
 `keep_denials` 是唯一透传到这一层的 `Runtime` 构造参数(`Runtime(keep_denials=N)`)。
@@ -454,6 +469,13 @@ PruningSessionStore(path, workspace, policy: TrimPolicy | None = None,
 **别调大** —— 被拒的调用从来没执行过,结果里没有任何信息,实测一次占 273 字符
 (93 字拒绝语加 180 字死命令原文),而且它**会误导**:实测协调者读到几条"不直接使用 Bash"之后,
 连放行的 `git status` 都不再尝试,直接说"Bash 被限制了,派个 agent 去看"(`prune.py:135-148`)。
+
+`heal_orphans` 治的是**打断之后 resume 每次都 400**:打断在消息边界断开,当时在飞的 `tool_use`
+后面可能根本没有 `tool_result`,而 API 要求两者成对。这条坏历史留在 transcript 里不会自己消失,
+于是之后每一次 resume 都被它打回。补法是在含孤儿的那条 assistant 之后插一条 `user` 条目,
+把这条里所有孤儿的结果一次补齐,再把原本指向那条 assistant 的 `parentUuid` 改指到补的这条
+(`prune.py:95-147`)。**补而不删**:删孤儿要重接父子链,同一条 assistant 里可能还有正常的块、
+文本和 thinking,容易连累(`prune.py:195-204`)。
 
 三条结构性红线,违反了 API 直接报错:
 

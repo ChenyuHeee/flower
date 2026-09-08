@@ -121,7 +121,7 @@ ch = HumanChannel(on_event=my_own_sink)     # 自己接,Workflow 不动它
 [`flower/cli.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/cli.py),
 它是交互层的**参考实现,不是框架的一部分**,可以整份换掉;开关见 [CLI 参考](../reference/cli.md)。
 照实说规模。整份 `cli.py` 是 1264 行、57KB —— 但**要换的不是整份**。
-真正的替换点是里面的 `class Render`(`cli.py:382-578`,197 行),它的 docstring 就写着
+真正的替换点是里面的 `class Render`(`cli.py:489-687`,197 行),它的 docstring 就写着
 "Event → 终端。换 UI 就是换这一个类。"其余一千多行是打断、旁路顾问、收件箱回执、
 信号抢救这些**终端特有**的配套,换成 Web 或 HTTP 时本来就不需要照搬。
 
@@ -292,8 +292,14 @@ class Event:
 | `error` | `normalize()` | 断线时的合成消息 | 错误文本 | `synthetic: True` |
 | `reset` | `normalize()` | 压缩边界或会话重置 | `压缩(trigger) 167000 → 42000 tokens`;会话重置时是 `conversation reset` | `trigger`、`pre_tokens`、`post_tokens`、`micro`、`subtype`(会话重置时为空) |
 | `system` | `normalize()` | 其余 SDK 系统消息 | subtype | `data` 原样透传 |
-| `task` | `normalize()` | 任务进度消息 | 消息类名 | — |
+| `task` | `normalize()` | 任务进度消息 | **空** | `kind` = SDK 的消息类名 |
 | `unknown` | `normalize()` | 没认出来的消息类型 | 类名 | — |
+
+!!! note "`task` 的正文是空的,别直接打"
+    `TaskProgressMessage` 这类是 SDK 的内部消息类型。早先 `normalize()` 把类名当正文发出来,
+    打到屏幕上是纯噪音,而且混在 agent 的正文里看着像出错了(实测如此)。现在它归成一条
+    **无正文**的事件,类名放进 `payload["kind"]` —— 要不要显示由交互层自己决定
+    (`events.py`)。
 | `ask` | `HumanChannel` | 要人回答、某次提问有了结局,或者人主动说了句话 | 问题 / 人说的话 | 两种身份,见下 |
 | `retry` | `Runtime` | 正在重试 / 挂着等网络 | 一句说明 | `step`、`attempt` |
 | `step` | `Workflow.run` | 步骤边界 | 步骤名 | `index`、`total`、`resumed`、`woke` |

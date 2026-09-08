@@ -63,7 +63,7 @@ Python 工具安装器、从 GitHub 装、告诉你下一步。**它一个字都
 | 4 | 第 3 条里 uv 也没装成 | `python3 -m pip install --user --upgrade <REPO>` | 用户脚本目录 —— **macOS 上不是 `~/.local/bin`** |
 
 四种情况装的都是同一个 console script:`flower = "flower.cli:main"`(`pyproject.toml:12`)。装完也可以用
-`python -m flower.cli` 调,效果一样(`cli.py:1263-1264`)。
+`python -m flower.cli` 调,效果一样(`cli.py:1451-1452`)。
 
 !!! warning "重跑安装脚本会强制覆盖,没有确认提示"
     三个安装命令分别带 `--force`、`--force`、`--upgrade`(`install.sh:37`、`:40`、`:54`)。
@@ -122,16 +122,47 @@ cp .env.example .env        # 填 ANTHROPIC_AUTH_TOKEN
 `.env` 已经被 `.gitignore` 忽略,不会进版本库。pip / pipx / uv 装出来的 flower **没有**这个位置
 可用 —— 它在 site-packages 里,没有"仓库根" —— 所以那种装法要用下面的全局凭证文件。
 
+## 自动更新 {#自动更新}
+
+flower 还在快速迭代,所以 **pip / pipx / uv 装出来的那份默认会自己更新**:装了三天前版本的人
+报回来的 bug 可能早就修了,双方都在浪费时间。这件事没有开关式的"要不要开"的问法 ——
+默认开,要关就设环境变量。
+
+它做的事(`update.py:116-129`):
+
+1. 每次 `flower` 启动时,在**后台线程**里查一次 GitHub 上 `main` 的最新 commit
+   (`update.py:70-80`)。主流程一秒都不等 —— 这是第一条不变式。
+2. 和本地装的那个 commit 不一样,就按当初的装法跑一次更新命令:有 `uv` 用
+   `uv tool install --force`,有 `pipx` 用 `pipx install --force`,都没有就
+   `pip install --user --upgrade`(`update.py:83-93`)。
+3. **装好了也不换掉正在跑的这个进程** —— 下一次跑 `flower` 才用新版
+   (`update.py:113`)。跑到一半被换掉是最难查的一类故障。
+4. 节流:每 24 小时最多查一次,时间戳记在 `~/.config/flower/.update`
+   (`update.py:32`、`:36-37`、`:124`)。
+5. **失败一律静默**。没网、GitHub 挂了、装不上 —— 都不打断你干活(`update.py:79`、`:108-110`)。
+
+**从源码(git)跑的不受影响。** 更新命令那一步先看仓库里有没有 `.git`,有就直接返回
+`None` 什么都不做(`update.py:83-87`)—— 你的工作区归 `git` 管,不归它管。
+非交互(stdin 不是终端,比如管道 / CI)也整个跳过(`update.py:121`)。
+
+要关掉:
+
+```bash
+export FLOWER_NO_UPDATE=1
+```
+
+任意非空值都算(`update.py:33`、`:121`)。CI、离线环境、要复现某个旧版本行为的时候用它。
+
 ## 第一次跑:配凭证
 
-`go`、`run`、`once` 三条跑活入口开头都调 `ensure_credentials()`(`cli.py:1013`、`:981`、`:1046`),
+`go`、`run`、`once` 三条跑活入口开头都调 `ensure_credentials()`(`cli.py:1192`、`:1160`、`:1225`),
 两道关:
 
 1. **有没有** —— 按优先级找一遍,找不到就当场问你。
 2. **能不能用** —— 真打一次 API。`max_tokens=16` 的最小请求(`env.py:120-123`),几乎不花钱。
    过期的 token、写错的网关地址,光看环境变量查不出来,不探就要跑到几分钟后才炸。
 
-没有凭证时,第一次跑 `flower` 会停在这个界面(`cli.py:1179-1209`):
+没有凭证时,第一次跑 `flower` 会停在这个界面(`cli.py:1358-1388`):
 
 ```text
 == 配置 flower ========================================
@@ -154,7 +185,7 @@ cp .env.example .env        # 填 ANTHROPIC_AUTH_TOKEN
 用官方端点就把第 2 问留空;第三方网关填它的根地址,**别带 `/v1`** —— flower 的探针打的是
 `<BASE_URL>/v1/messages`(`env.py:162`)。
 
-答完写出来的键(`cli.py:1199-1207`):
+答完写出来的键(`cli.py:1378-1386`):
 
 | 你填的 | 写进 `.env` 的键 |
 |---|---|
@@ -164,7 +195,7 @@ cp .env.example .env        # 填 ANTHROPIC_AUTH_TOKEN
 | 模型名非空 | `ANTHROPIC_MODEL`、`ANTHROPIC_DEFAULT_OPUS_MODEL`、`ANTHROPIC_DEFAULT_SONNET_MODEL` **三个一起写** |
 
 文件位置是 `${XDG_CONFIG_HOME:-~/.config}/flower/.env`(`env.py:39-42`),**整份覆盖写**,
-写完 `chmod 0o600`(`cli.py:1157-1168`)。这就是"装一次处处生效"的那个文件 ——
+写完 `chmod 0o600`(`cli.py:1336-1347`)。这就是"装一次处处生效"的那个文件 ——
 换项目目录不用重配,每个变量的含义见[配置](../reference/config.md#环境变量)。
 
 ### 本机装过 Claude Code 的话,可能一个问题都不问
@@ -183,7 +214,7 @@ cp .env.example .env        # 填 ANTHROPIC_AUTH_TOKEN
 
 ### 想重新配的时候
 
-`flower setup` 这个子命令注册过(`cli.py:1147-1149`),但 `_CMDS` 漏了它(`cli.py:758`),
+`flower setup` 这个子命令注册过(`cli.py:1326-1328`),但 `_CMDS` 漏了它(`cli.py:937`),
 于是 `flower setup` 会被改写成 `flower go setup` —— 把 "setup" 当成一句诉求跑一遍完整流程。
 **目前没有任何命令行写法能到达那个子命令**,尽管好几处错误文案还在让你去跑它。要改凭证:
 
@@ -193,7 +224,7 @@ $EDITOR ~/.config/flower/.env
 
 或者把那个文件里的 token 删掉再跑一次 `flower` —— 缺凭证那道关会重新问(前提是别的位置也没有,
 比如 `~/.claude/settings.json`)。凭证被拒(HTTP 401 / 403)时也会当场弹出同一个界面让你重配,
-最多给一次机会(`cli.py:1229-1244`)。
+最多给一次机会(`cli.py:1416-1428`)。
 
 ## 验证装好了没有
 
@@ -222,7 +253,7 @@ usage: flower [-h] [-w WORKSPACE] [-r RUN_DIR] [-v] [-W] [-T]
 flower -v -w /path/to/any/repo once "读一眼这个仓库,一句话说它是干什么的"
 ```
 
-`-v` 会在开跑**之前**先打印当前生效的配置,token 只留前 4 位(`cli.py:1257-1259`;`env.py:197-211`):
+`-v` 会在开跑**之前**先打印当前生效的配置,token 只留前 4 位(`cli.py:1445-1447`;`env.py:197-211`):
 
 ```text
 ANTHROPIC_AUTH_TOKEN = sk-1***(共 108 位)
@@ -248,7 +279,7 @@ ANTHROPIC_MODEL = claude-opus-5[1m]
 `- 验一下凭证…` 下面跟着 `! 凭证被拒` 或 `! 网关地址或模型名不对`,去下面的排错表。
 
 !!! note "`once` 的用时和累计花费显示为 0"
-    `once` 给每个事件新建一个渲染器(`cli.py:1060`、`:579-581`),所以 `用时` 恒为 `0:00`、
+    `once` 给每个事件新建一个渲染器(`cli.py:1239`、`:579-581`),所以 `用时` 恒为 `0:00`、
     状态行里的 `累计 $` 也从不累积 —— **单步那个花费是真的,时间不是**。
 
     上面那行的 `1 轮 · $0.1741` 是**有出处的实测**:2026-09-06 在 Linux/arm64 容器里,
@@ -269,7 +300,7 @@ ANTHROPIC_MODEL = claude-opus-5[1m]
 | `! 网关地址或模型名不对:HTTP 404 …` | `ANTHROPIC_BASE_URL` 或模型名不对 | BASE_URL 写到网关根,别带 `/v1`;模型名用网关自己的那套 |
 | `(探针没打通:… —— 当作网络问题,照常开跑)` | DNS / TCP / 超时 / 5xx | **不是凭证问题**,flower 有意不让你重配,照常开跑,交给[韧性](../reference/glossary.md#韧性)那一层 |
 | `! 标准输入不是终端,没人能回答提问` | 在管道或 CI 里跑 | 加 `--timeout 0` 让它自己判断,别等人 |
-| `flower setup` 跑起来在问"要做什么" | `_CMDS` 漏了 `setup`(`cli.py:758`) | 直接改 `~/.config/flower/.env`,见上面"想重新配的时候" |
+| `flower setup` 跑起来在问"要做什么" | `_CMDS` 漏了 `setup`(`cli.py:937`) | 直接改 `~/.config/flower/.env`,见上面"想重新配的时候" |
 
 ## 下一步
 

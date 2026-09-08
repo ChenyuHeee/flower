@@ -88,7 +88,7 @@ SDK 按平台发 wheel,自带的二进制是平台专属的:
 
 `FLOWER_HOME` 从脚本自己的位置推出来,不写死路径,所以仓库克隆到哪都能用。
 
-### 跑起来
+### 构建镜像并起容器 {#跑起来}
 
 ```bash
 docker/build                       # 一次就够
@@ -147,7 +147,7 @@ docker run -i $TTY --rm \
     探针文件,再起一个容器 `test -f /work/<探针>` 实测(配了额外挂载也能过)。过不了就退出 1,
     并告诉你 `colima start --mount '<路径>:w'`。探针要起容器,所以得先 `docker/build`。
 
-### 凭证
+### 凭证怎么进容器 {#凭证}
 
 走 `docker run --env-file`,**不进镜像层**。`flowerbox` 读的是 `$FLOWER_HOME/.env`,
 默认就是仓库根的 `.env`:
@@ -282,7 +282,7 @@ FLOWER_HOME=~/.config/flower /path/to/flower/docker/flowerbox
 
 ## 二、plugin {#plugin}
 
-### 它是什么
+### plugin 是什么,SDK 怎么加载它 {#它是什么}
 
 跟着仓库走的**领域能力包**。框架代码不含任何领域知识,领域知识全部放在仓库根的 `plugin/`
 目录里,和代码一起被 clone、一起被 review、一起被打 tag。

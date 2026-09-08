@@ -237,6 +237,15 @@ system_prompt = {"type": "preset", "preset": "claude_code", "append": spec.instr
     工具 —— 一个 $0.1 的探针里,`allowed_tools=["Read"]` 的 agent 照样调得动 Write / Bash。
     真正拦住的是 hook。
 
+    **`allowed_tools` 也是会话级的,同一课上了两遍。** 不在这份清单里的工具,**subagent**
+    调用时同样要走权限审批。无人值守时没人批,于是既不报错也不停下,模型反复重试同一个调用
+    (`toolDenialKind=user-rejected`)。实测:给执行者加了 `WebFetch`/`WebSearch` 却只写进
+    `AgentDefinition.tools`,那次运行二十多次 user-rejected、一个字都没产出(`roles.py:513-518`)。
+    症状比 `disallowed_tools` 难查 —— 后者当场报错,前者屏幕上什么都不像出错。
+    所以 `coordinator()` 现在会把手下执行者的只读 web 工具并进自己的 `allowed_tools`
+    (`roles.py:523-526`),而 `Write`/`Edit`/`Bash` **故意不并** —— 并了就等于把上面那道
+    hook 拆掉。
+
 ## 什么时候不该用它
 
 这四层省的都是**现场**。下面这些问题它们不解决,有的还会因为它们更难被看见:

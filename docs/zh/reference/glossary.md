@@ -63,7 +63,12 @@
 **coordinator** · `coordinator()`
 
 [主线程](#主线程)上那个 agent。它拆解任务、派活、读报告、做决策,**但不动手** ——
-拿不到 `Bash` / `Write` / `Edit`。工具只有 `Agent`、`TodoWrite`、`Read`。
+拿不到 `Write` / `Edit`。基础工具是 `Agent`、`TodoWrite`、`Read`
+(`roles.py:27`),但那不是最终清单,还会按参数往上加三种:`glance=True`(默认)加一个
+受限的 `Bash`(只够 `git status` / `ls` 这类看一眼就完的命令,由 `delegate_guard` 把关);
+给了提问通道加 `inbox` 和 `ask`;手下[执行者](#执行者)带了 `WebFetch` / `WebSearch` 的话,
+这两个也会被并进来 —— `allowed_tools` 是**会话级**的,不并的话 subagent 自己调用时
+会卡在没人回应的权限审批上(`roles.py:513-526`)。
 
 角色设定是"一个会用 Claude Code 的人",不是执行者。
 
