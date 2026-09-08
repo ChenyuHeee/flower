@@ -211,6 +211,10 @@ class Runtime:
         while True:
             attempt += 1
             result.attempts = attempt
+            # **只看这一轮新报的错。** result.errors 是整步累积、从不清空的,
+            # 拿它整个去判"装不下了"会latch住:一条瞬时的 prompt is too long
+            # 进去以后,这一步剩下的每一次失败都被当成溢出。见下面的判定。
+            fresh = len(result.errors)
             await self._attempt(spec, cur_prompt, result, resume=cur_resume,
                                 fork=cur_fork, resume_at=resume_at, on_event=on_event)
             if result.ok:
@@ -239,8 +243,13 @@ class Runtime:
             # 和打断一样不受 max_attempts 约束:换代不是故障。
             # 装不下了。窗口是按模型名判的,判大了的话阈值永远够不着 ——
             # 而 auto-compact 是关的。认出这个信号就能把硬错变成一次换代。
+            # **判据只取这一轮的**(result.errors[fresh:])。取整个列表实测会 latch:
+            # novel 那次网关吐了 31 条 prompt is too long,之后每一次无关的失败
+            # (86 条"模型服务调用失败")都被判成溢出 → forced=True → 直接抛
+            # _Overflow、**连写交接那一轮都不跑** → 空交接换代。实测现场:上下文
+            # 才 41K/54K/56K,离阈值十万八千里,照样换了代。
             overflowed = (self.handoff.enabled and result.session_id
-                          and is_overflow(result.error, *result.errors))
+                          and is_overflow(result.error, *result.errors[fresh:]))
             if result.error == self.HANDOFF_DUE or overflowed:
                 if len(result.retired) >= self.handoff.max_generations:
                     # 阈值低于这个 agent 的启动地板时,每个新会话一开口就越线,

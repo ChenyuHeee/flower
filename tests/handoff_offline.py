@@ -371,6 +371,35 @@ async def main() -> int:
     check("窗口" in (res.error or "") and "余量" in (res.error or ""),
           "并给出可操作的下一步(调 window / 给更大 headroom)")
 
+    print("\n[14] 溢出判定只看这一轮 —— 一条瞬时的 too long 不许 latch 住整步")
+    # novel 的真正死因(不是余量不够):`result.errors` 整步累积、从不清空,
+    # 而判定拿的是整个列表。网关吐了 31 条 prompt is too long 之后,后面 86 条
+    # 完全无关的"模型服务调用失败"全被判成溢出 → forced=True → 直接抛 _Overflow,
+    # **连写交接那一轮都不跑** → 8 次换代 7 次空交接。实测现场上下文才 41K/54K/56K,
+    # 离阈值差着两个数量级,照样一代代换下去。
+    rt = runtime(tmp / "m", window=1_000_000)
+    turns = []
+
+    async def blip_then_unrelated(sp, pr, result, *, resume, fork, resume_at, on_event):
+        turns.append(pr)
+        result.session_id = f"s{len(turns)}"
+        if len(turns) == 1:                        # 网关抖了一下
+            result.errors.append("API Error: 400 prompt is too long: 1049000 tokens")
+            result.ok, result.error = False, result.errors[-1]
+        else:                                      # 之后全是跟上下文无关的失败
+            result.errors.append("API Error: 400 模型服务调用失败")
+            result.ok, result.error = False, "API Error: 400 模型服务调用失败"
+            result.context = 40_000
+
+    rt._attempt = blip_then_unrelated              # type: ignore[method-assign]
+    res = await rt.run(SPEC, "任务", step_name="干活")
+    check(len(res.retired) == 1,
+          f"只为那一条真的溢出换一次代(实际换了 {len(res.retired)} 次)")
+    check("模型服务调用失败" in (res.error or ""),
+          f"最后报的是真实死因,不是被改写成「余量不够」:{(res.error or '')[:40]}")
+    check(res.context < rt.handoff.at,
+          f"上下文 {res.context} 远低于阈值 {rt.handoff.at} —— 不该被判成装不下")
+
     print(f"\n{'✓ 换代全部通过' if ok else '✗ 有失败'}")
     return 0 if ok else 1
 
