@@ -280,7 +280,7 @@ In [HT001](../cases/ht001.md) ist das einmal real eingetreten: Netzausfall-Zeita
 `attempts=2` / `resumed=True` / `ok=True`, und lief nach dem Resume noch über 8 Stunden bis zur Fertigstellung.
 
 Ein letzter, leicht misszuverstehender Punkt: **`Runtime(trim=False)` heißt nicht „es wird nichts bereinigt“**. `trim` ist standardmäßig `False`,
-aber es schaltet nur die Schicht **Trim großer Tool-Ergebnisse** ab. Abrissreste entfernen, abgelehnte Aufrufe entfernen,
+aber es schaltet nur die Schicht **[Trim](../reference/glossary.md#裁剪) großer Tool-Ergebnisse** ab. Abrissreste entfernen, abgelehnte Aufrufe entfernen,
 Abbruchreste neutralisieren, Ergebnisse von [Ephemeral commands](../reference/glossary.md#一次性命令) als veraltet markieren — diese vier passieren weiterhin
 (`ephemeral` ist standardmäßig `True`, `keep_denials` standardmäßig `1`).
 

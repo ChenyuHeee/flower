@@ -222,13 +222,18 @@ def sync_anchors(rel: str, lang: str) -> bool:
     return True
 
 
-def split_page(text: str, budget: int = 24000) -> list[str]:
+def split_page(text: str, budget: int = 14000) -> list[str]:
     """Split an oversized page on `##` boundaries.
 
-    A 2435-line page does not fit in one generation — the model silently stops
+    A long page does not fit in one generation — the model silently stops
     mid-sentence and the result fails the anchor/fence checks. Chunking on
     top-level sections keeps every chunk self-contained: headings, fences and
     tables never straddle a boundary.
+
+    The budget is in SOURCE characters and is deliberately well under what one
+    generation can emit. Chinese is dense: 22.9k characters of it became far more
+    than that in German and truncated mid-table at a 24000 budget, which looked
+    like a page that simply did not need chunking.
     """
     if len(text) <= budget:
         return [text]
@@ -279,6 +284,11 @@ def check(src: str, out: str) -> list[str]:
     pb = set(re.findall(r"\]\((\.{0,2}[^)\s]*\.md[^)\s]*)\)", out))
     if pa - pb:
         problems.append(f"链接目标被改 {sorted(pa - pb)[:3]}")
+    # A translation that stops mid-sentence still passes every structural check
+    # above if it happens to break between fences. Length is the reliable tell:
+    # no locale renders this content in under half the source.
+    if len(out) < len(src) * 0.5:
+        problems.append(f"疑似截断 {len(src)} -> {len(out)} 字符")
     return problems
 
 

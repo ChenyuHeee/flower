@@ -34,7 +34,7 @@ cd ~/proj && flower                              # ничего не сказа�
 cd ~/proj && flower --new "另一件事"              # на этот раз не продолжать
 ```
 
-Когда вы пишете свой workflow, продолжение тоже включено по умолчанию — значение `Workflow.continuous` по умолчанию равно
+Когда вы пишете свой [workflow](../reference/glossary.md#流程), продолжение тоже включено по умолчанию — значение `Workflow.continuous` по умолчанию равно
 `True`:
 
 ```python

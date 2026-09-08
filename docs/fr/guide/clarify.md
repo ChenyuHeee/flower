@@ -4,7 +4,7 @@ Poser clairement la question avant de mettre les mains dedans. Le [clarificateur
 
 ## Quel problème cela résout {#解决什么问题}
 
-Tout ce que flower nettoie du contexte, ce sont des **traces d'exécution** : péremption temporelle, retrait des appels refusés, retrait des messages d'erreur, spill des gros résultats sur disque. Perdre ces traces n'est pas grave : il suffit de relancer pour les avoir de nouveau.
+Tout ce que flower nettoie du contexte, ce sont des **traces d'exécution** : péremption temporelle, retrait des appels refusés, retrait des messages d'erreur, [spill](../reference/glossary.md#落盘) des gros résultats sur disque. Perdre ces traces n'est pas grave : il suffit de relancer pour les avoir de nouveau.
 
 Il existe une catégorie d'erreur qui n'obéit pas à cette règle : **avoir mal compris l'objectif**. C'est la seule catégorie d'erreur que **le nettoyage du contexte aggrave**. Une fois les traces jetées, ce qui reste est précisément la décision bâtie sur une prémisse fausse — et elle ressemble trait pour trait à une décision correcte : plus rien n'indique que sa prémisse est douteuse.
 

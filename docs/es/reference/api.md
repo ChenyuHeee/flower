@@ -1073,7 +1073,7 @@ class HandoffPolicy:
     def warn_at(self) -> int: ...   # max(1_000, at - 20_000)
 ```
 
-El objeto de política para, cuando el contexto está a punto de llenarse, «escribir el documento de relevo y cambiar de sesión» en lugar de hacer compact.
+El objeto de política para, cuando el contexto está a punto de llenarse, «escribir el [documento de relevo](glossary.md#交接书) y cambiar de sesión» en lugar de hacer compact.
 
 | Campo | Tipo | Por defecto | Descripción |
 |---|---|---|---|

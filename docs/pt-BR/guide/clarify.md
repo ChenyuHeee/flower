@@ -9,7 +9,7 @@ requisitos de novo — e aquele diálogo **nunca entrou** no contexto a jusante.
 ## Que problema isso resolve {#解决什么问题}
 
 Os mecanismos de limpeza de contexto do flower limpam sempre **material de trabalho**: expiração por
-tempo de vida, remoção de chamadas negadas, remoção de mensagens de erro, spill de resultados
+tempo de vida, remoção de chamadas negadas, remoção de mensagens de erro, [spill](../reference/glossary.md#落盘) de resultados
 grandes. Perder material de trabalho não é grave — basta rodar de novo que ele reaparece.
 
 Existe uma classe de erro que não é assim: **entender o objetivo errado**. É a única classe de erro
@@ -17,7 +17,7 @@ que **piora quando o contexto é limpo**. Depois que o material de trabalho é j
 é justamente aquela decisão construída sobre uma premissa errada — e ela parece exatamente igual a
 uma decisão correta. Não sobra nenhum rastro indicando que a premissa é suspeita.
 
-Execuções long-horizon amplificam isso até o pior caso: a premissa errada roda por horas, despacha
+Execuções [long-horizon](../reference/glossary.md#长程) amplificam isso até o pior caso: a premissa errada roda por horas, despacha
 uma dúzia de [subagents](../reference/glossary.md#subagent), deixa uma pilha de artefatos em disco —
 e só então aparece. Nesse ponto o caro não são os tokens, é que **cada artefato foi construído sobre
 o requisito errado**. As contas de [HT001](../cases/ht001.md) medem essa proporção: o passo de

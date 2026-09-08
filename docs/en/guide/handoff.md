@@ -244,7 +244,7 @@ All of these go into `manifest.json`, so afterwards you can fully reconstruct "h
 - **Short tasks, single-turn work.** The handoff will never fire, so configuring it is pointless — but remember that `Runtime` still defaults to `handoff=True` and therefore still turns auto-compact off.
 - **No workbench, but you expect to read the handoff later.** Turn the workbench on first, otherwise the document only ever existed inside that one run's context.
 - **Starting a long run before `window` is matched.** When the real window is smaller than the default, the first few generations' handoffs will all be degraded artifacts — and degraded artifacts are exactly the least useful kind of handoff. Match it with `--window` first, or do a short run and check the model name under `-v`.
-- **Treating handoff as the whole of context governance.** It is the last line. The layers that trim on the spot ([spill](../reference/glossary.md#落盘), [trim](../reference/glossary.md#裁剪), [prune](../reference/glossary.md#剪除)) are cheaper — see [Context economics](context.md).
+- **Treating handoff as the whole of context governance.** It is the last line. The layers that trim on the spot (spill, [trim](../reference/glossary.md#裁剪), [prune](../reference/glossary.md#剪除)) are cheaper — see [Context economics](context.md).
 
 ## Symptom table: which knob to turn {#旋钮}
 

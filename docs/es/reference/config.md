@@ -71,7 +71,7 @@ detecta que hay un `.git` en el repositorio y devuelve `None` directamente (`upd
 ### Las que flower escribe hacia el subproceso del agente {#写出的变量}
 
 Estas tres las genera `CompactPolicy.env()` y se meten en `ClaudeAgentOptions.env` (`agent.py:48-58`, `:241-245`),
-y controlan el compact integrado del harness. **Ponerlas en tu shell no sirve de nada** —
+y controlan el [compact](glossary.md#压缩) integrado del harness. **Ponerlas en tu shell no sirve de nada** —
 lo que manda es la copia que flower pasa al subproceso.
 
 | Variable | Función | Por defecto | Requerido | Origen |

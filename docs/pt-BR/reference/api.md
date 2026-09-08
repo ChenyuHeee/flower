@@ -1106,7 +1106,7 @@ class HandoffPolicy:
     def warn_at(self) -> int: ...   # max(1_000, at - 20_000)
 ```
 
-O objeto de política que, quando o contexto está quase cheio, "escreve o documento de handoff e troca de sessão" em vez de fazer compact.
+O objeto de política que, quando o contexto está quase cheio, "escreve o [documento de handoff](glossary.md#交接书) e troca de sessão" em vez de fazer compact.
 
 | Campo | Tipo | Padrão | Descrição |
 |---|---|---|---|
