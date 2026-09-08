@@ -6,7 +6,7 @@ flower 的核心不知道 UI 存在。运行里发生的每一件事——模型
 这是换 UI 不用动核心的那条边界:终端、Web、HTTP 服务、全自动无人值守,换掉的是 `Event`
 的消费者,别的一行都不用改。
 
-## 解决什么问题
+## 解决什么问题 {#解决什么问题}
 
 SDK 的消息流是**内部类型**:`AssistantMessage`、`ToolUseBlock`、`ToolResultBlock`、
 `ResultMessage`、`SystemMessage`……UI 直接消费它们有两个后果:SDK 一升级前端就得跟着改;
@@ -31,7 +31,7 @@ SDK 的消息流是**内部类型**:`AssistantMessage`、`ToolUseBlock`、`ToolR
    `cache_read_input_tokens` + `cache_creation_input_tokens`)。它是
    [换代](../reference/glossary.md#换代)判据的唯一来源。
 
-## 怎么用(最小代码)
+## 怎么用(最小代码) {#怎么用最小代码}
 
 一个交互层要接三样东西:**事件出口**(往哪渲染)、**提问通道**(谁来答)、**打断**(怎么喊停)。
 下面这段全接上了,可以直接跑:
@@ -96,7 +96,7 @@ asyncio.run(main())
     要么把 workflow 建好的那个交给 `Runtime`(上面的写法),
     要么用只读探测 `wake_state()` 问它在哪。
 
-### 三个事件出口
+### 三个事件出口 {#三个事件出口}
 
 ```python
 await rt.run(spec, "…", on_event=sink)                  # 1. 单个 agent
@@ -115,13 +115,13 @@ ch = HumanChannel(on_event=my_own_sink)     # 自己接,Workflow 不动它
 `StepResult`。进度条、写盘、报警挂这里,不要为了这个去 `Event` 流里拼——正文会被换代和
 重试打断成好几段。
 
-### 终端:默认的那个
+### 终端:默认的那个 {#终端默认的那个}
 
 不写代码也有一个。`flower "帮我做一个 X"` 走的是
 [`flower/cli.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/cli.py),
 它是交互层的**参考实现,不是框架的一部分**,可以整份换掉;开关见 [CLI 参考](../reference/cli.md)。
 照实说规模。整份 `cli.py` 是 1264 行、57KB —— 但**要换的不是整份**。
-真正的替换点是里面的 `class Render`(`cli.py:382-578`,197 行),它的 docstring 就写着
+真正的替换点是里面的 `class Render`(`cli.py:489-687`,197 行),它的 docstring 就写着
 "Event → 终端。换 UI 就是换这一个类。"其余一千多行是打断、旁路顾问、收件箱回执、
 信号抢救这些**终端特有**的配套,换成 Web 或 HTTP 时本来就不需要照搬。
 
@@ -168,7 +168,7 @@ def start_input(ch: HumanChannel) -> threading.Event:
 - **一直读,不是只在有提问时读。** 只在有提问时读的话,干活那几小时里敲的东西留在终端缓冲里,
   下一次提问时会被当成答案吃掉——人还没看见问题,问题就被"回答"了。
 
-### Web:队列 + WebSocket
+### Web:队列 + WebSocket {#web队列--websocket}
 
 ```python
 events: asyncio.Queue[dict] = asyncio.Queue()
@@ -196,7 +196,7 @@ def answer(ask_id: str, text: str) -> dict:
 用到 `raw` 就等于把前端绑回了 SDK 类型,这一层就白做了。`kind` / `text` / `tool` / `payload`
 四个字段够用。
 
-### HTTP:序号 + 轮询
+### HTTP:序号 + 轮询 {#http序号--轮询}
 
 没有长连接的时候,给事件编号让客户端拉:
 
@@ -233,7 +233,7 @@ def answer(ask_id: str, text: str) -> dict:
 配得上这个长度;还有**必须给 `timeout_s` 一个有限值** —— 没人轮询的时候提问不会自己结束,
 `timeout_s=None` 会把整次运行永远挂在那里。默认的 `1800.0` 秒是合适的。
 
-### 全自动无人值守:没有人
+### 全自动无人值守:没有人 {#全自动无人值守没有人}
 
 ```python
 wf = starter_flow("帮我做一个 X", workspace=".", run_dir="runs", timeout_s=0)
@@ -263,9 +263,9 @@ ctx = await wf.run(rt, on_event=None)       # 事件全丢弃
     而且不报错、不超时、日志上看不出区别。无人值守只有两个正确取值:`0`(立刻落空)
     或者一个有限秒数。
 
-## 它实际做了什么
+## 它实际做了什么 {#它实际做了什么}
 
-### `Event` 的形状
+### `Event` 的形状 {#event-的形状}
 
 ```python
 @dataclass
@@ -279,7 +279,7 @@ class Event:
 
 `str(ev)`:`tool_call` 是 `[工具名] 摘要`,其余是 `text`;`text` 为空时是 `<kind>`。
 
-### 15 个 `EventKind`
+### 15 个 `EventKind` {#15-个-eventkind}
 
 | `kind` | 谁发的 | 什么时候出现 | `text` | `payload` |
 |---|---|---|---|---|
@@ -292,8 +292,14 @@ class Event:
 | `error` | `normalize()` | 断线时的合成消息 | 错误文本 | `synthetic: True` |
 | `reset` | `normalize()` | 压缩边界或会话重置 | `压缩(trigger) 167000 → 42000 tokens`;会话重置时是 `conversation reset` | `trigger`、`pre_tokens`、`post_tokens`、`micro`、`subtype`(会话重置时为空) |
 | `system` | `normalize()` | 其余 SDK 系统消息 | subtype | `data` 原样透传 |
-| `task` | `normalize()` | 任务进度消息 | 消息类名 | — |
+| `task` | `normalize()` | 任务进度消息 | **空** | `kind` = SDK 的消息类名 |
 | `unknown` | `normalize()` | 没认出来的消息类型 | 类名 | — |
+
+!!! note "`task` 的正文是空的,别直接打"
+    `TaskProgressMessage` 这类是 SDK 的内部消息类型。早先 `normalize()` 把类名当正文发出来,
+    打到屏幕上是纯噪音,而且混在 agent 的正文里看着像出错了(实测如此)。现在它归成一条
+    **无正文**的事件,类名放进 `payload["kind"]` —— 要不要显示由交互层自己决定
+    (`events.py`)。
 | `ask` | `HumanChannel` | 要人回答、某次提问有了结局,或者人主动说了句话 | 问题 / 人说的话 | 两种身份,见下 |
 | `retry` | `Runtime` | 正在重试 / 挂着等网络 | 一句说明 | `step`、`attempt` |
 | `step` | `Workflow.run` | 步骤边界 | 步骤名 | `index`、`total`、`resumed`、`woke` |
@@ -305,7 +311,7 @@ class Event:
 
 写 UI 时留一个 `else` 分支。`EventKind` 还会加新成员,老 UI 不该因此崩掉。
 
-### `handoff` 的三个 phase
+### `handoff` 的三个 phase {#handoff-的三个-phase}
 
 | `phase` | 什么时候发 | `payload` 额外带 |
 |---|---|---|
@@ -315,7 +321,7 @@ class Event:
 
 机制本身见[换代](handoff.md)。
 
-### `ask` 的两种身份
+### `ask` 的两种身份 {#ask-的两种身份}
 
 `Event("ask")` 同时承载"提问"和"人主动说的话",**UI 必须先看 `payload["kind"]`**:
 
@@ -328,7 +334,7 @@ class Event:
 (`answered` / `timeout` / `declined` / `over_budget` / `invalid`)。UI 按 `payload["id"]`
 更新同一条即可。
 
-### 问人:`Ask` 与 `HumanChannel`
+### 问人:`Ask` 与 `HumanChannel` {#问人ask-与-humanchannel}
 
 ```python
 @dataclass
@@ -415,7 +421,7 @@ agent 的上下文,下一步(比如[判定](../reference/glossary.md#判定))是
 | `timeout_s<=0` | 不等,提问立刻落空 |
 | `remaining` 返回 `-1` | `max_asks=None` 时的取值,不是 0 |
 
-### 打断:任何线程都能喊停
+### 打断:任何线程都能喊停 {#打断任何线程都能喊停}
 
 `rt.interrupt("别改 Makefile,那两行直接改")`,空串就是只打断不说话。三条性质:
 
@@ -432,7 +438,7 @@ agent 的上下文,下一步(比如[判定](../reference/glossary.md#判定))是
 不想打断、只是想加个要求的话用收件箱(`ch.send(...)`)——它不打断任何东西,延迟是 agent 的
 下一个检查点。
 
-### 旁路顾问:问一句而不打扰运行
+### 旁路顾问:问一句而不打扰运行 {#旁路顾问问一句而不打扰运行}
 
 想知道"现在到哪了",不必打断,也不该问协调者:那段问答会**永久占住主线程上下文**
 (它装的是决策,不是问答记录),而且它得停下手里的活。对一次十小时的运行,顺手问三句就把这
@@ -446,7 +452,7 @@ agent 的上下文,下一步(比如[判定](../reference/glossary.md#判定))是
 
 实测两问共 $0.5190,主运行的 manifest 一个字节都没多。
 
-### 两条硬规矩
+### 两条硬规矩 {#两条硬规矩}
 
 !!! warning "on_event 既不能阻塞,也不能把异常放出来"
     **一、`on_event` 是同步函数,在事件循环所在的线程里被调用。** 所以
@@ -460,9 +466,9 @@ agent 的上下文,下一步(比如[判定](../reference/glossary.md#判定))是
     例外:`HumanChannel` 自己发的 `ask` 事件已经包过了,异常收进 `channel.ui_errors`,
     不中断运行。
 
-## 什么时候不该用它
+## 什么时候不该用它 {#什么时候不该用它}
 
-### 交互层里不该做的事
+### 交互层里不该做的事 {#交互层里不该做的事}
 
 | 不该做 | 为什么 | 该怎么做 |
 |---|---|---|
@@ -476,7 +482,7 @@ agent 的上下文,下一步(比如[判定](../reference/glossary.md#判定))是
 | 用 `Event` 流拼进度和结果 | 正文会被换代、重试打断成好几段 | `on_step(step, result)` 拿完整的 `StepResult` |
 | 无人值守时用 `timeout_s=None` | 没人回答,运行永远挂着,不报错也不超时 | `0`,或者一个有限秒数 |
 
-### 什么时候根本不用换
+### 什么时候根本不用换 {#什么时候根本不用换}
 
 - **只想改颜色、多打一行少打一行** —— 改渲染函数就行。终端参考实现里的打断、旁路顾问、
   收件箱回执、SIGHUP / SIGTERM 抢救、退出前等旁路收尾,重写一遍代价不小。

@@ -5,7 +5,7 @@
 也不该知道。这一页讲怎么设计一个流程,`Step` 和 `Workflow` 的完整字段表在
 [Python API](../reference/api.md)。
 
-## 解决什么问题
+## 解决什么问题 {#解决什么问题}
 
 一次[长程](../reference/glossary.md#长程)运行不是一句 prompt 就能说完的事:先问清需求、
 再调研、再实现、再复核,每一段有自己的角色、自己的上下文、自己的验收条件。
@@ -20,7 +20,7 @@ Python 代码** —— 可读、可测、可以只重跑坏掉的那一步。
 
 它不含任何领域假设。切在哪、每步验收什么、不过怎么办 —— 这四件事就是"设计流程"。
 
-## 怎么用(最小代码)
+## 怎么用(最小代码) {#怎么用最小代码}
 
 ```python
 # flows.py
@@ -56,9 +56,9 @@ flower run flows.py:main -w /path/to/repo
 ctx = await wf.run(rt, on_step=lambda step, r: print(f"{step.name} ok={r.ok} ${r.cost_usd:.4f}"))
 ```
 
-## 它实际做了什么
+## 它实际做了什么 {#它实际做了什么}
 
-### 一个 Step 收到什么、必须返回什么
+### 一个 Step 收到什么、必须返回什么 {#一个-step-收到什么必须返回什么}
 
 `Step` 不是函数,是**声明**。真正执行的是 `Runtime.run(step.spec, 渲染出来的 prompt, ...)` ——
 **一步 = 一次 `Runtime.run` = 一条[会话](../reference/glossary.md#会话)**。
@@ -80,7 +80,7 @@ ctx = await wf.run(rt, on_step=lambda step, r: print(f"{step.name} ok={r.ok} ${r
 [任务书](../reference/glossary.md#任务书)是 `kind="prompt"`,断线的合成错误是 `kind="error"`
 —— 三者都不进。
 
-### reduce:不是糖
+### reduce:不是糖 {#reduce不是糖}
 
 默认往下传的是模型说的原话。有些步骤的原话**不该**原样往下传:
 
@@ -94,7 +94,7 @@ Step("确认需求", spec=确认者, prompt="帮我做一个 X",
 
 `reduce` **必须是同步函数**;`gate` / `when` / `on_reject` 可以是 async。
 
-### 状态怎么在 ctx 里流动
+### 状态怎么在 ctx 里流动 {#状态怎么在-ctx-里流动}
 
 `ctx` 是一个 `dict[str, Any]`,就是 `Workflow.context` 本身。每一步跑完按这张表写:
 
@@ -126,7 +126,7 @@ Step("确认需求", spec=确认者, prompt="帮我做一个 X",
     下游写 `lambda ctx: ctx["某步"]` 会直接 `KeyError`。要带着残缺结果往下走,用
     `on_fail="continue"`;真要跳过,下游得自己 `ctx.get(...)` 兜底。
 
-### 判定与打回:gate、on_reject、StepAbort
+### 判定与打回:gate、on_reject、StepAbort {#判定与打回gateon_rejectstepabort}
 
 `gate(result, ctx) -> bool` 判的是"跑完了,但合格吗"。两个必须知道的细节:
 
@@ -161,7 +161,7 @@ def gate(result, ctx):
 区别记牢:**返回 False 是"这次不行,再来一轮";`StepAbort` 是"再来也没用"。**
 典型场合是目标被判为这个环境做不到、而且没人可问 —— 继续空转是最贵的选择。
 
-### 两层重试别混
+### 两层重试别混 {#两层重试别混}
 
 | | `Step.retries` | `Runtime(resilience=...)` |
 |---|---|---|
@@ -173,7 +173,7 @@ def gate(result, ctx):
 续跑用的那句 prompt **有意不含任何错误细节** —— 模型需要知道"被打断了、接着做",
 不需要知道是 ENOTFOUND 还是 503。
 
-### 把步骤串起来
+### 把步骤串起来 {#把步骤串起来}
 
 步与步之间传递状态有三种接法,选哪种决定了下一步能看见什么:
 
@@ -203,7 +203,7 @@ def gate(result, ctx):
 6. **并行改同一个仓库就 `worker(isolate=True)`。** 收尾(合并、清理 worktree、开 PR)目前留给
    你的流程自己做,harness 只保证改动落在各自的 worktree 里。
 
-### 工作台要挂在 Workflow 上
+### 工作台要挂在 Workflow 上 {#工作台要挂在-workflow-上}
 
 凡是流程要往[工作台](../reference/glossary.md#工作台)里写文件的场合 —— 典型是
 `clarify_step(brief_path=...)` —— 必须自己建一个 `Workbench`,**同时**挂到 `Workflow.workbench`
@@ -245,7 +245,7 @@ rt = Runtime(workspace=Path.cwd(), run_dir="runs", workbench=wb)
     建好一个对象两边共用就没有这个问题;`Workflow.workbench` 存在时命令行的 `-W` 会被忽略,
     以它为准。
 
-### `continuous=True`:同一个路径再跑一次
+### `continuous=True`:同一个路径再跑一次 {#continuoustrue同一个路径再跑一次}
 
 上面三种接法说的是**一次运行内**步与步之间。跨进程是另一个轴:
 
@@ -272,7 +272,7 @@ Workflow([...], continuous=True)     # 默认值
 
 完整设计和 `--new` 见[接续](continuity.md)。
 
-## 什么时候不该用它
+## 什么时候不该用它 {#什么时候不该用它}
 
 - **只跑一个 agent、也不需要判定** —— 别套 `Workflow`。直接 `await rt.run(spec, "…")`,
   或者命令行 `flower once "读一眼这个仓库"`。

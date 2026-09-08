@@ -716,7 +716,7 @@ def coordinator(
 |---|---|---|---|
 | `name` | `str` | 必填 | 角色名,也是默认的步骤名 |
 | `instructions` | `str` | 必填 | 领域指令。最终是 `f"{COORDINATOR_RULES}\n{instructions}".strip()` |
-| `workers` | `dict[str, AgentDefinition]` | 必填 | 手下有哪些角色,落到 `AgentSpec.agents` |
+| `workers` | `dict[str, AgentDefinition]` | 必填 | 手下有哪些角色,落到 `AgentSpec.agents`。**它们的只读 web 工具还会被并进协调者自己的 `allowed_tools`**,见下 |
 | `channel` | `HumanChannel \| None` | `None` | 给了就同时追加 `inbox` **和** `ask` 两个工具,并设 `mcp_servers` |
 | `can_read` | `bool` | `True` | `True` → `["Agent", "TodoWrite", "Read"]`;`False` → 去掉 `Read` |
 | `glance` | `bool` | `True` | 追加 `"Bash"`,并设 `AgentSpec.glance`。**具体能跑什么由 `delegate_guard` 把关**,不是靠这里 |
@@ -731,6 +731,27 @@ def coordinator(
 
 产出的 `AgentSpec` 里固定的三项:`delegate_only=True`、`agents=workers`、
 `workbench` 保持 `AgentSpec` 的默认 `True`。
+
+#### `workers` 的 web 工具会被并进来 {#coordinator-web-merge}
+
+造完清单之后,`coordinator()` 会遍历每个 `AgentDefinition.tools`,凡是落在
+`WEB_TOOLS`(`WebFetch`、`WebSearch`,`roles.py:33`)里的,就往协调者自己的
+`allowed_tools` 里也加一份(`roles.py:523-526`)。
+
+**理由:`allowed_tools` 和 `disallowed_tools` 一样是会话级的。** 这是全文关于这一点最硬的
+一条证据 —— 它不只影响主线程。不在这份会话级清单里的工具,**subagent** 调用时也要走权限审批;
+无人值守时没人批,harness 回一句
+`Claude requested permissions to use X, but you haven't granted it yet`
+(`toolDenialKind=user-rejected`),而模型会反复重试同一个调用。实测栽过:给执行者加了
+`WebFetch`/`WebSearch`,却只写进 `AgentDefinition.tools`,那次 novel 运行二十多次
+user-rejected、一个字都没写出来(`roles.py:513-518`)。
+
+两个字段的会话级性质相同,**症状不同**:`disallowed_tools` 是当场报错,
+`allowed_tools` 是静默重试到死。后者更难查,因为屏幕上什么都不像出错。
+
+**只并只读、无副作用的那些。** `Write`/`Edit`/`Bash` **故意不并**:主线程一旦对它们免审批,
+`delegate_guard` 那道"协调者不动手"的墙就没意义了;而 subagent 的 `Bash`/`Write`
+本来就走得通(实测 462 次放行,`roles.py:520-522`)。
 
 源码里明确写着**不要用 `disallowed_tools` 实现"只协调不动手"** —— 那是会话级的,
 会把 subagent 的 `Bash`/`Write` 一起禁掉,见 [`AgentSpec`](#agentspec) 那条警告。
@@ -1733,6 +1754,8 @@ class PrunePolicy:
     drop_api_errors: bool = True
     neutralize_interrupts: bool = True
     interrupt_text: str = "[上一轮在此处被中断,该工具结果未产生]"
+    heal_orphans: bool = True
+    orphan_text: str = "[这一步被打断了,没有结果。需要的话重做。]"
     keep_denials: int = 1
 ```
 
@@ -1741,7 +1764,16 @@ class PrunePolicy:
 | `drop_api_errors` | `bool` | `True` | 摘掉合成 API 错误消息(断线残渣) |
 | `neutralize_interrupts` | `bool` | `True` | 中断残留的 `tool_result` 换成中性说明 |
 | `interrupt_text` | `str` | 见签名 | 中性说明的文案 |
+| `heal_orphans` | `bool` | `True` | 给"有 `tool_use` 却没有 `tool_result`"的孤儿调用补一条合成结果 |
+| `orphan_text` | `str` | 见签名 | 补出来的那条 `tool_result` 的正文 |
 | `keep_denials` | `int` | `1` | 保留最近 N 次被拒的工具调用 |
+
+`heal_orphans` 治的是**打断之后 resume 每次都 400**:打断在消息边界断开,当时在飞的
+`tool_use` 后面可能根本没有 `tool_result`,而 API 要求两者成对 —— 这条坏历史留在 transcript 里,
+于是之后**每一次** resume 都被它打回。`heal_orphans()` 在含孤儿的那条 assistant 之后插一条
+`user` 条目把缺的结果补齐,并把原本指向那条 assistant 的 `parentUuid` 改指到补的这条,保持链连续
+(`prune.py:95-147`)。**补而不删**:删孤儿要重接 assistant 的父子链,同一条里可能还有正常的块、
+文本和 thinking,容易连累(`prune.py:195-204`)。
 
 `keep_denials` 的理由:被拒调用从没执行过,结果里没信息,但占位不小(实测一次 273 字符 =
 93 字拒绝语 + 180 字**死命令原文**)。更要紧的是**它会误导** —— 实测协调者读到几条
@@ -1921,7 +1953,7 @@ class Event:
 | `thinking` | `normalize` | 思考块 |
 | `tool_call` | `normalize` | 工具调用。`text` 是 `file_path` / `command` / `pattern` 摘要,截 200 字 |
 | `tool_result` | `normalize` | 工具结果。`text` 截 500 字,payload 带 `tool_use_id` / `is_error` |
-| `task` | `normalize` | 三种 Task 消息,`text` 是消息类名 |
+| `task` | `normalize` | 三种 Task 消息。`text` **是空的**,类名在 `payload["kind"]` 里 |
 | `system` | `normalize` | 其余系统消息,`text` 是 subtype |
 | `reset` | `normalize` | `compact_boundary` / `microcompact_boundary` / `ConversationResetMessage` |
 | `result` | `normalize` | `ResultMessage`,payload 带 `session_id` / `cost_usd` / `num_turns` / `is_error` |

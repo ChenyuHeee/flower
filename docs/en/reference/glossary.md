@@ -10,7 +10,7 @@ mistaking one of these terms for another.
 
 ---
 
-## Framework and execution
+## Framework and execution {#框架与运行}
 
 ### long-horizon {#长程}
 
@@ -60,7 +60,7 @@ exit early.
 
 ---
 
-## Roles
+## Roles {#角色}
 
 A role is how flower divides labour between agents. Each role is a block of injected rule text
 plus a tool set plus a set of hooks. All five roles are factory functions; see the
@@ -71,8 +71,13 @@ plus a tool set plus a set of hooks. All five roles are factory functions; see t
 *Chinese: 协调者* · `coordinator()`
 
 The agent on the [main thread](#主线程). It decomposes the task, delegates, reads reports and
-makes decisions — but it never does the work itself: it has no `Bash`, `Write` or `Edit`. Its
-only tools are `Agent`, `TodoWrite` and `Read`.
+makes decisions — but it never does the work itself: it has no `Write` or `Edit`. Its base tools
+are `Agent`, `TodoWrite` and `Read` (`roles.py:27`), though that is not the final list — three
+things get added on top depending on the arguments. `glance=True` (the default) adds a
+restricted `Bash`, enough for a `git status` or an `ls` and no more, policed by `delegate_guard`.
+Giving it a channel adds `inbox` and `ask`. And if its [workers](#执行者) carry `WebFetch` or
+`WebSearch`, those get merged in too — `allowed_tools` is **session-level**, so leaving them out
+strands the subagent's own calls in a permission prompt nobody answers (`roles.py:513-526`).
 
 Its brief is to act like *a person who is good at using Claude Code*, not like an executor.
 
@@ -142,7 +147,7 @@ This is flower's first and largest context saving. See
 
 ---
 
-## The four mechanisms
+## The four mechanisms {#四个机制}
 
 ### clarify {#前置确认}
 
@@ -237,7 +242,7 @@ continue.
 
 ---
 
-## Context management
+## Context management {#上下文管理}
 
 ### main thread {#主线程}
 
@@ -326,7 +331,7 @@ error*.
 
 ---
 
-## Runtime
+## Runtime {#运行时}
 
 ### isolation {#隔离}
 
@@ -408,7 +413,7 @@ without one — [HT001](../cases/ht001.md) cost $171.62.
 
 ---
 
-## Portability
+## Portability {#可移植性}
 
 ### portable {#可移植}
 

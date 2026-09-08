@@ -22,44 +22,44 @@
 
 四个数字出自 [HT001](cases/ht001.md) —— 一个 agent 在 flower 下从零写出一个终端 IDE 的那次运行。
 
-## 装
+## 一条命令装好,不用 Node {#装}
 
 ```bash
 curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
 ```
 
-自动找 `uv` / `pipx` / `pip` 装好 `flower` 命令。只要 Python ≥ 3.10,不用装 Node,
-也不用装 Claude Code CLI。装完 `cd` 到任意项目目录敲一句 `flower`:第一次会问你要 API key
+脚本自动找 `uv` / `pipx` / `pip` 把 `flower` 命令装上,只要 Python ≥ 3.10,
+Claude Code CLI 也不用装。装完 `cd` 到任意项目目录敲一句 `flower`:第一次会问你要 API key
 或网关地址,配一次存到 `~/.config/flower/.env`,处处生效;本机已经装了 Claude Code 并配好的话,
 它直接借那份 token,连问都不问。完整步骤和排错见[安装](getting-started/install.md)。
 
-## 它替你挡四类失败
+## 它替你挡四类失败 {#四类失败}
 
 <div class="fl-grid" markdown>
 
 <div class="fl-card" markdown>
-### [前置确认](guide/clarify.md)
+### [前置确认](guide/clarify.md) {#前置确认}
 
 怕做出来不是想要的 —— 动手之前有一个只提问、不动手的角色问到清楚为止,把需求冻结成一份文书,
 后面每一步读它开局。
 </div>
 
 <div class="fl-card" markdown>
-### [目标看守](guide/goal.md)
+### [目标看守](guide/goal.md) {#目标看守}
 
 怕它说做完了其实没做完 —— 每一轮活结束由另一个角色独立判一次,达成往下走,没达成打回去,
 这个环境验不了就停下来问人。
 </div>
 
 <div class="fl-card" markdown>
-### [接续](guide/continuity.md)
+### [接续](guide/continuity.md) {#接续}
 
 怕跑几小时崩了从头再来 —— 在同一个目录再敲一次 `flower` 就接上上次的进度,进程被 kill、
 机器重启也一样,你不用记任何 id。
 </div>
 
 <div class="fl-card" markdown>
-### [换代](guide/handoff.md)
+### [换代](guide/handoff.md) {#换代}
 
 怕上下文满了被压成一段摘要 —— 当前会话自己写一份人能读、能改的交接书,换一条新会话接手,
 不用 compact。
@@ -67,7 +67,7 @@ curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
 
 </div>
 
-## 它凭什么"长程"
+## 它凭什么"长程" {#长程}
 
 主线程上的[协调者](reference/glossary.md#协调者)只装决策,拿不到 `Write` 和 `Edit` ——
 写码、跑测试、查资料全派给 [subagent](reference/glossary.md#subagent),
@@ -77,7 +77,7 @@ HT001 那次 10.4 小时的运行里,**94.8% 的正文字符落在 subagent**,
 所以主线程 70 轮才涨到 185.9K、全程没有发生过压缩 —— 这一层怎么做的、另外三层是什么,
 见[上下文经济学](guide/context.md)。
 
-## 真的跑过
+## 两次真实长跑的原始记录 {#真的跑过}
 
 - **[HT001](cases/ht001.md)** —— 从零写一个终端 IDE。$171.62 / 10.4 小时 /
   主线程上下文涨到 185.9K,交出 12,212 行产品代码,中途断过一次网、自己接着跑完。
@@ -86,12 +86,12 @@ HT001 那次 10.4 小时的运行里,**94.8% 的正文字符落在 subagent**,
 
 两页都写了站不住的地方:HT001 里 agent 给自己的验收判错了一条,
 HT002 把 `git clone && make && ./cppide` 做成了一小时。每个数字都能在 `runs/manifest.json`
-和 `sessions.db` 里复算 —— 这是原始记录,不是宣传。
+和 `sessions.db` 里复算 —— 是记录,不是宣传。
 
-## 从哪读起
+## 从哪读起 {#从哪读起}
 
-- **想马上跑起来** —— [快速上手](getting-started/quickstart.md):先花两毛钱验一发凭证,
-  再零代码跑完一次三步流程。
+- **想马上跑起来** —— [快速上手](getting-started/quickstart.md):三条命令跑起来,
+  然后教你读屏幕上滚过去的东西。
 - **想先搞懂概念** —— [核心概念](getting-started/concepts.md):运行、步骤、会话、五个角色,
   五分钟一次说完。
 - **想接进自己的代码** —— [Python API](reference/api.md):`Runtime`、`Step`、五个角色工厂,

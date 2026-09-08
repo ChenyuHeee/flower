@@ -5,7 +5,7 @@
 [协调者](../reference/glossary.md#协调者)不动手、长产出落盘、hook 当场剪枝 —— 全是从这一条推出来的。
 这一页讲的是为什么。
 
-## 解决什么问题
+## 解决什么问题 {#解决什么问题}
 
 [压缩](../reference/glossary.md#压缩)是等上下文满了再回头总结,治的是标。真正的问题是:
 **琐碎的东西一开始就不该进主线程。**
@@ -28,7 +28,7 @@ flower 用四层解决,顺序就是优先级 —— 按省得多少排:
 前两层管**东西进不进来**,后两层管**已经进来的留不留**。顺序不能倒:第四层再狠,
 也追不回第一层漏进来的量。
 
-## 怎么用(最小代码)
+## 怎么用(最小代码) {#怎么用最小代码}
 
 ```python
 from flower import Runtime, coordinator, worker
@@ -52,9 +52,9 @@ rt = Runtime(workspace="repo", workbench=True)
     结论:**`Runtime(workbench=False)` 配 `coordinator()` 时,主线程的 Bash / Write / Edit
     一道墙都没有。**
 
-## 它实际做了什么
+## 它实际做了什么 {#它实际做了什么}
 
-### 第一层:分工(省得最多)
+### 第一层:分工(省得最多) {#第一层分工省得最多}
 
 协调者扮演"一个会用 Claude Code 的人":拆解、派活、读报告、决策。它拿不到
 Bash / Write / Edit —— 工具只有 `Agent`、`TodoWrite`、`Read`
@@ -87,7 +87,7 @@ Bash / Write / Edit —— 工具只有 `Agent`、`TodoWrite`、`Read`
 一条:**任务书只写这次任务专属的东西**。唯一还需要交代的规矩是"工作台在哪 + 长产出写
 `artifacts/` + 回话只给路径与结论" —— 因为工作台索引进不了 subagent,任务书是唯一通道。
 
-### 第二层:工作台(治"每次重写")
+### 第二层:工作台(治"每次重写") {#第二层工作台治每次重写}
 
 `.flower/` 下三个目录随工作区走:
 
@@ -113,7 +113,7 @@ Bash / Write / Edit —— 工具只有 `Agent`、`TodoWrite`、`Read`
     **继承不到**(实测 $0.2461,`tests/prelude_live.py`)。所以"工作台在哪 + 长产出写
     `artifacts/`"必须由协调者在任务书里转述 —— 那是唯一通道,不是冗余。
 
-### 第三层:当场落盘
+### 第三层:当场落盘 {#第三层当场落盘}
 
 `spill_guard` 是一个 `PostToolUse` hook,在工具结果**进模型之前**看一眼:超过 `threshold`
 (默认 **4000** 字符)的,[落盘](../reference/glossary.md#落盘)到工作台的 `spill/` 目录,
@@ -136,7 +136,7 @@ Runtime(workspace="repo", workbench=True, spill_threshold=4000)   # None 或 0 =
 **省多少**:[HT001](../cases/ht001.md) 那次运行里,103 次 spill、791.4K 字符换成了路径指针,
 没有常驻上下文。
 
-### 第四层:裁剪与剪除
+### 第四层:裁剪与剪除 {#第四层裁剪与剪除}
 
 这一层在[会话存储](../reference/glossary.md#会话存储)里。`Runtime` 的 store 永远是
 `PruningSessionStore`(继承链 `SqliteSessionStore` ← `TrimmingSessionStore` ←
@@ -185,7 +185,7 @@ Runtime(workspace="repo", trim=TrimPolicy(keep_recent=20, min_chars=2000))   # T
 `Runtime(trim=False)`(默认)**不等于什么都不清**:它只关掉大结果裁剪,过期、被拒调用、
 断线残渣照做。
 
-### 反例:看一眼的活自己干
+### 反例:看一眼的活自己干 {#反例看一眼的活自己干}
 
 前三层都在说"派出去",但有个反例:`git status`、`ls`、`cat` 这种命令,结果几十个字符,
 而**派一个 subagent 光启动就要约 4.3k 上下文**(实测,不可摊薄)。为一条 `ls` 付这个价钱是净亏。
@@ -208,7 +208,7 @@ Runtime(workspace="repo", trim=TrimPolicy(keep_recent=20, min_chars=2000))   # T
 subagent。现在是逐段拆开检查:每一段都在白名单里才放行,`git status && rm -rf x` 照样拦
 (后半段不在表里)。
 
-### 叠加,不替换
+### 叠加,不替换 {#叠加不替换}
 
 ```python
 system_prompt = {"type": "preset", "preset": "claude_code", "append": spec.instructions}
@@ -237,7 +237,16 @@ system_prompt = {"type": "preset", "preset": "claude_code", "append": spec.instr
     工具 —— 一个 $0.1 的探针里,`allowed_tools=["Read"]` 的 agent 照样调得动 Write / Bash。
     真正拦住的是 hook。
 
-## 什么时候不该用它
+    **`allowed_tools` 也是会话级的,同一课上了两遍。** 不在这份清单里的工具,**subagent**
+    调用时同样要走权限审批。无人值守时没人批,于是既不报错也不停下,模型反复重试同一个调用
+    (`toolDenialKind=user-rejected`)。实测:给执行者加了 `WebFetch`/`WebSearch` 却只写进
+    `AgentDefinition.tools`,那次运行二十多次 user-rejected、一个字都没产出(`roles.py:513-518`)。
+    症状比 `disallowed_tools` 难查 —— 后者当场报错,前者屏幕上什么都不像出错。
+    所以 `coordinator()` 现在会把手下执行者的只读 web 工具并进自己的 `allowed_tools`
+    (`roles.py:523-526`),而 `Write`/`Edit`/`Bash` **故意不并** —— 并了就等于把上面那道
+    hook 拆掉。
+
+## 什么时候不该用它 {#什么时候不该用它}
 
 这四层省的都是**现场**。下面这些问题它们不解决,有的还会因为它们更难被看见:
 
