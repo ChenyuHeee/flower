@@ -2,7 +2,7 @@
 
 Get the requirement straight before touching anything. The [clarifier](../reference/glossary.md#确认者) is a role that only asks questions and never does work; it keeps asking until things are clear, then emits a [brief](../reference/glossary.md#需求确认书) of exactly four sections and freezes it to disk. Every later [step](../reference/glossary.md#步骤) opens by reading that document instead of guessing the requirement again — and the Q&A itself **never enters** any downstream context.
 
-## The problem it solves
+## The problem it solves {#解决什么问题}
 
 Everything flower's context cleanup removes is **scene material**: staleness expiry, denied-call excision, error-message excision, [spilling](../reference/glossary.md#落盘) of large results. Losing scene material is fine — rerun and you have it again.
 
@@ -12,9 +12,9 @@ One class of error is not like that: **misunderstanding the goal**. It is the on
 
 So there has to be a channel that can "stop and ask", and it has to sit **before** work starts.
 
-## How to use it (minimal code)
+## How to use it (minimal code) {#怎么用最小代码}
 
-### Zero code: command line
+### Zero code: command line {#零代码命令行}
 
 Go into the project directory and just run:
 
@@ -48,7 +48,7 @@ Want to see only what it asks, without any work happening afterwards: `flower --
 !!! warning "Answers come from standard input — run it in a real terminal"
     In a pipe, under `nohup`, or in CI there is nobody to answer: as soon as stdin hits EOF, the question pending at that moment is treated as "input closed" and skipped, and every question after it waits out the full `--timeout`. In those settings just pass `--timeout 0` — every question falls through immediately, and it decides for itself and writes the assumptions into "Unknowns and assumptions".
 
-### Wiring it yourself
+### Wiring it yourself {#自己接线}
 
 ```python
 from pathlib import Path
@@ -97,9 +97,9 @@ When tuning goes badly, reach for these knobs first:
 | Stalls with nobody on duty | `timeout_s=0` |
 | Want to re-clarify every time | `always_ask=True`, or delete the brief file |
 
-## What it actually does
+## What it actually does {#它实际做了什么}
 
-### Trigger points: three wires, not one new field
+### Trigger points: three wires, not one new field {#触发时机三处接线一个新字段都没加}
 
 What `clarify_step()` builds is an ordinary `Step` with three callbacks filled in:
 
@@ -115,7 +115,7 @@ What `clarify_step()` builds is an ordinary `Step` with three callbacks filled i
 
 On [continuity](../reference/glossary.md#接续), this step opens with a different sentence — `CLARIFY_RESUME`: "Continue the requirement clarification you didn't finish — **do not start over**…". Without that sentence, continuity resends the original request as a new task, and the clarifier may re-ask what it already asked.
 
-### Boundary: the Q&A does not enter downstream context
+### Boundary: the Q&A does not enter downstream context {#边界问答不进下游的上下文}
 
 ```text
 确认需求        独立会话  ────→  磁盘上一份冻结的四段确认书
@@ -127,7 +127,7 @@ On [continuity](../reference/glossary.md#接续), this step opens with a differe
 
 The Q&A itself is **appended to `log_path`**. That copy costs no context, is unaffected by compaction, and survives a move to another machine — the same idea as the workbench.
 
-### Each of the four sections blocks one class of failure
+### Each of the four sections blocks one class of failure {#四段各挡一类失败}
 
 | Section | What to write | What happens if you don't |
 |---|---|---|
@@ -145,7 +145,7 @@ Parsing is very forgiving about form: `## 目标` / `**目标**` / `目标:` / `
 - `Brief.parse()` **strips fenced code blocks first**, and on an **unclosed** fence it discards everything from that point on. When the model's output is truncated, none of the following sections parse → the four sections are incomplete → `gate` sends it back.
 - `Brief.load()` treats `"(未填)"` as empty. If you hand-edit the brief and copy `to_markdown()`'s placeholder text verbatim, that section still counts as missing.
 
-### Boundary: what the clarifier can touch
+### Boundary: what the clarifier can touch {#边界确认者能碰什么}
 
 I ran an **unconstrained** clarifier (`/tmp/probe_ask.py`, **$0.8908 / 230 seconds**): after two questions it **started writing code immediately**; once permissions blocked it, it **pasted the entire codebase into the body of its reply**. Writing "don't write code" in the prompt does not stop this — its system prompt at the time said something like that already. So there are two mechanisms:
 
@@ -162,7 +162,7 @@ Giving it read access pays off: one look at the repo saves several questions, an
 
 **Two: the framework parses only those four sections and drops everything else.** `Brief.parse()` strips fenced code blocks before looking for headings — pasted code can't reach downstream. This is the last gate against "it pollutes downstream".
 
-### Boundary: the question channel
+### Boundary: the question channel {#边界提问通道}
 
 The model-side question tool is `mcp__human__ask` (parameter `question`, optional `options`). `HumanChannel` is an in-process MCP server, and it **registers two tools** — `mcp__human__ask` and `mcp__human__inbox`; the clarifier's no-approval list contains only the former (the inbox is for the coordinator).
 
@@ -201,7 +201,7 @@ One measured mechanical fact: `await`ing an external future inside an in-process
 !!! warning "Set `max_turns` too low and "ask until it's clear" becomes empty words"
     `clarify()`'s `max_turns` defaults to `None` (unlimited). **Every question asked is one turn** — setting it to 16 means "at most a dozen or so questions", and it takes effect **silently**: on the channel side `max_asks=None` still says "no limit", and a human can't tell who cut it off. To leave questioning open, **both defaults must stay at `None`**: `HumanChannel.max_asks` and `clarify(max_turns=...)`.
 
-### Where the brief lands: it must be the workbench you attached
+### Where the brief lands: it must be the workbench you attached {#确认书落在哪必须是挂上去的那个工作台}
 
 The workbench index is injected into the system prompt, so the coordinator knows from the start where the requirement file is; when dispatching work it just passes the path down, without copying the content into the [task brief](../reference/glossary.md#任务书).
 
@@ -232,7 +232,7 @@ rt = Runtime(workspace="repo", workbench=True); wb = rt.workbench
 
 When writing your own driver (not going through `cli.py`), build the `Workbench` first, then give **the same object** to both `Workflow(workbench=wb)` and `Runtime(workbench=wb)`. Item 5 of `tests/trial_offline.py` asserts directly that "the brief appears in `prompt_block()`", and item 11 confirms that this assertion catches the regression.
 
-### Verification status
+### Verification status {#验证状态}
 
 **All green offline** (`tests/clarify.py`, **52 items**, costs nothing): the five semantics of the question channel (blocking wait for an answer / quota exhausted / timeout fall-through / skip / cross-thread answer), four-section parsing (including a "pasted code in" sample), the fact that the `clarify()` role has **no** write tools, and the three wires of `clarify_step`.
 
@@ -240,7 +240,7 @@ When writing your own driver (not going through `cli.py`), build the `Workbench`
 
 **Not exercised against the real API.** The $0.8908 probe was a **real request**, but what it tested was "what an unconstrained clarifier will do", not this path as it stands.
 
-## When not to use it
+## When not to use it {#什么时候不该用它}
 
 **The requirement is already a frozen artifact.** The requirement is written in a file, handed down by an upstream system, or this run is just a rerun of the same thing — then there's nothing to ask. Feed the requirement text straight into the work step, or keep `clarify_step` and let `when` skip it (with the brief present it doesn't ask anyway).
 

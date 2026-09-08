@@ -22,7 +22,7 @@ Cambias de máquina y el comportamiento es idéntico: no lee la configuración d
 
 Los cuatro números salen de [HT001](cases/ht001.md): la ejecución en la que un agente escribió desde cero un IDE de terminal bajo flower.
 
-## Instalación
+## Instalación {#装}
 
 ```bash
 curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
@@ -33,33 +33,33 @@ ni la CLI de Claude Code. Al terminar, haz `cd` a cualquier directorio de proyec
 o la dirección del gateway; se configura una vez, se guarda en `~/.config/flower/.env` y vale en todas partes. Si ya tienes Claude Code instalado y configurado en la máquina,
 toma prestado ese token directamente, sin preguntar nada. Los pasos completos y la resolución de problemas están en [Instalación](getting-started/install.md).
 
-## Te protege de cuatro clases de fallo
+## Te protege de cuatro clases de fallo {#四类失败}
 
 <div class="fl-grid" markdown>
 
 <div class="fl-card" markdown>
-### [Clarificación previa](guide/clarify.md)
+### [Clarificación previa](guide/clarify.md) {#前置确认}
 
 Miedo a que lo construido no sea lo que querías: antes de empezar hay un rol que solo pregunta, no toca nada, y pregunta hasta que todo queda claro; congela los requisitos en un documento
 que cada paso posterior lee al arrancar.
 </div>
 
 <div class="fl-card" markdown>
-### [Guardián de objetivo](guide/goal.md)
+### [Guardián de objetivo](guide/goal.md) {#目标看守}
 
 Miedo a que diga que ha terminado cuando no ha terminado: al final de cada ronda de trabajo otro rol emite un juicio independiente; si se ha cumplido, sigue adelante; si no, lo devuelve,
 y si en este entorno no se puede verificar, se detiene y pregunta a una persona.
 </div>
 
 <div class="fl-card" markdown>
-### [Continuidad](guide/continuity.md)
+### [Continuidad](guide/continuity.md) {#接续}
 
 Miedo a que tras horas de ejecución se caiga y haya que empezar de cero: vuelve a escribir `flower` en el mismo directorio y retoma el progreso anterior; si el proceso muere por un kill o
 la máquina se reinicia, igual. No tienes que recordar ningún id.
 </div>
 
 <div class="fl-card" markdown>
-### [Relevo](guide/handoff.md)
+### [Relevo](guide/handoff.md) {#换代}
 
 Miedo a que, al llenarse el contexto, todo quede reducido a un resumen: la sesión actual escribe por sí misma un documento de relevo legible y editable por una persona, y una sesión nueva toma el mando,
 sin necesidad de compact.
@@ -67,7 +67,7 @@ sin necesidad de compact.
 
 </div>
 
-## Por qué es "de largo horizonte"
+## Por qué es "de largo horizonte" {#长程}
 
 El [coordinador](reference/glossary.md#协调者) del hilo principal solo carga decisiones y no tiene acceso a `Write` ni a `Edit`:
 escribir código, ejecutar tests y buscar información se delegan todos a [subagents](reference/glossary.md#subagent),
@@ -77,7 +77,7 @@ de las 1,893 llamadas a herramientas de trabajo manual, solo 32 entraron en el c
 Por eso el hilo principal llegó a 185.9K recién en la ronda 70 y no hubo ni un compact en toda la ejecución. Cómo se logra esta capa y cuáles son las otras tres,
 en [Economía del contexto](guide/context.md).
 
-## Se ha ejecutado de verdad
+## Se ha ejecutado de verdad {#真的跑过}
 
 - **[HT001](cases/ht001.md)** — escribir un IDE de terminal desde cero. $171.62 / 10.4 horas /
   el contexto del hilo principal subió a 185.9K, entregó 12,212 líneas de código de producto, con una caída de red por medio de la que se recuperó y terminó solo.
@@ -88,7 +88,7 @@ Ambas páginas describen también lo que no se sostiene: en HT001 el agente se e
 y HT002 convirtió `git clone && make && ./cppide` en una hora de trabajo. Cada número se puede recalcular en `runs/manifest.json`
 y `sessions.db`: es el registro original, no propaganda.
 
-## Por dónde empezar a leer
+## Por dónde empezar a leer {#从哪读起}
 
 - **Quieres ejecutarlo ya** — [Inicio rápido](getting-started/quickstart.md): primero gasta unos céntimos en validar las credenciales,
   y luego completa un flujo de trabajo de tres pasos sin escribir código.

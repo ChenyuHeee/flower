@@ -9,7 +9,7 @@ Führe `flower` im selben Verzeichnis noch einmal aus, und es spricht dort weite
 
     Beides greift automatisch ineinander, es ist keine zusätzliche Verdrahtung nötig: die [Lineage](../reference/glossary.md#血缘) merkt sich immer die Session, die diesen Schritt **zuletzt** übernommen hat — der nächste Weckvorgang knüpft also an den Nachfolger an.
 
-## Welches Problem das löst
+## Welches Problem das löst {#解决什么问题}
 
 Auf der Platte ist eigentlich alles da. `runs/sessions.db` enthält das **vollständige** Transcript jeder historischen Session, `需求.md` / `目标.md` sind eingefrorene Dokumente, der Code liegt im Arbeitsbereich.
 
@@ -17,7 +17,7 @@ Auf der Platte ist eigentlich alles da. `runs/sessions.db` enthält das **vollst
 
 In [HT002](../cases/ht002.md) hat er eine Stunde lang mit Compiler-Flags herumprobiert. Ein anderer Prozess, und diese Stunde war umsonst.
 
-## Wie man es benutzt (minimaler Code)
+## Wie man es benutzt (minimaler Code) {#怎么用最小代码}
 
 Auf der Kommandozeile ist nichts zu konfigurieren, auf dem Pfad `flower` ist Kontinuität standardmäßig an:
 
@@ -76,9 +76,9 @@ Führst du diesen Code im selben Verzeichnis ein zweites Mal aus, ist `ctx["_wok
     `checks` = wie viele Einträge die Prüfliste hat; `woke` = wie oft schon aufgeweckt wurde; `steps` = Zuordnung von Schrittnamen zu session_id.
     Die Kommandozeile entscheidet damit, ob der Prompt „Was soll getan werden?“ oder „Weiter wie zuletzt?“ fragt.
 
-## Was es tatsächlich tut
+## Was es tatsächlich tut {#它实际做了什么}
 
-### Die drei Dateien auf der Platte
+### Die drei Dateien auf der Platte {#落在磁盘上的三个文件}
 
 `run_dir` ist per Default `./runs`, **relativ zum aktuellen Arbeitsverzeichnis, nicht relativ zum workspace**.
 
@@ -109,7 +109,7 @@ Schrittnamen treten dort in vier Formen auf, an denen man sofort sieht, wie der 
 
 Geschrieben wird **anhängend, nicht überschreibend**: bei jedem Schreiben wird die Datei neu eingelesen und über das Feld `run` dedupliziert — Zeilen dieses Prozesses werden durch die aktuellen ersetzt, fremde Zeilen bleiben unangetastet. Mehrere flower-Instanzen parallel im selben Verzeichnis sind damit sicher.
 
-### `continuous=True` ändert die Semantik von `resume_from`
+### `continuous=True` ändert die Semantik von `resume_from` {#continuoustrue-改变了-resume_from-的语义}
 
 Das wird am leichtesten übersehen: `Workflow.continuous` ist per Default `True`, also bedeutet `resume_from=None`
 **nicht „ganz neue Session“**.
@@ -128,7 +128,7 @@ Beim Laden der Lineage gibt es noch eine Prüfung: für jedes eingelesene `(Schr
     Die Lineage indiziert nach `Step.name`. **Den Schrittnamen zu ändern heißt, die Lineage zu kappen** — es gibt keinen Fehler, der nächste Lauf ist einfach eine ganz neue Session.
     Namen mit Suffix (`#retry`, `#round`, `·判定#`) landen nicht in der Lineage, `Lineage.remember` benutzt immer den Originalnamen.
 
-### Zwei Invarianten
+### Zwei Invarianten {#两条不变式}
 
 **Erstens: Sobald die session_id da ist, wird sofort auf Platte geschrieben — nicht erst, wenn der Schritt fertig ist.**
 
@@ -146,7 +146,7 @@ Das Feld `workspace` ist die Wache: der `project_key` des SDK wird aus dem Pfad 
 
 **Kontinuität ist das Sahnehäubchen; wenn sie ausfällt, darf sie niemanden bei der Arbeit aufhalten.**
 
-### Prozess gekillt, und Maschine neu gestartet
+### Prozess gekillt, und Maschine neu gestartet {#进程被杀和机器重启}
 
 Das Ergebnis ist dasselbe — beides lässt sich fortsetzen — der Ablauf unterscheidet sich:
 
@@ -159,7 +159,7 @@ Das Ergebnis ist dasselbe — beides lässt sich fortsetzen — der Ablauf unter
 
 Es gibt nur eine Voraussetzung: **derselbe `workspace` plus dasselbe `run_dir`**. `run_dir` ist relativ zum aktuellen Arbeitsverzeichnis, ein `flower` aus einem anderen Verzeichnis sucht also ein anderes `runs/` und knüpft nicht an.
 
-### Der Judge ist immer eine neue Session
+### Der Judge ist immer eine neue Session {#判定者永远是新会话}
 
 Das ist **konstruktiv garantiert**, nicht Sache der Disziplin.
 
@@ -171,7 +171,7 @@ Ließe man ihn an der Kontinuität teilnehmen, verkäme der Zielwächter zur Sel
 
 Abschnitt 4 von `tests/lineage_offline.py` nagelt das fest.
 
-### Der Satz beim Aufwecken muss an drei Stellen ankommen
+### Der Satz beim Aufwecken muss an drei Stellen ankommen {#唤醒时说的那句话要落到三个地方}
 
 `flower "顺便支持代码块高亮"` in einem schon benutzten Verzeichnis ist **keine neue Aufgabe, sondern ein weiterer gesagter Satz**.
 Es tut drei Dinge gleichzeitig — fehlt eines davon, fällt es still aus:
@@ -186,19 +186,19 @@ Der dritte Punkt wird am leichtesten übersehen. Der Judge liest nur das eingefr
 
 **Aufwecken, ohne etwas zu sagen** (einfach Enter), hängt nichts an und leitet nichts neu ab — es kostet keinen Cent extra.
 
-### Auch ein Absturz innerhalb des ersten Schritts (Bedarf klären) lässt sich fortsetzen
+### Auch ein Absturz innerhalb des ersten Schritts (Bedarf klären) lässt sich fortsetzen {#崩在第一步确认需求之内也能接上}
 
 `clarify_step` trägt einen `resume_prompt` (Konstante `CLARIFY_RESUME`): startet man nach einem Absturz mitten in der Klärung neu, sagt er dem [Klärer](../reference/glossary.md#确认者) „Setze die eben nicht zu Ende geführte Bedarfsklärung fort — fang nicht von vorn an“, statt das ursprüngliche Anliegen erneut als neue Aufgabe zu schicken. Zusammen mit der obigen Regel „session_id sofort auf Platte“ lässt sich damit auch ein Lauf fortsetzen, der im ersten Schritt gestorben ist, bevor `需求.md` eingefroren war — ohne dass jemand noch einmal antworten muss.
 
 Umgekehrt werden bereits eingefrorene Vorstufen **komplett übersprungen**: sind die vier Abschnitte von `需求.md` vollständig, entfällt Bedarf klären (der Inhalt wird trotzdem in den ctx gespeist); ist `目标.md` vollständig, entfällt Ziele setzen.
 
-### Beim Anknüpfen wird nicht derselbe Satz geschickt
+### Beim Anknüpfen wird nicht derselbe Satz geschickt {#接续时发的不是同一句话}
 
 Dafür ist `Step.resume_prompt` da. Das Gegenüber **hat** das Anforderungsdokument, die Ziele und den letzten Stand bereits im Kontext; „Arbeite nach diesem Bedarf: <ganzes Anforderungsdokument>“ noch einmal wortgleich zu schicken ist reines Rauschen — schlimmer noch, es wird gelesen als „der Bedarf hat sich geändert, schau es dir neu an“.
 
 Ohne `resume_prompt` wird `prompt` weiterverwendet — manche Schritte sollen ohnehin den vollen Text erneut schicken (beim Neuableiten der Prüfliste in Ziele setzen ist genau das vollständige Anforderungsdokument gefragt).
 
-### Beim Aufwecken zuerst eine Zeile melden
+### Beim Aufwecken zuerst eine Zeile melden {#唤醒时先报一行}
 
 ```text
 <- 在 ~/explore/test-ide 接上上次  需求已确认 · 目标 15 条 · 干活上下文 80.2K · 第 3 次唤醒
@@ -210,7 +210,7 @@ Ohne diese Meldung wäre „erinnert es sich nun oder nicht“ völlig unspürba
 
 **Die Kontextzahl steht dort mit Absicht** — der Grund folgt im Abschnitt „Der Preis“.
 
-### Resilienz: bei Netzausfall wartend hängen bleiben, und Fehler landen nicht im Kontext nach dem Anknüpfen
+### Resilienz: bei Netzausfall wartend hängen bleiben, und Fehler landen nicht im Kontext nach dem Anknüpfen {#韧性断网时挂着等而且错误不进接续后的上下文}
 
 [Resilienz](../reference/glossary.md#韧性) und Kontinuität gehören zusammen: läuft etwas stundenlang, bricht das Netz zwangsläufig einmal weg, und das Default-Verhalten ist übel — im Moment des Abbruchs schiebt der Harness eine **synthetische assistant-Nachricht** ins Transcript (`isApiErrorMessage=true`, `model="<synthetic>"`), im Text steht „API Error: Can't reach the API server …“. Diese Nachricht wird zum Blatt der Session, beim späteren resume wird sie als „das hat das Modell zuletzt gesagt“ zurückgefüttert, und das Modell glaubt, es diskutiere gerade eine Netzstörung.
 
@@ -246,7 +246,7 @@ schaltet aber nur die Schicht **[Trim](../reference/glossary.md#裁剪) großer 
 Unterbrechungsreste neutralisieren, Ergebnisse von [Ephemeral-Kommandos](../reference/glossary.md#一次性命令) als veraltet markieren — diese vier laufen weiterhin
 (`ephemeral` per Default `True`, `keep_denials` per Default `1`).
 
-### Der Preis: der Kontext wächst immer weiter, ohne Ende
+### Der Preis: der Kontext wächst immer weiter, ohne Ende {#代价上下文会一直涨而且没有尽头}
 
 Das ist der inhärente Preis der Kontinuität, kein Bug.
 
@@ -262,7 +262,7 @@ Zwei Mechanismen halten das im Zaum:
 
 Nebenbei: `--rounds` (Gesamtzahl der Arbeitsrunden) **wird bei jedem Weckvorgang zurückgesetzt**. Das ist Absicht — ein neuer Weckvorgang ist eine neue Absicht und sollte die verbrauchten Runden des letzten nicht erben.
 
-### Etwas Neues anfangen
+### Etwas Neues anfangen {#重开一件事}
 
 ```bash
 flower --new "另一件事"
@@ -284,7 +284,7 @@ gleichzeitig werden `steps` und `woke` der Lineage auf null gesetzt. Die drei si
 
 Im Code entspricht das `Lineage.archive(into, extra=[...])`.
 
-## Wann man es nicht einsetzen sollte
+## Wann man es nicht einsetzen sollte {#什么时候不该用它}
 
 - **Szenarien, die jedes Mal einen sauberen Startpunkt verlangen.** Denselben Workflow im Batch fahren, Vergleichsevaluationen, jemandem einen Bug reproduzierbar machen — nichts davon sollte den Kontext des letzten Laufs mitschleppen. Schreib `Workflow(..., continuous=False)` oder nimm jedes Mal ein anderes `run_dir`.
 - **Das Verzeichnis wird verschoben oder kopiert, oder `run_dir` ist nicht persistent.** Im Container laufen lassen, während `runs/` im inneren Dateisystem des Containers liegt, oder den Arbeitsbereich per rsync auf eine andere Maschine bringen — die Kontinuität fällt dann **still aus** (die Pfadwache verwirft eine nicht passende Lineage). Verlass dich nicht darauf als Garantie.
@@ -292,7 +292,7 @@ Im Code entspricht das `Lineage.archive(into, extra=[...])`.
 - **Einmaliger Einzel-Agent.** `flower once` läuft nicht über `Workflow`, es gibt keine Lineage; zum Fortsetzen musst du selbst `--resume <session_id>` angeben.
 - **Kontinuität als Backup missverstehen.** Sie merkt sich nur, „welcher Schritt welche Session benutzt hat“. Code, Artefakte und Entscheidungen gehören in den Arbeitsbereich und in die [Workbench](../reference/glossary.md#工作台) und sollten nicht aus dem Transcript zurückgegraben werden müssen.
 
-## Verwandtes
+## Verwandtes {#相关}
 
 - [Handoff](handoff.md) — was passiert, wenn der Kontext innerhalb eines Laufs voll wird; zwei Richtungen derselben Sache wie diese Seite
 - [Zielwächter](goal.md) — warum der Judge nicht an der Kontinuität teilnimmt

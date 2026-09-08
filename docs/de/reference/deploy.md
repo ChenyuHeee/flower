@@ -3,9 +3,9 @@
 Wer flower woandershin verpflanzt, hat drei Dinge zu erledigen: den Container (das uneingeschränkte Bash einzäunen — und nebenbei den Satz „ohne CLI" nachprüfen), das
 [plugin](glossary.md#plugin) (Domänenfähigkeiten reisen mit dem Repository, unabhängig davon, was auf dem Host installiert ist) und die Dokumentationsseite (Push auf `main` veröffentlicht automatisch, `install.sh` hängt unter der Pages-Domain). Die drei Abschnitte sind voneinander unabhängig; lies, was du brauchst.
 
-## Teil 1 — Container
+## Teil 1 — Container {#一容器}
 
-### Warum ein Container
+### Warum ein Container {#为什么要容器}
 
 **Erstens: einzäunen.** Der arbeitende [Worker](glossary.md#执行者) hat **uneingeschränktes Bash** — flowers Bash-Whitelist (`delegate_guard`) gilt nur für den [Main-Thread](glossary.md#主线程); wer rausgeschickt wird, muss Tests laufen lassen können, das ist Absicht.
 Im Container ist nur dein Projektverzeichnis gemountet, der Framework-Quellcode liegt im Image unter `/opt/flower`, vom Host ist sonst nichts sichtbar.
@@ -23,7 +23,7 @@ Praktisch verifiziert (2026-09-06, macOS 15 / arm64 / colima + docker 28.4.0):
 | Dateieigentum | im Container nach `/work` geschriebene Dateien gehören auf dem Host `hechenyu:staff`, Mapping stimmt |
 | Sichtbarkeit des Hosts | im Container `ls /Users` → `No such file or directory` |
 
-### Was im Image installiert ist
+### Was im Image installiert ist {#镜像里装了什么}
 
 Basis-Image `python:3.13-slim`, darauf installiert apt genau drei Pakete. Jedes hat einen Grund:
 
@@ -44,7 +44,7 @@ Der Framework-Quellcode kommt per `COPY` ins Image, **nicht per bind mount** —
 Der Einstiegspunkt ist `ENTRYPOINT ["flower"]`, `CMD` ist leer — läuft der Container ohne Argumente, landet man in der interaktiven Eingabe
 (er fragt, was du willst), statt `--help` zu drucken. So muss man ein deutschsprachiges Anliegen nicht in der Shell in Anführungszeichen setzen.
 
-### Warum sich das `.venv` des Hosts nicht hineinmounten lässt
+### Warum sich das `.venv` des Hosts nicht hineinmounten lässt {#为什么不能把宿主的-venv-挂进去}
 
 Das SDK liefert Wheels pro Plattform aus, das mitgelieferte Binary ist plattformspezifisch:
 
@@ -57,7 +57,7 @@ Das SDK liefert Wheels pro Plattform aus, das mitgelieferte Binary ist plattform
 Hineingemountet läuft es nicht, das Image muss also selbst `pip install` machen. Umgekehrt ist genau das der Beleg für Portabilität: dieselbe
 `pyproject.toml`, bei Plattformwechsel ein anderes natives Binary, und keine Zeile Framework-Code muss sich ändern.
 
-### Die zwei Skripte
+### Die zwei Skripte {#两个脚本}
 
 | Skript | Was es tut |
 |---|---|
@@ -85,7 +85,7 @@ Die letzten drei wirken nur bei `FLOWER_MIRRORS=1` — der Zweig `FLOWER_MIRRORS
 
 `FLOWER_HOME` wird aus der Position des Skripts abgeleitet, kein fest verdrahteter Pfad — egal wohin das Repository geklont wird, es funktioniert.
 
-### Ausführen
+### Ausführen {#跑起来}
 
 ```bash
 docker/build                       # einmal reicht
@@ -118,7 +118,7 @@ docker run -i $TTY --rm \
     "$IMAGE" "$@"
 ```
 
-### Mount-Grenzen und Persistenz
+### Mount-Grenzen und Persistenz {#挂载边界与持久化}
 
 ```text
 Host $PWD  ──mount──>  /work       ← hier arbeitet der Agent, die Ergebnisse bleiben auf dem Host
@@ -144,7 +144,7 @@ der Framework-Quellcode liegt außerhalb des Mounts.
     und startet einen Container, der mit `test -f /work/<Probe>` real nachmisst (mit zusätzlich konfigurierten Mounts kommt man also auch durch). Klappt das nicht, wird mit 1 beendet
     und dir `colima start --mount '<Pfad>:w'` genannt. Die Probe braucht einen Container, also muss vorher `docker/build` gelaufen sein.
 
-### Credentials
+### Credentials {#凭证}
 
 Über `docker run --env-file`, **nicht in die Image-Layer**. `flowerbox` liest `$FLOWER_HOME/.env`,
 standardmäßig also die `.env` in der Repo-Wurzel:
@@ -171,7 +171,7 @@ Schlüsselnamen, Priorität und wie das Gateway einzutragen ist: siehe [Konfigur
     den vollen `--timeout` (Standard 1800 Sekunden) abwartet. Für unbeaufsichtigte Läufe explizit `--timeout 0`. Erkennt das Skript, dass kein TTY da ist,
     gibt es vorher eine Hinweiszeile aus.
 
-### git submodule
+### git submodule {#git-submodule}
 
 In `.gitmodules` steht nur ein Eintrag:
 
@@ -187,7 +187,7 @@ Ein normales `git clone` holt es nicht, `human-test/HT001` ist dann ein leeres V
 | flower laufen lassen, Image bauen | **Nein.** `.dockerignore` schließt `human-test/` aus, und das `Dockerfile` `COPY`t ohnehin nur `pyproject.toml` / `flower` / `examples` |
 | Den von HT001 produzierten Code lokal durchsehen | Ja: `git submodule update --init human-test/HT001`, oder von Anfang an `git clone --recurse-submodules` |
 
-### Netz in China: warum dieser ganze Mirror-Ersatz
+### Netz in China: warum dieser ganze Mirror-Ersatz {#国内网络为什么有那一堆镜像替换}
 
 Wenn man das Ganze hinter der Great Firewall installiert, ist nicht die Bandbreite langsam, sondern die internationale Strecke. Das voreingestellte `docker/build` hat alles Nötige bereits ersetzt,
 `FLOWER_MIRRORS=0` schaltet alles mit einem Griff ab. Unten stehen die Messdaten und die Begründung für die vier Ersetzungen — wer das Netzproblem nicht hat, braucht das nicht zu lesen.
@@ -279,7 +279,7 @@ Wenn man das Ganze hinter der Great Firewall installiert, ist nicht die Bandbrei
 
 ## Teil 2 — plugin {#plugin}
 
-### Was es ist
+### Was es ist {#它是什么}
 
 Ein **Domänen-Fähigkeitspaket**, das mit dem Repository mitreist. Der Framework-Code enthält kein Domänenwissen, das gesamte Domänenwissen liegt im Verzeichnis `plugin/`
 in der Repo-Wurzel und wird mit dem Code geklont, mit dem Code reviewt, mit dem Code getaggt.
@@ -298,7 +298,7 @@ if use_plugin and PLUGIN_DIR.is_dir():
 Zusammen mit `setting_sources=[]` (dazu weiter unten separat) ist das der Grund, warum flower gleichzeitig „[portabel](glossary.md#可移植)"
 sein und „deine Domäne verstehen" kann: es fragt nicht, was auf dem Host installiert ist, es kennt nur dieses eine Verzeichnis, das mit dem Repository kommt.
 
-### Verzeichnislayout
+### Verzeichnislayout {#目录布局}
 
 | Pfad | Inhalt | Wann es greift | Wer entscheidet |
 |---|---|---|---|
@@ -321,7 +321,7 @@ schreib ein Skill. Etwas Zwingendes als Skill zu schreiben heißt, die Disziplin
 Zurzeit enthält `plugin/` im Repository nur zwei Dinge: `.claude-plugin/plugin.json` und `skills/example/SKILL.md`.
 `agents/`, `hooks/` und `.mcp.json` **existieren alle noch nicht** — wer sie braucht, legt sie selbst an, mit den Verzeichnisnamen exakt aus der Tabelle oben.
 
-### Ein Skill schreiben: vollständiges Beispiel
+### Ein Skill schreiben: vollständiges Beispiel {#写一个-skill完整例子}
 
 Am Beispiel „Release Notes erzeugen", von null bis zur Bestätigung, dass es greift.
 
@@ -408,7 +408,7 @@ als Namen den `name` aus `SKILL.md` verwenden, das SDK akzeptiert auch die quali
     zur Selbstprüfung laufen lassen: erscheint `False`, hat diese Installation kein Domänen-Fähigkeitspaket. Wer eines braucht,
     muss derzeit aus einem Quellcode-Checkout laufen.
 
-### Warum `setting_sources=[]` Domänenfähigkeiten ins plugin zwingt
+### Warum `setting_sources=[]` Domänenfähigkeiten ins plugin zwingt {#setting_sources-为什么逼着领域能力走-plugin}
 
 In derselben Funktion steht noch diese Zeile:
 
@@ -441,7 +441,7 @@ Nebenbei: `instructions` läuft über [Append](glossary.md#叠加) (das `append`
 und ist ein anderer Kanal als das plugin — Ersteres steht in jeder Runde im Kontext, Letzteres wird bei Bedarf geladen. Kurze und zwingende Disziplin gehört in `instructions`,
 langes und nur gelegentlich nützliches Wissen in ein Skill.
 
-## Teil 3 — Dokumentationsseite
+## Teil 3 — Dokumentationsseite {#三文档站}
 
 Die Seite, die du gerade liest, ist mit mkdocs-material gebaut, die Quelldateien liegen im Repository unter `docs/`, ein Push auf `main` veröffentlicht automatisch.
 
@@ -469,7 +469,7 @@ Die CI wird ausgelöst durch einen Push auf `main` **und** wenn die Änderungen 
 docs/**  mkdocs.yml  hooks/**  docs-requirements.txt  install.sh  .github/workflows/docs.yml
 ```
 
-### Warum `install.sh` von Pages ausgeliefert wird
+### Warum `install.sh` von Pages ausgeliefert wird {#installsh-为什么从-pages-发}
 
 Am Ende des Build-Schritts steht diese Zeile:
 

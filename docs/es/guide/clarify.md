@@ -5,7 +5,7 @@ pregunta hasta que todo queda claro y al final emite un [brief](../reference/glo
 congelado en disco. Cada [paso](../reference/glossary.md#步骤) posterior arranca leyendo ese documento y ya no vuelve a adivinar el requisito —
 y ese interrogatorio **nunca entró** en el contexto de los pasos siguientes.
 
-## Qué problema resuelve
+## Qué problema resuelve {#解决什么问题}
 
 Todo lo que los mecanismos de limpieza de contexto de flower eliminan es **material en curso**: caducidad por tiempo, poda de llamadas rechazadas, poda de mensajes de error,
 [spill](../reference/glossary.md#落盘) de resultados grandes. Perder material en curso no importa: se vuelve a ejecutar y aparece otra vez.
@@ -22,9 +22,9 @@ y el paso que hace el trabajo, **$171.2476 / 31 turnos / 10.44h**.
 
 Por eso hace falta un canal capaz de «parar y preguntar», y tiene que estar **antes** de empezar a trabajar.
 
-## Cómo se usa (código mínimo)
+## Cómo se usa (código mínimo) {#怎么用最小代码}
 
-### Cero código: línea de comandos
+### Cero código: línea de comandos {#零代码命令行}
 
 Entra en el directorio del proyecto y ejecuta directamente:
 
@@ -63,7 +63,7 @@ La implementación de este camino está en
     y a partir de ahí cada pregunta se queda esperando el `--timeout` completo. En ese escenario pon directamente `--timeout 0` —
     todas las preguntas caen en vacío al instante, el agente decide solo y escribe los supuestos en «未知与假设».
 
-### Cableado manual
+### Cableado manual {#自己接线}
 
 ```python
 from pathlib import Path
@@ -114,9 +114,9 @@ Cuando no acaba de ir fino, empieza por estas perillas:
 | Se atasca sin nadie de guardia | `timeout_s=0` |
 | Quieres reconfirmar siempre | `always_ask=True`, o borra el archivo del brief |
 
-## Qué hace en realidad
+## Qué hace en realidad {#它实际做了什么}
 
-### Cuándo se dispara: tres puntos de cableado, ni un campo nuevo
+### Cuándo se dispara: tres puntos de cableado, ni un campo nuevo {#触发时机三处接线一个新字段都没加}
 
 Lo que construye `clarify_step()` es un `Step` normal y corriente; solo rellena tres callbacks:
 
@@ -137,7 +137,7 @@ En la [continuidad](../reference/glossary.md#接续), este paso abre con otra fr
 «continúa la confirmación de requisitos que quedó a medias, **no empieces de nuevo**…». Sin esa frase,
 la continuidad reenvía la petición original como si fuera una tarea nueva y el clarificador puede repetir preguntas ya hechas.
 
-### Límite: el interrogatorio no entra en el contexto de los pasos siguientes
+### Límite: el interrogatorio no entra en el contexto de los pasos siguientes {#边界问答不进下游的上下文}
 
 ```text
 确认需求        独立会话  ────→  磁盘上一份冻结的四段确认书
@@ -153,7 +153,7 @@ y todavía puede volver con un resume; lo que nunca entró no tiene ese problema
 El interrogatorio en sí se **añade a `log_path`**. Esa copia no ocupa contexto, no la afecta el compact y sigue ahí si cambias de máquina —
 la misma idea que el workbench.
 
-### Cada sección bloquea un tipo de fallo
+### Cada sección bloquea un tipo de fallo {#四段各挡一类失败}
 
 | Sección | Qué se escribe | Qué pasa si no se escribe |
 |---|---|---|
@@ -176,7 +176,7 @@ El parser es muy tolerante con el formato: reconoce `## 目标` / `**目标**` /
 - `Brief.load()` trata `"(未填)"` como vacío. Si al editar el brief a mano copias el texto de relleno de `to_markdown()`,
   esa sección sigue contando como ausente.
 
-### Límite: qué puede tocar el clarificador
+### Límite: qué puede tocar el clarificador {#边界确认者能碰什么}
 
 Se probó un clarificador **sin restricciones** (`/tmp/probe_ask.py`, **$0.8908 / 230 segundos**):
 tras dos preguntas **se puso directamente a escribir código**; cuando los permisos lo pararon, **pegó el código entero en el cuerpo de la respuesta**.
@@ -210,7 +210,7 @@ el modelo puede invocar igualmente herramientas que no estén en ella. Dos evide
 **Dos: el framework solo parsea esas cuatro secciones y descarta todo lo demás.** `Brief.parse()` primero arranca los bloques con fences y luego busca los títulos —
 aunque lo pegue, no llega a los pasos siguientes. Es la última compuerta contra «que contamine lo de abajo».
 
-### Límite: el canal de preguntas
+### Límite: el canal de preguntas {#边界提问通道}
 
 La herramienta de preguntar del lado del modelo se llama `mcp__human__ask` (parámetro `question`, `options` opcional).
 `HumanChannel` es un servidor MCP dentro del proceso y **registra dos herramientas** —
@@ -262,7 +262,7 @@ Por eso `answer()` / `decline()` se pueden llamar directamente desde un backend 
     «sin límite», y la persona no ve quién lo estranguló. Para dejar las preguntas abiertas, `HumanChannel.max_asks`
     y `clarify(max_turns=...)` **tienen que quedarse los dos en `None`**.
 
-### Dónde cae el brief: tiene que ser el workbench que enganchaste
+### Dónde cae el brief: tiene que ser el workbench que enganchaste {#确认书落在哪必须是挂上去的那个工作台}
 
 El índice del workbench se inyecta en el system prompt, así que el coordinador sabe desde el principio dónde está el archivo de requisitos; al repartir trabajo basta con pasar la ruta,
 sin copiar el contenido dentro del [task brief](../reference/glossary.md#任务书).
@@ -299,7 +299,7 @@ Si escribes tu propio arranque (sin pasar por `cli.py`), crea primero el `Workbe
 `Workflow(workbench=wb)` y a `Runtime(workbench=wb)`. El ítem 5 de `tests/trial_offline.py`
 afirma directamente que «el brief aparece dentro de `prompt_block()`», y el ítem 11 confirma que esa aserción detecta la regresión.
 
-### Estado de verificación
+### Estado de verificación {#验证状态}
 
 **Todo en verde offline** (`tests/clarify.py`, **52 ítems**, sin coste): las cinco semánticas del canal de preguntas (esperar bloqueando la respuesta /
 cuota agotada / caer por timeout / saltar / responder desde otro hilo), el parseo de las cuatro secciones (incluida una muestra con «me pegó código dentro»),
@@ -311,7 +311,7 @@ el brief se vuelca en `ctx` → salida limpia.
 **No se ha probado contra la API real.** La sonda de $0.8908 sí fue una **petición real**, pero medía «qué hace un clarificador sin restricciones»,
 no este camino tal como está ahora.
 
-## Cuándo no usarlo
+## Cuándo no usarlo {#什么时候不该用它}
 
 **El requisito ya es un artefacto congelado.** Si el requisito está en un archivo, viene dado por un sistema aguas arriba, o esta vez se trata de repetir lo mismo —
 no hay nada que preguntar. Pasa el texto del requisito directamente al paso que trabaja, o deja el `clarify_step` y que su `when` lo salte

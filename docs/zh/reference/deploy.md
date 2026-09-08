@@ -4,9 +4,9 @@
 [plugin](glossary.md#plugin)(领域能力随仓库走,不看宿主机装了什么)、文档站(推到 `main`
 就自动发,`install.sh` 挂在 Pages 域名上)。三节互相独立,按需要读。
 
-## 一、容器
+## 一、容器 {#一容器}
 
-### 为什么要容器
+### 为什么要容器 {#为什么要容器}
 
 **一是围起来。** 干活的[执行者](glossary.md#执行者)有**不受限的 Bash** —— flower 的 Bash
 白名单(`delegate_guard`)只管[主线程](glossary.md#主线程),派出去的人要能跑测试,所以是有意的。
@@ -26,7 +26,7 @@
 | 文件归属 | 容器内写 `/work` 的文件在宿主是 `hechenyu:staff`,映射正确 |
 | 宿主可见性 | 容器里 `ls /Users` → `No such file or directory` |
 
-### 镜像里装了什么
+### 镜像里装了什么 {#镜像里装了什么}
 
 基础镜像 `python:3.13-slim`,上面 apt 只装三个包。每一样都有理由:
 
@@ -47,7 +47,7 @@
 入口是 `ENTRYPOINT ["flower"]`,`CMD` 是空的 —— 不带参数跑容器时进交互输入
 (它问你要做什么),而不是打印 `--help`。这样就不必在 shell 里给一句中文诉求打引号。
 
-### 为什么不能把宿主的 `.venv` 挂进去
+### 为什么不能把宿主的 `.venv` 挂进去 {#为什么不能把宿主的-venv-挂进去}
 
 SDK 按平台发 wheel,自带的二进制是平台专属的:
 
@@ -60,7 +60,7 @@ SDK 按平台发 wheel,自带的二进制是平台专属的:
 挂进去跑不了,所以镜像必须自己 `pip install`。反过来说这也是可移植性的证据:同一个
 `pyproject.toml`,换平台就换一份原生二进制,框架代码一行不用改。
 
-### 两个脚本
+### 两个脚本 {#两个脚本}
 
 | 脚本 | 做什么 |
 |---|---|
@@ -121,7 +121,7 @@ docker run -i $TTY --rm \
     "$IMAGE" "$@"
 ```
 
-### 挂载边界与持久化
+### 挂载边界与持久化 {#挂载边界与持久化}
 
 ```text
 宿主 $PWD  ──挂载──>  /work       ← agent 在这里干活,产出留在宿主
@@ -174,7 +174,7 @@ FLOWER_HOME=~/.config/flower /path/to/flower/docker/flowerbox
     `--timeout`(默认 1800 秒)。无人值守要显式 `--timeout 0`。脚本检测到没有 TTY 时会
     先打一行提醒。
 
-### git submodule
+### git submodule {#git-submodule}
 
 `.gitmodules` 里只有一条:
 
@@ -190,7 +190,7 @@ FLOWER_HOME=~/.config/flower /path/to/flower/docker/flowerbox
 | 跑 flower、建镜像 | **不要**。`.dockerignore` 排掉了 `human-test/`,而 `Dockerfile` 本来也只 `COPY` `pyproject.toml` / `flower` / `examples` |
 | 在本地翻 HT001 的产出代码 | 要:`git submodule update --init human-test/HT001`,或者一开始就 `git clone --recurse-submodules` |
 
-### 国内网络:为什么有那一堆镜像替换
+### 国内网络:为什么有那一堆镜像替换 {#国内网络为什么有那一堆镜像替换}
 
 这套东西在墙内装的时候,慢的不是带宽而是国际线路。默认的 `docker/build` 已经把该换的都换了,
 `FLOWER_MIRRORS=0` 一键全关。下面是实测数据和四处替换的原委 —— 网络没这个问题就不用读。
@@ -301,7 +301,7 @@ if use_plugin and PLUGIN_DIR.is_dir():
 配合 `setting_sources=[]`(下面单独讲),这就是 flower 能同时做到"[可移植](glossary.md#可移植)"
 和"懂你的领域"的原因:它不问宿主机装了什么,只认仓库里带来的这一个目录。
 
-### 目录布局
+### 目录布局 {#目录布局}
 
 | 路径 | 放什么 | 什么时候生效 | 谁决定 |
 |---|---|---|---|
@@ -324,7 +324,7 @@ if use_plugin and PLUGIN_DIR.is_dir():
 现在仓库里 `plugin/` 只有两样东西:`.claude-plugin/plugin.json` 和 `skills/example/SKILL.md`。
 `agents/`、`hooks/`、`.mcp.json` **都还不存在** —— 要用就自己建,目录名照上表写死。
 
-### 写一个 skill:完整例子
+### 写一个 skill:完整例子 {#写一个-skill完整例子}
 
 以"生成发版说明"为例,从零到确认生效。
 
@@ -411,7 +411,7 @@ python3 -c "from flower.core.agent import PLUGIN_DIR; print(PLUGIN_DIR, PLUGIN_D
     `PLUGIN_DIR` 命令自查:打出 `False` 就说明这次装的没有领域能力包。要用领域能力包,
     现在只能从源码 checkout 跑。
 
-### `setting_sources=[]` 为什么逼着领域能力走 plugin
+### `setting_sources=[]` 为什么逼着领域能力走 plugin {#setting_sources-为什么逼着领域能力走-plugin}
 
 同一个函数里还有这一行:
 
@@ -444,7 +444,7 @@ SDK 的默认是 `None` = 三个来源全读:`~/.claude/settings.json`(用户)�
 和 plugin 是两条不同的通道 —— 前者每轮都在上下文里,后者按需加载。短而必须的纪律写 `instructions`,
 长而偶尔用得上的知识写 skill。
 
-## 三、文档站
+## 三、文档站 {#三文档站}
 
 你正在读的这个站是 mkdocs-material 建的,源文件就在仓库的 `docs/` 下,推到 `main` 就自动发。
 
@@ -472,7 +472,7 @@ CI 的触发条件是 push 到 `main` **且**改动命中这几个路径,另外�
 docs/**  mkdocs.yml  hooks/**  docs-requirements.txt  install.sh  .github/workflows/docs.yml
 ```
 
-### `install.sh` 为什么从 Pages 发
+### `install.sh` 为什么从 Pages 发 {#installsh-为什么从-pages-发}
 
 构建那步末尾有一行:
 

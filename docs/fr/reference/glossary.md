@@ -6,7 +6,7 @@ Chaque entrée donne trois choses : **ce que le terme désigne**, **ce qu'il est
 
 ---
 
-## Framework et exécution
+## Framework et exécution {#框架与运行}
 
 ### Long-horizon {#长程}
 
@@ -47,7 +47,7 @@ Un ensemble de [steps](#步骤) enchaînés dans l'ordre, plus la façon dont l'
 
 ---
 
-## Rôles
+## Rôles {#角色}
 
 Les rôles sont la répartition du travail que flower impose aux agents. Chaque rôle = un texte de règles injecté + un jeu d'outils + un jeu de hooks. Les cinq rôles sont des fonctions fabriques, voir [API Python](api.md#角色工厂).
 
@@ -106,7 +106,7 @@ C'est la première couche d'économie de contexte de flower, et de loin la plus 
 
 ---
 
-## Les quatre mécanismes
+## Les quatre mécanismes {#四个机制}
 
 ### Clarification préalable {#前置确认}
 
@@ -178,7 +178,7 @@ flower **ne l'utilise pas**, et lui substitue le [handoff](#换代). La différe
 
 ---
 
-## Gestion du contexte
+## Gestion du contexte {#上下文管理}
 
 ### Thread principal {#主线程}
 
@@ -249,7 +249,7 @@ Tient les **messages d'erreur** hors du contexte. La pile d'erreurs produite pen
 
 ---
 
-## Runtime
+## Runtime {#运行时}
 
 ### Isolation {#隔离}
 
@@ -314,7 +314,7 @@ Le plafond de dépense d'un run ; au-delà, on s'arrête. Sans lui, un run long-
 
 ---
 
-## Portabilité
+## Portabilité {#可移植性}
 
 ### Portable {#可移植}
 

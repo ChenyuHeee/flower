@@ -7,7 +7,7 @@ data structure, [`Event`](../reference/glossary.md#事件).
 That is the boundary that lets you swap the UI without touching the core: terminal, web, HTTP
 service, fully unattended — what changes is the consumer of `Event`, and nothing else.
 
-## What problem it solves
+## What problem it solves {#解决什么问题}
 
 The SDK's message stream is made of **internal types**: `AssistantMessage`, `ToolUseBlock`,
 `ToolResultBlock`, `ResultMessage`, `SystemMessage`… Consuming them directly in a UI has two
@@ -37,7 +37,7 @@ This boundary also handles four less obvious things along the way, all inside `n
    `cache_read_input_tokens` + `cache_creation_input_tokens`). It is the only source for the
    [handoff](../reference/glossary.md#换代) decision.
 
-## How to use it (minimal code)
+## How to use it (minimal code) {#怎么用最小代码}
 
 An interaction layer has to hook up three things: an **event sink** (where to render), a
 **question channel** (who answers), and **interrupts** (how to call a halt). The snippet below
@@ -103,7 +103,7 @@ has a value the run stopped part way (`on_fail="stop"`) — don't treat that as 
     error raised. Either hand the workflow's workbench to `Runtime` (as above),
     or ask where it is with the read-only probe `wake_state()`.
 
-### Three event sinks
+### Three event sinks {#三个事件出口}
 
 ```python
 await rt.run(spec, "…", on_event=sink)                  # 1. a single agent
@@ -124,7 +124,7 @@ ch = HumanChannel(on_event=my_own_sink)     # wired by you, Workflow leaves it a
 alerting here; don't try to assemble them out of the `Event` stream — prose gets chopped into
 several pieces by handoffs and retries.
 
-### Terminal: the default one
+### Terminal: the default one {#终端默认的那个}
 
 There is one even if you write no code. `flower "帮我做一个 X"` goes through
 [`flower/cli.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/cli.py),
@@ -183,7 +183,7 @@ All three points were learned the hard way:
   pending, anything typed during those hours of work sits in the terminal buffer and gets eaten as
   the answer to the next question — the question is "answered" before the human has even seen it.
 
-### Web: queue + WebSocket
+### Web: queue + WebSocket {#web队列--websocket}
 
 ```python
 events: asyncio.Queue[dict] = asyncio.Queue()
@@ -211,7 +211,7 @@ def answer(ask_id: str, text: str) -> dict:
 don't send it to the frontend** — touching `raw` binds the frontend back to SDK types and this
 whole layer was for nothing. The four fields `kind` / `text` / `tool` / `payload` are enough.
 
-### HTTP: sequence numbers + polling
+### HTTP: sequence numbers + polling {#http序号--轮询}
 
 Without a long-lived connection, number the events and let the client pull:
 
@@ -250,7 +250,7 @@ that length. And **you must give `timeout_s` a finite value** — with nobody po
 will never end on its own, and `timeout_s=None` leaves the entire run hanging forever. The default
 of `1800.0` seconds is a good one.
 
-### Fully unattended: nobody there
+### Fully unattended: nobody there {#全自动无人值守没有人}
 
 ```python
 wf = starter_flow("帮我做一个 X", workspace=".", run_dir="runs", timeout_s=0)
@@ -285,9 +285,9 @@ block a question are the quota and the timeout.
     Unattended has only two correct values: `0` (fall through immediately)
     or a finite number of seconds.
 
-## What it actually does
+## What it actually does {#它实际做了什么}
 
-### The shape of `Event`
+### The shape of `Event` {#event-的形状}
 
 ```python
 @dataclass
@@ -302,7 +302,7 @@ class Event:
 `str(ev)`: for `tool_call` it is `[tool name] summary`, otherwise `text`; when `text` is empty it
 is `<kind>`.
 
-### The 15 `EventKind`s
+### The 15 `EventKind`s {#15-个-eventkind}
 
 | `kind` | Emitted by | When it appears | `text` | `payload` |
 |---|---|---|---|---|
@@ -330,7 +330,7 @@ human" or "a step boundary".**
 Leave an `else` branch when writing a UI. `EventKind` will gain new members, and an older UI
 should not crash because of it.
 
-### The three `handoff` phases
+### The three `handoff` phases {#handoff-的三个-phase}
 
 | `phase` | When it fires | Extra `payload` |
 |---|---|---|
@@ -340,7 +340,7 @@ should not crash because of it.
 
 For the mechanism itself see [handoff](handoff.md).
 
-### The two identities of `ask`
+### The two identities of `ask` {#ask-的两种身份}
 
 `Event("ask")` carries both "a question" and "something the human said", so the **UI must check
 `payload["kind"]` first**:
@@ -354,7 +354,7 @@ A single question emits **at least two** events: one when asked (`state="asked"`
 reaches an outcome (`answered` / `timeout` / `declined` / `over_budget` / `invalid`). The UI can
 just update the same entry keyed by `payload["id"]`.
 
-### Asking a human: `Ask` and `HumanChannel`
+### Asking a human: `Ask` and `HumanChannel` {#问人ask-与-humanchannel}
 
 ```python
 @dataclass
@@ -446,7 +446,7 @@ when unattended or not a single question asked:
 | `timeout_s<=0` | Don't wait, the question falls through immediately |
 | `remaining` returns `-1` | The value when `max_asks=None`, not 0 |
 
-### Interrupts: any thread can call a halt
+### Interrupts: any thread can call a halt {#打断任何线程都能喊停}
 
 `rt.interrupt("别改 Makefile,那两行直接改")`; an empty string means interrupt without saying
 anything. Three properties:
@@ -469,7 +469,7 @@ same.
 If you don't want to interrupt but just want to add a requirement, use the inbox (`ch.send(...)`)
 — it interrupts nothing, and the delay is until the agent's next checkpoint.
 
-### The oracle: asking a question without disturbing the run
+### The oracle: asking a question without disturbing the run {#旁路顾问问一句而不打扰运行}
 
 To find out "where are we now", you don't need to interrupt, and you shouldn't ask the
 coordinator: that exchange would **permanently occupy main thread context** (which holds
@@ -487,7 +487,7 @@ manifest records "which steps this run performed", and a passing question is not
 Measured: two questions for $0.5190 in total, and the main run's manifest did not grow by a single
 byte.
 
-### Two hard rules
+### Two hard rules {#两条硬规矩}
 
 !!! warning "on_event must neither block nor let exceptions escape"
     **One: `on_event` is a synchronous function, called on the event loop's thread.** So
@@ -503,9 +503,9 @@ byte.
     Exception: the `ask` events emitted by `HumanChannel` itself are already wrapped; exceptions
     are collected into `channel.ui_errors` and do not interrupt the run.
 
-## When not to use it
+## When not to use it {#什么时候不该用它}
 
-### What not to do in the interaction layer
+### What not to do in the interaction layer {#交互层里不该做的事}
 
 | Don't | Why | Do instead |
 |---|---|---|
@@ -519,7 +519,7 @@ byte.
 | Assemble progress and results out of the `Event` stream | Prose gets chopped into several pieces by handoffs and retries | `on_step(step, result)` gives you the full `StepResult` |
 | `timeout_s=None` when unattended | With nobody to answer, the run hangs forever, with no error and no timeout | `0`, or a finite number of seconds |
 
-### When you don't need to swap it at all
+### When you don't need to swap it at all {#什么时候根本不用换}
 
 - **You just want different colours, or one more/one fewer printed line** — change the render
   function. The interrupts, oracle, inbox receipts, SIGHUP / SIGTERM rescue and waiting for the

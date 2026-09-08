@@ -7,7 +7,7 @@ ne contient pas, décide jusqu'où ce run peut aller. La forme de flower — un
 écrites sur disque, les hooks qui élaguent à la source — découle entièrement de cette seule contrainte.
 Cette page explique pourquoi.
 
-## Quel problème ça résout
+## Quel problème ça résout {#解决什么问题}
 
 La [compaction](../reference/glossary.md#压缩) attend que le contexte soit plein pour résumer après
 coup : elle traite le symptôme. Le vrai problème est ailleurs :
@@ -35,7 +35,7 @@ Les deux premières couches décident **ce qui entre**, les deux dernières **ce
 entré**. L'ordre n'est pas interchangeable : même très agressive, la couche IV ne rattrape jamais
 le volume que la couche I a laissé passer.
 
-## Comment l'utiliser (code minimal)
+## Comment l'utiliser (code minimal) {#怎么用最小代码}
 
 ```python
 from flower import Runtime, coordinator, worker
@@ -62,9 +62,9 @@ aucun paramètre du constructeur ne permet de le remplacer.
     Conclusion : **avec `Runtime(workbench=False)` et `coordinator()`, Bash / Write / Edit du thread
     principal n'ont plus le moindre garde-fou.**
 
-## Ce que ça fait réellement
+## Ce que ça fait réellement {#它实际做了什么}
 
-### Couche I : division du travail (la plus grosse économie)
+### Couche I : division du travail (la plus grosse économie) {#第一层分工省得最多}
 
 Le coordinateur joue « quelqu'un qui sait se servir de Claude Code » : découper, déléguer, lire les
 rapports, décider. Il n'a pas accès à Bash / Write / Edit — ses outils se limitent à `Agent`,
@@ -106,7 +106,7 @@ nécessaire est « où est le workbench + les longues sorties vont dans `artifac
 chemins et conclusions » — parce que l'index du workbench n'atteint pas les subagents, le brief de
 tâche est le seul canal.
 
-### Couche II : le workbench (contre la réécriture permanente)
+### Couche II : le workbench (contre la réécriture permanente) {#第二层工作台治每次重写}
 
 Trois répertoires sous `.flower/`, qui suivent l'espace de travail :
 
@@ -135,7 +135,7 @@ Si cette couche fonctionne, c'est grâce à une différence : la compaction peut
     l'obligation, pour le coordinateur, de retranscrire « où est le workbench + longues sorties dans
     `artifacts/` » dans le brief de tâche — c'est le seul canal, ce n'est pas de la redondance.
 
-### Couche III : spill immédiat
+### Couche III : spill immédiat {#第三层当场落盘}
 
 `spill_guard` est un hook `PostToolUse` qui inspecte le résultat d'un outil **avant qu'il n'atteigne
 le modèle** : au-delà de `threshold` (**4000** caractères par défaut), le résultat est
@@ -165,7 +165,7 @@ Runtime(workspace="repo", workbench=True, spill_threshold=4000)   # None ou 0 = 
 **Combien ça économise** : sur le run [HT001](../cases/ht001.md), 103 spills, 791.4K caractères
 remplacés par des pointeurs de chemin, zéro résidence en contexte.
 
-### Couche IV : trim et prune
+### Couche IV : trim et prune {#第四层裁剪与剪除}
 
 Cette couche vit dans le [session store](../reference/glossary.md#会话存储). Le store du `Runtime` est
 toujours un `PruningSessionStore` (chaîne d'héritage `SqliteSessionStore` ← `TrimmingSessionStore` ←
@@ -227,7 +227,7 @@ assistant ne doivent pas être touchés, et la chaîne des `parentUuid` doit êt
 le trim des gros résultats ; péremption, appels refusés et résidus de déconnexion sont traités comme
 d'habitude.
 
-### Contre-exemple : les coups d'œil, on les fait soi-même
+### Contre-exemple : les coups d'œil, on les fait soi-même {#反例看一眼的活自己干}
 
 Les trois premières couches disent toutes « délègue », mais il y a un contre-exemple : des commandes
 comme `git status`, `ls`, `cat` produisent quelques dizaines de caractères, alors que **le seul
@@ -258,7 +258,7 @@ Aujourd'hui, chaque segment est découpé et vérifié séparément : la command
 tous les segments sont sur la liste blanche ; `git status && rm -rf x` reste bloqué (le second segment
 n'est pas dans la table).
 
-### Append, pas remplacement
+### Append, pas remplacement {#叠加不替换}
 
 ```python
 system_prompt = {"type": "preset", "preset": "claude_code", "append": spec.instructions}
@@ -291,7 +291,7 @@ du system prompt, il n'occupe pas l'historique de conversation et la compaction 
     une sonde à $0.1, un agent avec `allowed_tools=["Read"]` appelait sans problème Write / Bash.
     Ce qui bloque réellement, c'est le hook.
 
-## Quand ne pas l'utiliser
+## Quand ne pas l'utiliser {#什么时候不该用它}
 
 Ces quatre couches économisent toutes du **matériau de terrain**. Les problèmes suivants ne sont pas
 résolus par elles, et certains deviennent même plus difficiles à voir à cause d'elles :

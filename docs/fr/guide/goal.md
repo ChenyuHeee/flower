@@ -7,7 +7,7 @@ il **juge une fois, indépendamment**, et produit un [verdict](../reference/glos
 atteint, on continue ; pas atteint, on renvoie le travail avec « ce qui manque » ;
 jugé impossible, on s'arrête et on demande à l'humain.
 
-## Quel problème cela résout
+## Quel problème cela résout {#解决什么问题}
 
 La [clarification préalable](clarify.md) bloque **« ce n'est pas la chose voulue qui est faite »**. Cette couche-ci
 bloque une autre catégorie : **« ce n'est en fait pas fini, mais il dit lui-même que c'est fini »**. Les deux doivent
@@ -27,9 +27,9 @@ Le jugement est donc confié à un rôle qui **n'a pas participé au travail et 
 l'exécutant a essayé et à quel point ça a été dur — il ne lui trouvera donc pas d'excuses.
 C'est exactement la même raison qui fait tourner le clarificateur dans une session indépendante.
 
-## Comment s'en servir (code minimal)
+## Comment s'en servir (code minimal) {#怎么用最小代码}
 
-### Zéro code : ligne de commande
+### Zéro code : ligne de commande {#零代码命令行}
 
 ```bash
 flower                      # le gardien d'objectif est actif par défaut
@@ -38,7 +38,7 @@ flower --rounds 5           # cinq rounds de travail au maximum (défaut : 3)
 flower --judge-can-run      # laisse le juge exécuter des commandes (jugement plus dur)
 ```
 
-### Câblage manuel
+### Câblage manuel {#自己接线}
 
 Deux fonctions, chacune sa moitié, à ne pas mélanger : `goal_step()` **fixe l'objectif** (une étape à part entière),
 `with_goal()` est la **boucle de jugement** (elle emballe une étape de travail).
@@ -106,9 +106,9 @@ Quand ça ne tourne pas rond, commencez par ces boutons :
 | Trop cher | `--rounds 1`, ou `--no-goal` pour tout désactiver |
 | Ne pas être interrompu | `--timeout 0` : en cas d'impossibilité, on ne demande pas, on s'arrête directement (la raison reste sur le disque) |
 
-## Ce qu'il fait réellement
+## Ce qu'il fait réellement {#它实际做了什么}
 
-### À quoi ressemble un objectif
+### À quoi ressemble un objectif {#目标长什么样}
 
 `goal_step` lit le brief, produit deux sections, et les gèle dans `.flower/notes/目标.md` :
 
@@ -128,7 +128,7 @@ réécrite de sorte que chaque ligne soit vérifiable sur-le-champ — les ligne
 Les deux sections doivent être non vides (`statement` dit quelque chose, `checks` n'est pas vide) pour que ce soit
 complet ; sinon l'étape ne laisse pas passer.
 
-### La longueur de la checklist est dictée par « combien de modes de défaillance existent »
+### La longueur de la checklist est dictée par « combien de modes de défaillance existent » {#清单的长度由有多少种失败方式决定}
 
 Pas par la rigueur du juge. Pour une tâche du type `git clone && make && ./app`, **trois à cinq lignes suffisent** :
 la compilation passe, ça démarre, c'est utilisable.
@@ -139,7 +139,7 @@ a donné une checklist de **15 lignes**, dont seulement **5** vérifiaient « es
 (dont vérifier le mtime de `~/.zshrc`, vérifier si le répertoire `.flower/` avait été modifié — c'est le répertoire
 du framework lui-même), et **4** étaient invérifiables par principe.
 
-#### Une limite n'est pas un critère de jugement
+#### Une limite n'est pas un critère de jugement {#边界不是判定项}
 
 C'est la cause principale de cet épisode :
 
@@ -152,7 +152,7 @@ C'est la cause principale de cet épisode :
 ajoutée — et les limites sont précisément ce que la phase de clarification encourage à écrire en abondance.
 S'il faut vraiment rendre des comptes, une phrase suffit ; ne la découpez pas en six lignes.
 
-### Les items invérifiables sont signalés dès la définition de l'objectif
+### Les items invérifiables sont signalés dès la définition de l'objectif {#验不了的条目设目标时就会喊}
 
 Pour les items marqués `[此环境无法验证:原因]` dans la checklist, `goal_step` émet un avertissement
 **au moment même où il gèle l'objectif** :
@@ -172,7 +172,7 @@ Simple avertissement, pas de blocage : l'humain peut choisir de tourner quand m�
 « accepter ce résultat »). `Goal.unverifiable` contient cette liste, et le payload de l'événement fournit les données
 structurées pour l'UI.
 
-### Trois conclusions, pas deux
+### Trois conclusions, pas deux {#三个结论不是两个}
 
 ```text
 干活 ──> 判定 ──达成────> 往下走
@@ -216,7 +216,7 @@ personne à qui demander : continuer, c'est brûler de l'argent round après rou
     « ça a l'air de marcher » ; le traiter comme « pas atteint », c'est le faire recommencer round après round une
     chose de toute façon invérifiable.
 
-### Jugement vague = pas atteint
+### Jugement vague = pas atteint {#判定含糊--未达成}
 
 Ordre de reconnaissance de `Verdict.parse` : d'abord la section titrée « 结论 / 判定 » ; en l'absence de section titrée,
 un texte entier valant `1` / `true` compte pour atteint, `0` / `false` pour pas atteint (quand on demande au juge de
@@ -228,7 +228,7 @@ C'est délibéré : « impossible de trancher » et « c'est fini » sont deux c
 systématiquement traité comme « pas atteint », avec une raison par défaut ajoutée
 (« le juge n'a pas rendu de conclusion claire, traité comme pas atteint »).
 
-### Ce qui est jugé, c'est le livrable, pas le code source
+### Ce qui est jugé, c'est le livrable, pas le code source {#判的是产出物不是源码}
 
 !!! warning "Un jugement qui ne lit que le code source ne peut pas juger le livrable"
     Dans [HT001](../cases/ht001.md), le critère d'acceptation disait littéralement « produire un exécutable autonome,
@@ -258,7 +258,7 @@ lsof -p 96040      → 起于 16:10,16:15 仍活着
 La phrase du prompt de jugement dit la même chose : va voir sur le terrain toi-même, reprends la checklist ligne par
 ligne, et **un critère de jugement dont tu ne vois pas la preuve est un critère non passé**.
 
-### « Renvoyer » signifie continuer, pas recommencer
+### « Renvoyer » signifie continuer, pas recommencer {#打回是接着做不是重头做}
 
 Le renvoi utilise `Step.on_reject` : au round suivant, on **`resume` la session qui vient d'être recalée**, avec un
 prompt remplacé par le retour du jugement (`Verdict.feedback()` ne donne que « ce qui manque », pas la solution).
@@ -278,7 +278,7 @@ sans `resume` ; le nom de l'étape porte le numéro de round (`干活·判定#1`
 [lignée](../reference/glossary.md#血缘) inter-processus.
 Si le `gate` n'obtient pas `ctx["_runtime"]`, il lève `StepAbort` — **il ne fait pas semblant de passer**.
 
-### Saut et redéfinition
+### Saut et redéfinition {#跳过与重设}
 
 Si le fichier d'objectif existe déjà et est complet, l'étape est **sautée** (comme pour le brief) — quand un run
 [long-horizon](../reference/glossary.md#长程) plante et redémarre, il ne faut pas recalculer les conclusions déjà
@@ -290,7 +290,7 @@ que vous venez d'ajouter n'entrerait tout simplement pas dans le jugement — il
 l'ancienne checklist. Coût mesuré de la redérivation : **$0.41 / 3 minutes**.
 Voir [continuité](continuity.md).
 
-### Le juge peut-il exécuter des commandes
+### Le juge peut-il exécuter des commandes {#判定者能不能跑命令}
 
 Par défaut **non**. La liste de pré-approbation de `judge()` contient les outils de question plus
 `Read` / `Glob` / `Grep` ; `Bash` ne s'ajoute qu'avec `can_run=True`. L'arbitrage :
@@ -316,7 +316,7 @@ sécurité des chemins
     ne peut pas s'appliquer — il risque donc de vous écrire une checklist tout simplement invérifiable sur cette
     machine. `with_goal()` est un autre cas : il a son propre paramètre `can_run` (défaut `False`).
 
-### Pourquoi le nombre de rounds est plafonné, mais pas le nombre de questions
+### Pourquoi le nombre de rounds est plafonné, mais pas le nombre de questions {#为什么轮数有上限而提问次数没有}
 
 Poser une question ne coûte presque rien, un round de travail coûte de l'argent réel. Donc :
 
@@ -324,7 +324,7 @@ Poser une question ne coûte presque rien, un round de travail coûte de l'argen
 - **Rounds plafonnés** (`rounds=3`) — mais le vrai garde-fou n'est pas ce chiffre, c'est la troisième conclusion
   « impossible » : dès qu'elle apparaît, on s'arrête et on demande, sans attendre l'épuisement des rounds
 
-## Quand il ne faut pas l'utiliser
+## Quand il ne faut pas l'utiliser {#什么时候不该用它}
 
 **Quand la tâche est si petite que juger est plus verbeux que faire.** Cette couche complique les problèmes simples,
 et c'est mesuré : pour ce « cloner un dépôt, l'installer et le faire tourner sur macOS » de HT002, la checklist de

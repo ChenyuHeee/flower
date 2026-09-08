@@ -7,7 +7,7 @@ end of every round of work it **judges once, independently**, and produces a
 [verdict](../reference/glossary.md#判定) — achieved, move on; not achieved, send it back with "what's
 missing" and keep going; judged impossible, stop and ask a human.
 
-## What problem it solves
+## What problem it solves {#解决什么问题}
 
 [Clarify](clarify.md) blocks **"it built the wrong thing"**. This layer blocks a different failure:
 **"it isn't actually done, but it says it is"**. The two must be kept apart, because they fail differently:
@@ -25,9 +25,9 @@ So the verdict goes to a role that **did none of the work and runs in its own
 times the worker tried or how hard it was, so it won't make excuses on its behalf. This is the same reasoning
 behind running the clarifier in an independent session.
 
-## How to use it (minimum code)
+## How to use it (minimum code) {#怎么用最小代码}
 
-### Zero code: the command line
+### Zero code: the command line {#零代码命令行}
 
 ```bash
 flower                      # goal guard is on by default
@@ -36,7 +36,7 @@ flower --rounds 5           # at most five rounds of work (default 3)
 flower --judge-can-run      # let the judge run commands (harder verdicts)
 ```
 
-### Wiring it yourself
+### Wiring it yourself {#自己接线}
 
 Two functions each cover half; don't mix them up: `goal_step()` **sets the goal** (a standalone step),
 `with_goal()` is the **verdict loop** (it wraps a step that does work).
@@ -103,9 +103,9 @@ When it doesn't behave, turn these knobs first:
 | Too expensive | `--rounds 1`, or `--no-goal` to turn it off entirely |
 | Don't want to be interrupted | `--timeout 0`: on unreachable it doesn't ask, it just stops (the reason stays on disk) |
 
-## What it actually does
+## What it actually does {#它实际做了什么}
 
-### What a goal looks like
+### What a goal looks like {#目标长什么样}
 
 `goal_step` reads the brief, emits two sections, and freezes them into `.flower/notes/目标.md`:
 
@@ -125,7 +125,7 @@ so every line can be verified on the spot — the judge fills in the vague ones.
 (`statement` says something, `checks` is non-empty) for it to count as complete; otherwise this step doesn't
 let you through.
 
-### The length of the checklist is decided by how many ways the task can fail
+### The length of the checklist is decided by how many ways the task can fail {#清单的长度由有多少种失败方式决定}
 
 Not by how rigorous the judge feels. For a task like `git clone && make && ./app`, **three to five lines are
 enough**: it builds, it runs, it works.
@@ -135,7 +135,7 @@ checklist, of which only **5** verified "does the thing work", **6** verified "d
 (including checking the mtime of `~/.zshrc` and whether the `.flower/` directory had been modified — that's the
 framework's own directory), and **4** were unverifiable in principle.
 
-#### A boundary is not a check item
+#### A boundary is not a check item {#边界不是判定项}
 
 That was the main cause that time:
 
@@ -148,7 +148,7 @@ Writing "did not run `brew install`" as a check item means every added boundary 
 and boundaries are exactly what the clarify phase encourages you to write plenty of. If you really need an
 account of it, one sentence is enough; don't split it into six lines.
 
-### Items that can't be verified are flagged at goal-setting time
+### Items that can't be verified are flagged at goal-setting time {#验不了的条目设目标时就会喊}
 
 For items marked `[此环境无法验证:原因]`, `goal_step` fires a warning **at the moment it freezes the goal**:
 
@@ -167,7 +167,7 @@ moving the discovery forward to goal-setting drops the cost of the same informat
 It warns, it doesn't block: a human can choose to run it anyway (HT002 ended up choosing "accept this result").
 `Goal.unverifiable` is that list, and the event payload carries structured data for the UI.
 
-### Three outcomes, not two
+### Three outcomes, not two {#三个结论不是两个}
 
 ```text
 work ──> judge ──achieved────> move on
@@ -209,7 +209,7 @@ there, and a human can pick up the decision later.
     closing out the work with a "looks like it should work"; treating it as "not yet" means making it redo,
     round after round, something that was never verifiable in the first place.
 
-### An ambiguous verdict = not achieved
+### An ambiguous verdict = not achieved {#判定含糊--未达成}
 
 The order `Verdict.parse` tries: first take the "结论 / 判定" section by heading; with no heading section,
 the whole thing being `1` / `true` counts as achieved and `0` / `false` as not yet (when the judge is told
@@ -220,7 +220,7 @@ text (longer words first); finally, look for a lone `1` / `0`.
 achieved.** This is deliberate: "can't tell" and "done" are two different things, ambiguity always counts as
 not achieved, plus a default reason is filled in ("the judge gave no clear conclusion, treated as not achieved").
 
-### It judges the artifact, not the source
+### It judges the artifact, not the source {#判的是产出物不是源码}
 
 !!! warning "A verdict that only reads source can't judge the deliverable"
     In [HT001](../cases/ht001.md) the acceptance criterion literally read "compile a standalone executable
@@ -250,7 +250,7 @@ lsof -p 96040      → started at 16:10, still alive at 16:15
 That's what the line in the judging prompt means: go look at the scene yourself, walk the checklist item by
 item, and **a check item with no visible evidence is a fail**.
 
-### "Sent back" means continue, not start over
+### "Sent back" means continue, not start over {#打回是接着做不是重头做}
 
 Sending back uses `Step.on_reject`: the next round **`resume`s the very session that was just rejected**, with
 the prompt replaced by the judge's feedback (`Verdict.feedback()` gives only "what's missing", not a solution).
@@ -270,7 +270,7 @@ The judge itself is **always a fresh session**: `with_goal`'s gate calls `Runtim
 [lineage](../reference/glossary.md#血缘). When the gate can't get `ctx["_runtime"]` it raises `StepAbort` —
 **it does not fake a pass**.
 
-### Skipping and re-deriving
+### Skipping and re-deriving {#跳过与重设}
 
 When the goal file already exists and is complete, this step is **skipped** (same as the brief) — restarting
 after a [long-horizon](../reference/glossary.md#长程) run crashes shouldn't re-derive conclusions already
@@ -282,7 +282,7 @@ checklist, and whether the new thing you added got done wouldn't enter the verdi
 "achieved" against the old checklist. The measured cost of re-deriving is **$0.41 / 3 minutes**.
 See [continuity](continuity.md).
 
-### Whether the judge can run commands
+### Whether the judge can run commands {#判定者能不能跑命令}
 
 By default it **can't**. `judge()`'s pre-approved list is the ask tools plus `Read` / `Glob` / `Grep`;
 `Bash` is added only when `can_run=True`. The tradeoff:
@@ -308,7 +308,7 @@ stopped by the permission layer and path safety
     a checklist that simply can't be verified on this machine. `with_goal()` is a different matter: it has its
     own `can_run` parameter (default `False`).
 
-### Why rounds are capped but questions aren't
+### Why rounds are capped but questions aren't {#为什么轮数有上限而提问次数没有}
 
 Asking costs almost nothing; a round of work costs real money. So:
 
@@ -317,7 +317,7 @@ Asking costs almost nothing; a round of work costs real money. So:
   "unreachable": the moment it appears the run stops and asks a human, instead of waiting for the rounds
   to run out
 
-## When not to use it
+## When not to use it {#什么时候不该用它}
 
 **The task is small enough that judging is more verbose than doing.** This layer turns simple problems into
 complicated ones, and that's been measured: in HT002's "clone a repo, install and run it on macOS", the

@@ -6,7 +6,7 @@ Cada verbete traz três coisas: **o que o termo designa**, **o que ele é no có
 
 ---
 
-## Framework e execução
+## Framework e execução {#框架与运行}
 
 ### Long-horizon {#长程}
 
@@ -47,7 +47,7 @@ Um conjunto de [passos](#步骤) encadeados em ordem, mais as regras de como o e
 
 ---
 
-## Papéis
+## Papéis {#角色}
 
 Papel é a divisão de trabalho que o flower impõe aos agents. Cada papel = um trecho de texto de regras injetado + um conjunto de ferramentas + um conjunto de hooks. Os cinco papéis são funções de fábrica, veja a [Python API](api.md#角色工厂).
 
@@ -106,7 +106,7 @@ Essa é a primeira camada de economia de contexto do flower, e a que mais econom
 
 ---
 
-## Os quatro mecanismos
+## Os quatro mecanismos {#四个机制}
 
 ### Esclarecimento prévio {#前置确认}
 
@@ -178,7 +178,7 @@ O flower **não usa isso**; usa [handoff](#换代) no lugar. A diferença: o sum
 
 ---
 
-## Gestão de contexto
+## Gestão de contexto {#上下文管理}
 
 ### Thread principal {#主线程}
 
@@ -249,7 +249,7 @@ Mantém **mensagens de erro** fora do contexto. A pilha de erros gerada durante 
 
 ---
 
-## Runtime
+## Runtime {#运行时}
 
 ### Isolamento {#隔离}
 
@@ -314,7 +314,7 @@ O teto de gasto de uma execução; ao estourar, ela para. Sem isso, uma execuç�
 
 ---
 
-## Portabilidade
+## Portabilidade {#可移植性}
 
 ### Portátil {#可移植}
 

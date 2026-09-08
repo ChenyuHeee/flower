@@ -4,9 +4,9 @@ flower를 다른 곳으로 옮기려면 세 가지를 처리해야 한다. 컨�
 [plugin](glossary.md#plugin)(도메인 능력이 저장소를 따라다니고, 호스트에 무엇이 설치돼 있는지는 보지 않는다), 문서 사이트(`main`에 push하면
 자동 배포, `install.sh`는 Pages 도메인에 걸린다). 세 절은 서로 독립적이니 필요한 것만 읽으면 된다.
 
-## 1. 컨테이너
+## 1. 컨테이너 {#一容器}
 
-### 왜 컨테이너인가
+### 왜 컨테이너인가 {#为什么要容器}
 
 **첫째, 가둬두기 위해서다.** 실제로 일하는 [워커](glossary.md#执行者)는 **제한 없는 Bash**를 갖는다 — flower의 Bash
 화이트리스트(`delegate_guard`)는 [메인 스레드](glossary.md#主线程)만 관리하고, 파견된 쪽은 테스트를 돌릴 수 있어야 하므로 의도된 설계다.
@@ -26,7 +26,7 @@ Python과 `claude-agent-sdk`만 있다 — 요청은 wheel이 자체적으로 �
 | 파일 소유권 | 컨테이너 안에서 `/work`에 쓴 파일이 호스트에서 `hechenyu:staff`, 매핑 정상 |
 | 호스트 가시성 | 컨테이너 안에서 `ls /Users` → `No such file or directory` |
 
-### 이미지에 무엇이 들어 있나
+### 이미지에 무엇이 들어 있나 {#镜像里装了什么}
 
 베이스 이미지는 `python:3.13-slim`이고, 그 위에 apt로 딱 세 패키지만 설치한다. 각각 이유가 있다:
 
@@ -47,7 +47,7 @@ Python과 `claude-agent-sdk`만 있다 — 요청은 wheel이 자체적으로 �
 엔트리포인트는 `ENTRYPOINT ["flower"]`이고 `CMD`는 비어 있다 — 인자 없이 컨테이너를 돌리면 대화형 입력으로 들어간다
 (무엇을 할지 물어본다). `--help`를 출력하지 않는다. 이렇게 하면 셸에서 중국어 요구사항 한 줄에 따옴표를 씌울 필요가 없다.
 
-### 호스트의 `.venv`를 마운트할 수 없는 이유
+### 호스트의 `.venv`를 마운트할 수 없는 이유 {#为什么不能把宿主的-venv-挂进去}
 
 SDK는 플랫폼별로 wheel을 배포하고, 함께 들어 있는 바이너리는 플랫폼 전용이다:
 
@@ -60,7 +60,7 @@ SDK는 플랫폼별로 wheel을 배포하고, 함께 들어 있는 바이너리�
 마운트해봐야 돌지 않으므로, 이미지는 스스로 `pip install`을 해야 한다. 뒤집어 말하면 이것이 이식 가능성의 증거이기도 하다. 같은
 `pyproject.toml`로 플랫폼만 바뀌면 네이티브 바이너리 한 벌이 교체될 뿐, 프레임워크 코드는 한 줄도 고칠 필요가 없다.
 
-### 두 개의 스크립트
+### 두 개의 스크립트 {#两个脚本}
 
 | 스크립트 | 하는 일 |
 |---|---|
@@ -88,7 +88,7 @@ SDK는 플랫폼별로 wheel을 배포하고, 함께 들어 있는 바이너리�
 
 `FLOWER_HOME`은 스크립트 자기 위치에서 유추하고 경로를 하드코딩하지 않으므로, 저장소를 어디에 클론해도 동작한다.
 
-### 실행하기
+### 실행하기 {#跑起来}
 
 ```bash
 docker/build                       # 한 번이면 충분
@@ -121,7 +121,7 @@ docker run -i $TTY --rm \
     "$IMAGE" "$@"
 ```
 
-### 마운트 경계와 영속성
+### 마운트 경계와 영속성 {#挂载边界与持久化}
 
 ```text
 宿主 $PWD  ──挂载──>  /work       ← agent 在这里干活,产出留在宿主
@@ -147,7 +147,7 @@ docker run -i $TTY --rm \
     프로브 파일을 하나 쓴 뒤 컨테이너를 하나 띄워 `test -f /work/<探针>`로 실측한다(추가 마운트를 설정해 두었다면 통과한다).
     통과 못 하면 1로 종료하고 `colima start --mount '<路径>:w'`를 알려준다. 프로브는 컨테이너를 띄워야 하므로 먼저 `docker/build`를 해야 한다.
 
-### 크리덴셜
+### 크리덴셜 {#凭证}
 
 `docker run --env-file`을 타므로 **이미지 레이어에 들어가지 않는다**. `flowerbox`가 읽는 것은 `$FLOWER_HOME/.env`이고,
 기본값은 저장소 루트의 `.env`다:
@@ -174,7 +174,7 @@ FLOWER_HOME=~/.config/flower /path/to/flower/docker/flowerbox
     `--timeout`(기본 1800초)이 다 찰 때까지 기다리는 수밖에 없다. 무인 운영이라면 명시적으로 `--timeout 0`을 줘야 한다.
     스크립트는 TTY가 없다고 감지하면 먼저 한 줄 알려준다.
 
-### git submodule
+### git submodule {#git-submodule}
 
 `.gitmodules`에는 한 줄뿐이다:
 
@@ -190,7 +190,7 @@ FLOWER_HOME=~/.config/flower /path/to/flower/docker/flowerbox
 | flower 실행, 이미지 빌드 | **필요 없다**. `.dockerignore`가 `human-test/`를 제외했고, `Dockerfile`도 원래 `pyproject.toml` / `flower` / `examples`만 `COPY`한다 |
 | 로컬에서 HT001의 산출 코드를 열어보기 | 필요하다: `git submodule update --init human-test/HT001`, 또는 처음부터 `git clone --recurse-submodules` |
 
-### 중국 내 네트워크: 그 많은 미러 교체가 왜 있나
+### 중국 내 네트워크: 그 많은 미러 교체가 왜 있나 {#国内网络为什么有那一堆镜像替换}
 
 이 세트를 방화벽 안에서 설치할 때 느린 것은 대역폭이 아니라 국제 회선이다. 기본 `docker/build`는 바꿔야 할 것을 이미 다 바꿔 두었고,
 `FLOWER_MIRRORS=0` 한 방으로 전부 끌 수 있다. 아래는 실측 데이터와 네 군데 교체의 경위다 — 네트워크에 이 문제가 없다면 읽지 않아도 된다.
@@ -282,7 +282,7 @@ FLOWER_HOME=~/.config/flower /path/to/flower/docker/flowerbox
 
 ## 2. plugin {#plugin}
 
-### 무엇인가
+### 무엇인가 {#它是什么}
 
 저장소를 따라다니는 **도메인 능력 패키지**다. 프레임워크 코드에는 어떤 도메인 지식도 들어 있지 않고, 도메인 지식은 전부 저장소 루트의 `plugin/`
 디렉터리에 놓여, 코드와 함께 clone되고 함께 review되고 함께 tag가 찍힌다.
@@ -301,7 +301,7 @@ if use_plugin and PLUGIN_DIR.is_dir():
 `setting_sources=[]`(아래에서 따로 다룬다)와 합쳐지면, 이것이 flower가 "[이식 가능](glossary.md#可移植)"과
 "당신의 도메인을 안다"를 동시에 해내는 이유다. 호스트에 무엇이 설치돼 있는지 묻지 않고, 저장소가 들고 온 이 디렉터리 하나만 인정한다.
 
-### 디렉터리 구조
+### 디렉터리 구조 {#目录布局}
 
 | 경로 | 무엇을 담나 | 언제 작동하나 | 누가 정하나 |
 |---|---|---|---|
@@ -324,7 +324,7 @@ skill을 쓴다. 반드시인 일을 skill로 쓰는 것은, 규율을 모델의
 지금 저장소의 `plugin/`에는 두 가지밖에 없다. `.claude-plugin/plugin.json`과 `skills/example/SKILL.md`.
 `agents/`, `hooks/`, `.mcp.json`은 **아직 존재하지 않는다** — 쓰려면 직접 만들어야 하고, 디렉터리 이름은 위 표대로 고정이다.
 
-### skill 하나 작성하기: 완전한 예제
+### skill 하나 작성하기: 완전한 예제 {#写一个-skill完整例子}
 
 "릴리스 노트 생성"을 예로, 0부터 작동 확인까지.
 
@@ -411,7 +411,7 @@ python3 -c "from flower.core.agent import PLUGIN_DIR; print(PLUGIN_DIR, PLUGIN_D
     `PLUGIN_DIR` 명령으로 자가 점검하라. `False`가 찍히면 이번 설치에는 도메인 능력 패키지가 없다는 뜻이다. 도메인 능력 패키지를 쓰려면
     현재로서는 소스 checkout에서 돌리는 수밖에 없다.
 
-### `setting_sources=[]`가 도메인 능력을 plugin으로 몰아넣는 이유
+### `setting_sources=[]`가 도메인 능력을 plugin으로 몰아넣는 이유 {#setting_sources-为什么逼着领域能力走-plugin}
 
 같은 함수 안에 이 줄도 있다:
 
@@ -444,7 +444,7 @@ SDK의 기본값은 `None` = 세 출처를 전부 읽는다. `~/.claude/settings
 plugin과는 서로 다른 두 통로다 — 전자는 매 라운드 컨텍스트에 들어 있고, 후자는 필요할 때 로드된다. 짧고 반드시 지켜야 할 규율은 `instructions`에,
 길고 가끔 쓸모 있는 지식은 skill에 쓴다.
 
-## 3. 문서 사이트
+## 3. 문서 사이트 {#三文档站}
 
 지금 읽고 있는 이 사이트는 mkdocs-material로 만들었고, 소스 파일은 저장소의 `docs/` 아래에 있으며, `main`에 push하면 자동 배포된다.
 
@@ -472,7 +472,7 @@ CI의 트리거 조건은 `main`에 push하고 **또한** 변경이 다음 경�
 docs/**  mkdocs.yml  hooks/**  docs-requirements.txt  install.sh  .github/workflows/docs.yml
 ```
 
-### `install.sh`를 Pages에서 배포하는 이유
+### `install.sh`를 Pages에서 배포하는 이유 {#installsh-为什么从-pages-发}
 
 빌드 단계 끝에 이런 줄이 있다:
 

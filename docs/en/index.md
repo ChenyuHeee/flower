@@ -22,7 +22,7 @@ Move to another machine and the behavior is identical — it does not read the h
 
 The four numbers come from [HT001](cases/ht001.md) — the run in which an agent wrote a terminal IDE from scratch under flower.
 
-## Install
+## Install {#装}
 
 ```bash
 curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
@@ -33,33 +33,33 @@ no Claude Code CLI. Once installed, `cd` into any project directory and type `fl
 or a gateway address; configure it once, it is stored in `~/.config/flower/.env`, and it applies everywhere. If Claude Code is already installed and configured on this machine,
 it borrows that token directly and does not ask at all. For the full steps and troubleshooting, see [Install](getting-started/install.md).
 
-## It blocks four classes of failure for you
+## It blocks four classes of failure for you {#四类失败}
 
 <div class="fl-grid" markdown>
 
 <div class="fl-card" markdown>
-### [Clarify](guide/clarify.md)
+### [Clarify](guide/clarify.md) {#前置确认}
 
 Afraid of building the wrong thing — before any work starts, a role that only asks questions and never touches code keeps asking until things are clear, then freezes the requirements into a document
 that every later step reads to open with.
 </div>
 
 <div class="fl-card" markdown>
-### [Goal guard](guide/goal.md)
+### [Goal guard](guide/goal.md) {#目标看守}
 
 Afraid it says "done" when it isn't — at the end of every round of work, a different role judges once, independently. Met: move on. Not met: send it back.
 Can't be verified in this environment: stop and ask a human.
 </div>
 
 <div class="fl-card" markdown>
-### [Continuity](guide/continuity.md)
+### [Continuity](guide/continuity.md) {#接续}
 
 Afraid of a crash after hours of running and starting over — type `flower` again in the same directory and it picks up where it left off, the same whether the process was killed
 or the machine rebooted. You don't have to remember any id.
 </div>
 
 <div class="fl-card" markdown>
-### [Handoff](guide/handoff.md)
+### [Handoff](guide/handoff.md) {#换代}
 
 Afraid a full context gets squashed into one summary — the current session writes its own handoff document that a human can read and edit, and a new session takes over.
 No compact needed.
@@ -67,7 +67,7 @@ No compact needed.
 
 </div>
 
-## What makes it "long-horizon"
+## What makes it "long-horizon" {#长程}
 
 The [coordinator](reference/glossary.md#协调者) on the main thread carries decisions only; it has no `Write` and no `Edit` —
 writing code, running tests, looking things up all go to [subagents](reference/glossary.md#subagent),
@@ -77,7 +77,7 @@ of 1,893 hands-on tool calls, only 32 ever entered the coordinator's field of vi
 That's why the main thread only climbed to 185.9K over 70 turns and never compacted once — how this layer works, and what the other three layers are,
 see [Context economics](guide/context.md).
 
-## It has actually been run
+## It has actually been run {#真的跑过}
 
 - **[HT001](cases/ht001.md)** — writing a terminal IDE from scratch. $171.62 / 10.4 hours /
   main-thread context climbed to 185.9K, delivered 12,212 lines of product code, lost the network once mid-run and finished on its own.
@@ -88,7 +88,7 @@ Both pages also write down what doesn't hold up: in HT001 the agent got one item
 and HT002 turned `git clone && make && ./cppide` into an hour. Every number can be recomputed from `runs/manifest.json`
 and `sessions.db` — these are raw records, not promotion.
 
-## Where to start reading
+## Where to start reading {#从哪读起}
 
 - **Want to run it right now** — [Quickstart](getting-started/quickstart.md): spend twenty cents verifying credentials first,
   then run a full three-step workflow with zero code.

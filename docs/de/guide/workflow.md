@@ -5,7 +5,7 @@ Das Framework kümmert sich nur um den Mechanismus: wie ein Schritt läuft, wie 
 und es soll es auch nicht wissen. Diese Seite erklärt, wie man einen Workflow entwirft; die vollständigen Feldtabellen von
 `Step` und `Workflow` stehen in der [Python-API](../reference/api.md).
 
-## Welches Problem das löst
+## Welches Problem das löst {#解决什么问题}
 
 Ein [Long-Horizon](../reference/glossary.md#长程)-Run ist nichts, was sich in einem einzigen Prompt sagen ließe: erst die Anforderungen klären,
 dann recherchieren, dann implementieren, dann prüfen — jeder Abschnitt hat seine eigene Rolle, seinen eigenen Kontext, seine eigenen Abnahmekriterien.
@@ -20,7 +20,7 @@ Schreibt man alles in einen einzigen Prompt, entscheidet das Modell selbst, welc
 
 Es enthält keinerlei Domänenannahmen. Wo man schneidet, was jeder Schritt abnimmt, was bei Nichtbestehen passiert — genau diese vier Dinge sind „einen Workflow entwerfen".
 
-## Verwendung (Minimalcode)
+## Verwendung (Minimalcode) {#怎么用最小代码}
 
 ```python
 # flows.py
@@ -56,9 +56,9 @@ Ein eigenes Treiberprogramm geht auch; das erste Argument von `Workflow.run` ist
 ctx = await wf.run(rt, on_step=lambda step, r: print(f"{step.name} ok={r.ok} ${r.cost_usd:.4f}"))
 ```
 
-## Was es tatsächlich tut
+## Was es tatsächlich tut {#它实际做了什么}
 
-### Was ein Step bekommt und was er zurückgeben muss
+### Was ein Step bekommt und was er zurückgeben muss {#一个-step-收到什么必须返回什么}
 
 `Step` ist keine Funktion, sondern eine **Deklaration**. Ausgeführt wird tatsächlich `Runtime.run(step.spec, gerenderter Prompt, ...)` —
 **ein Schritt = ein `Runtime.run` = eine [Session](../reference/glossary.md#会话)**.
@@ -80,7 +80,7 @@ Die ersten drei Felder sind Positionsargumente, `Step(name, spec, prompt)`:
 vergebene [Task Brief](../reference/glossary.md#任务书) hat `kind="prompt"`, der synthetische Fehler bei Verbindungsabbruch hat `kind="error"`
 — keines der drei geht ein.
 
-### reduce: kein Zucker
+### reduce: kein Zucker {#reduce不是糖}
 
 Standardmäßig wird der Wortlaut des Modells weitergereicht. Bei manchen Schritten **darf** dieser Wortlaut nicht unverändert weitergereicht werden:
 
@@ -94,7 +94,7 @@ geparsten vier Abschnitte, sonst landet dieser ganze Code im Prompt des nächste
 
 `reduce` **muss eine synchrone Funktion sein**; `gate` / `when` / `on_reject` dürfen async sein.
 
-### Wie der Zustand durch ctx fließt
+### Wie der Zustand durch ctx fließt {#状态怎么在-ctx-里流动}
 
 `ctx` ist ein `dict[str, Any]` — nämlich `Workflow.context` selbst. Nach jedem Schritt wird nach dieser Tabelle geschrieben:
 
@@ -126,7 +126,7 @@ Für einen sauberen Neustart legst du ein neues an oder übergibst explizit `con
     Schreibt ein späterer Schritt `lambda ctx: ctx["某步"]`, gibt es direkt einen `KeyError`. Willst du mit dem unvollständigen Ergebnis
     weiterlaufen, nimm `on_fail="continue"`; willst du wirklich überspringen, muss der spätere Schritt selbst mit `ctx.get(...)` absichern.
 
-### Verdict und Zurückweisung: gate, on_reject, StepAbort
+### Verdict und Zurückweisung: gate, on_reject, StepAbort {#判定与打回gateon_rejectstepabort}
 
 `gate(result, ctx) -> bool` beurteilt „ist durchgelaufen, aber taugt es was?". Zwei Details, die man kennen muss:
 
@@ -161,7 +161,7 @@ Nach dem Wurf: der Grund wird in `ctx["_aborted"]` vermerkt, der Schritt gilt al
 Den Unterschied gut merken: **False zurückgeben heißt „diesmal nicht, noch eine Runde"; `StepAbort` heißt „noch eine Runde bringt nichts".**
 Der typische Fall ist ein Ziel, das in dieser Umgebung als nicht machbar beurteilt wurde und zu dem niemand befragt werden kann — weiter leerzulaufen ist dann die teuerste Option.
 
-### Die zwei Retry-Ebenen nicht verwechseln
+### Die zwei Retry-Ebenen nicht verwechseln {#两层重试别混}
 
 | | `Step.retries` | `Runtime(resilience=...)` |
 |---|---|---|
@@ -173,7 +173,7 @@ Der typische Fall ist ein Ziel, das in dieser Umgebung als nicht machbar beurtei
 Der Prompt für das Fortsetzen **enthält absichtlich keinerlei Fehlerdetails** — das Modell muss wissen „du wurdest unterbrochen, mach weiter",
 nicht ob es ENOTFOUND oder 503 war.
 
-### Schritte verketten
+### Schritte verketten {#把步骤串起来}
 
 Zustand zwischen Schritten weiterzugeben geht auf drei Arten; welche du wählst, bestimmt, was der nächste Schritt sieht:
 
@@ -203,7 +203,7 @@ Ein paar Entwurfserfahrungen, die wir uns mehrfach eingehandelt haben:
 6. **Parallel am selben Repo arbeiten heißt `worker(isolate=True)`.** Der Abschluss (Merge, Worktree aufräumen, PR öffnen) bleibt derzeit
    deinem Workflow überlassen; die Harness garantiert nur, dass die Änderungen im jeweils eigenen Worktree landen.
 
-### Die Workbench muss am Workflow hängen
+### Die Workbench muss am Workflow hängen {#工作台要挂在-workflow-上}
 
 Überall dort, wo der Workflow Dateien in die [Workbench](../reference/glossary.md#工作台) schreibt — typisch bei
 `clarify_step(brief_path=...)` — musst du selbst eine `Workbench` anlegen und sie **sowohl** an `Workflow.workbench` hängen
@@ -245,7 +245,7 @@ Dass `channel` am Workflow hängt, hat zwei Gründe: `run()` verdrahtet dessen `
     **und es gibt keinen Fehler**. Legst du ein Objekt an und benutzt es auf beiden Seiten, hast du das Problem nicht;
     existiert `Workflow.workbench`, wird das `-W` der Kommandozeile ignoriert und dieses Feld gilt.
 
-### `continuous=True`: derselbe Pfad, noch einmal gelaufen
+### `continuous=True`: derselbe Pfad, noch einmal gelaufen {#continuoustrue同一个路径再跑一次}
 
 Die drei obigen Verkettungsarten betreffen Schritte **innerhalb eines Runs**. Prozessübergreifend ist eine andere Achse:
 
@@ -273,7 +273,7 @@ Drei Konsequenzen:
 
 Vollständiger Entwurf und `--new` unter [Continuity](continuity.md).
 
-## Wann man es nicht verwenden sollte
+## Wann man es nicht verwenden sollte {#什么时候不该用它}
 
 - **Nur ein Agent, kein Verdict nötig** — dann kein `Workflow` drumherum. Direkt `await rt.run(spec, "…")`,
   oder auf der Kommandozeile `flower once "读一眼这个仓库"`.

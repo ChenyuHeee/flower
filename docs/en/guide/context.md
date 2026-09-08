@@ -6,7 +6,7 @@ far that run gets. The shape of flower — the [coordinator](../reference/glossa
 anything, long outputs go to disk, hooks prune on the spot — all follows from this one fact.
 This page explains why.
 
-## What problem it solves
+## What problem it solves {#解决什么问题}
 
 [Compaction](../reference/glossary.md#压缩) waits until the context is full and then summarizes in
 hindsight; it treats the symptom. The real problem is: **trivia should never have entered the main
@@ -33,7 +33,7 @@ The first two layers govern **whether things get in**; the last two govern **whe
 stays**. The order can't be reversed: no matter how aggressive layer four is, it can't claw back the
 volume that layer one let slip through.
 
-## How to use it (minimal code)
+## How to use it (minimal code) {#怎么用最小代码}
 
 ```python
 from flower import Runtime, coordinator, worker
@@ -60,9 +60,9 @@ constructor parameter to swap it out.
     Conclusion: **with `Runtime(workbench=False)` plus `coordinator()`, there is not a single wall in
     front of the main thread's Bash / Write / Edit.**
 
-## What it actually does
+## What it actually does {#它实际做了什么}
 
-### Layer one: division of labor (saves the most)
+### Layer one: division of labor (saves the most) {#第一层分工省得最多}
 
 The coordinator plays "a person who knows how to use Claude Code": decompose, delegate, read
 reports, decide. It does not get Bash / Write / Edit — its tools are only `Agent`, `TodoWrite`, `Read`
@@ -101,7 +101,7 @@ contains only what is specific to this task**. The one convention still worth st
 workbench is + write long outputs to `artifacts/` + report back only paths and conclusions" — because
 the workbench index cannot reach subagents, the task brief is the only channel.
 
-### Layer two: the workbench (fixes "rewriting it every time")
+### Layer two: the workbench (fixes "rewriting it every time") {#第二层工作台治每次重写}
 
 Three directories under `.flower/` travel with the workspace:
 
@@ -130,7 +130,7 @@ the disk, and it can't clear the index in the system prompt**.
     workbench is + write long outputs to `artifacts/`" must be relayed by the coordinator in the task
     brief — that's the only channel, not redundancy.
 
-### Layer three: spill on the spot
+### Layer three: spill on the spot {#第三层当场落盘}
 
 `spill_guard` is a `PostToolUse` hook that takes a look at the tool result **before it reaches the
 model**: anything over `threshold` (default **4000** characters) is
@@ -158,7 +158,7 @@ Runtime(workspace="repo", workbench=True, spill_threshold=4000)   # None or 0 = 
 **How much it saves**: in the [HT001](../cases/ht001.md) run, 103 spills replaced 791.4K characters
 with path pointers, none of them resident in context.
 
-### Layer four: trim and prune
+### Layer four: trim and prune {#第四层裁剪与剪除}
 
 This layer lives in the [session store](../reference/glossary.md#会话存储). `Runtime`'s store is always
 `PruningSessionStore` (inheritance chain `SqliteSessionStore` ← `TrimmingSessionStore` ←
@@ -216,7 +216,7 @@ message must not be hit by accident, and the `parentUuid` chain must be reconnec
 `Runtime(trim=False)` (the default) **does not mean nothing is cleaned**: it only turns off large-result
 trimming; expiry, denied calls, and disconnect residue are still handled.
 
-### Counter-example: do the quick-glance work yourself
+### Counter-example: do the quick-glance work yourself {#反例看一眼的活自己干}
 
 The first three layers all say "delegate it out," but there is a counter-example: commands like
 `git status`, `ls`, `cat` produce results of a few dozen characters, while **launching a subagent
@@ -245,7 +245,7 @@ measured, all three of the coordinator's attempts were blocked, so it went back 
 subagents. Now each segment is split out and checked: it's allowed only if every segment is on the
 whitelist, and `git status && rm -rf x` is still blocked (the second half isn't on the list).
 
-### Append, don't replace
+### Append, don't replace {#叠加不替换}
 
 ```python
 system_prompt = {"type": "preset", "preset": "claude_code", "append": spec.instructions}
@@ -276,7 +276,7 @@ above: **it only reaches the coordinator.**
     whitelist**. Measured, the model can call tools that aren't in it — in a $0.1 probe, an agent with
     `allowed_tools=["Read"]` still managed to call Write / Bash. What actually blocks is the hook.
 
-## When not to use it
+## When not to use it {#什么时候不该用它}
 
 All four layers save the **working material**. The following problems they don't solve, and some
 become harder to see because of them:

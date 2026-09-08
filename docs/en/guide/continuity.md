@@ -10,7 +10,7 @@ Run `flower` a second time in the same directory and it picks up the conversatio
     The two mesh automatically, no extra wiring needed: [lineage](../reference/glossary.md#血缘) always records the **last**
     session that took over that step, so the next wake resumes the successor.
 
-## What it solves
+## What it solves {#解决什么问题}
 
 Everything is already on disk. `runs/sessions.db` holds the **complete** transcript of every historical session, `需求.md` / `目标.md`
 are frozen artifacts, and the code is right there in the workspace.
@@ -21,7 +21,7 @@ which dead ends it already tried, why it rejected some approach — all of it do
 
 In [HT002](../cases/ht002.md) it spent an hour going around in circles on compiler flags. Change process, and that hour is thrown away.
 
-## How to use it (minimal code)
+## How to use it (minimal code) {#怎么用最小代码}
 
 Nothing to configure on the command line; the `flower` path has continuity on by default:
 
@@ -81,9 +81,9 @@ Run this same code a second time in the same directory and `ctx["_woke"]` is `2`
     `checks` = how many items in the verdict checklist; `woke` = how many wakes have happened; `steps` = the mapping from step name to session_id.
     The command line uses exactly this to decide whether the prompt should ask "what do you want to do" or "keep going".
 
-## What it actually does
+## What it actually does {#它实际做了什么}
 
-### The three files it puts on disk
+### The three files it puts on disk {#落在磁盘上的三个文件}
 
 `run_dir` defaults to `./runs`, **relative to the current working directory, not to the workspace**.
 
@@ -115,7 +115,7 @@ Step names appear in four shapes there, so you can see at a glance how the step 
 Writes **append rather than overwrite**: every write re-reads the file first and dedupes on the `run` field — rows belonging to this process are replaced with the latest,
 everyone else's rows are left untouched. So running several flowers in parallel in the same directory is safe.
 
-### `continuous=True` changes the meaning of `resume_from`
+### `continuous=True` changes the meaning of `resume_from` {#continuoustrue-改变了-resume_from-的语义}
 
 This is the easiest thing to miss: `Workflow.continuous` defaults to `True`, so `resume_from=None`
 **does not mean "brand-new session"**.
@@ -136,7 +136,7 @@ and resuming a session that doesn't exist only blows up once the subprocess come
     Lineage is indexed by `Step.name`. **Renaming a step severs the lineage** — no error, the next run is simply a brand-new session.
     Suffixed names (`#retry`, `#round`, `·判定#`) never enter lineage; `Lineage.remember` always uses the original name.
 
-### Two invariants
+### Two invariants {#两条不变式}
 
 **One: write to disk the moment you get a session_id, don't wait for the step to finish.**
 
@@ -161,7 +161,7 @@ and after a directory is copied elsewhere the old session_id simply isn't findab
 
 **Continuity is a bonus; its failure must never stop someone from working.**
 
-### Process killed, versus machine rebooted
+### Process killed, versus machine rebooted {#进程被杀和机器重启}
 
 The outcome is the same for both — it continues — but the path differs:
 
@@ -175,7 +175,7 @@ The outcome is the same for both — it continues — but the path differs:
 One precondition only: **the same `workspace` plus the same `run_dir`**. `run_dir` is relative to the current working directory,
 so typing `flower` from a different directory looks for a different `runs/` and won't continue.
 
-### The judge is always a new session
+### The judge is always a new session {#判定者永远是新会话}
 
 This is **guaranteed by construction**, not by remembering.
 
@@ -187,7 +187,7 @@ Let it follow continuity and the goal guard degrades into self-audit.
 
 Section 4 of `tests/lineage_offline.py` nails this down.
 
-### What you say at wake time has to land in three places
+### What you say at wake time has to land in three places {#唤醒时说的那句话要落到三个地方}
 
 `flower "顺便支持代码块高亮"` in a directory you've used before is **not a new task, it's one more remark**.
 It does three things at once — miss any one and it silently fails:
@@ -204,7 +204,7 @@ $0.41 / 3 minutes).
 
 **Waking without saying anything** (just pressing Enter) neither appends nor re-derives, and costs nothing extra.
 
-### Crashing inside the first step (clarify requirements) still continues
+### Crashing inside the first step (clarify requirements) still continues {#崩在第一步确认需求之内也能接上}
 
 `clarify_step` carries a `resume_prompt` (the constant `CLARIFY_RESUME`): if you crash mid-clarification and start again,
 what the [clarifier](../reference/glossary.md#确认者) is told is "continue the clarification you didn't finish just now —
@@ -214,7 +214,7 @@ a run that died in the first step before `需求.md` was frozen now continues to
 Conversely, already-frozen preceding steps are **skipped entirely**: if `需求.md` has all four sections, clarify requirements is skipped (but its content is still fed into ctx),
 and if `目标.md` is complete, set goals is skipped.
 
-### On continuation it doesn't send the same words
+### On continuation it doesn't send the same words {#接续时发的不是同一句话}
 
 `Step.resume_prompt` handles this. The other side's context **already has** the brief, the goals, and where it got to last time; resending
 "do it according to this brief: <the whole brief>" verbatim is pure noise, and worse, it reads as "the requirements changed, take another look".
@@ -222,7 +222,7 @@ and if `目标.md` is complete, set goals is skipped.
 If you don't give a `resume_prompt`, `prompt` is reused — some steps genuinely should resend the full text (when set-goals re-derives the checklist,
 the complete brief is exactly what it needs).
 
-### It prints a line on wake
+### It prints a line on wake {#唤醒时先报一行}
 
 ```text
 <- 在 ~/explore/test-ide 接上上次  需求已确认 · 目标 15 条 · 干活上下文 80.2K · 第 3 次唤醒
@@ -236,7 +236,7 @@ looked up in `sessions.db`.
 
 **The context number is put there on purpose** — the reason is in the "Cost" section below.
 
-### Resilience: hang and wait when the network is down, and keep errors out of the resumed context
+### Resilience: hang and wait when the network is down, and keep errors out of the resumed context {#韧性断网时挂着等而且错误不进接续后的上下文}
 
 [Resilience](../reference/glossary.md#韧性) and continuity go together: a run that lasts hours will hit a network drop, and the default behavior is bad —
 the moment the connection drops, the harness stuffs a **synthetic assistant message** into the transcript (`isApiErrorMessage=true`,
@@ -284,7 +284,7 @@ but it only turns off the **large tool result [trimming](../reference/glossary.m
 neutralizing interruption leftovers, marking [ephemeral command](../reference/glossary.md#一次性命令) results stale — those four still happen
 (`ephemeral` defaults to `True`, `keep_denials` defaults to `1`).
 
-### Cost: context keeps growing, with no end
+### Cost: context keeps growing, with no end {#代价上下文会一直涨而且没有尽头}
 
 This is an inherent cost of continuity, not a bug.
 
@@ -305,7 +305,7 @@ Two mechanisms manage it:
 An aside: `--rounds` (total work rounds) **resets on every wake**. That's intentional — a new wake is a new intent,
 and it shouldn't inherit the rounds spent last time.
 
-### Starting something new
+### Starting something new {#重开一件事}
 
 ```bash
 flower --new "另一件事"
@@ -328,7 +328,7 @@ and lineage's `steps` and `woke` are zeroed at the same time. The three are thre
 
 In code this is `Lineage.archive(into, extra=[...])`.
 
-## When not to use it
+## When not to use it {#什么时候不该用它}
 
 - **Scenarios that require a clean start every time.** Batch-running the same workflow, running controlled evaluations, reproducing a bug for someone else —
   none of these should carry the previous context. Write `Workflow(..., continuous=False)`, or use a different `run_dir` each time.
@@ -341,7 +341,7 @@ In code this is `Lineage.archive(into, extra=[...])`.
 - **Treating continuity as a backup.** It only records "which step used which session". Code, artifacts, and decisions belong in the workspace and the
   [workbench](../reference/glossary.md#工作台), not something to dig back out of a transcript.
 
-## Related
+## Related {#相关}
 
 - [Handoff](handoff.md) — what to do when context fills up inside a single run; the same thing as this page from the other direction
 - [Goal guard](goal.md) — why the judge doesn't continue

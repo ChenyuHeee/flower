@@ -2,7 +2,7 @@
 
 Bevor gearbeitet wird, wird die Anforderung geklärt. Der [Clarifier](../reference/glossary.md#确认者) ist eine Rolle, die ausschließlich fragt und nichts anfasst; er fragt so lange, bis alles klar ist, und gibt am Ende einen [Brief](../reference/glossary.md#需求确认书) aus genau vier Abschnitten aus, der auf die Platte eingefroren wird. Jeder nachfolgende [Schritt](../reference/glossary.md#步骤) startet mit diesem Dokument und rät die Anforderung nicht erneut — und der Frage-Antwort-Verlauf **gelangt nie** in den Kontext stromabwärts.
 
-## Welches Problem das löst
+## Welches Problem das löst {#解决什么问题}
 
 Alles, was flower beim Aufräumen des Kontexts entfernt, ist **Arbeitsmaterial**: abgelaufene Zeitbezüge, entfernte abgelehnte Aufrufe, entfernte Fehlermeldungen, große Ergebnisse per [Spill](../reference/glossary.md#落盘) auf Platte. Arbeitsmaterial zu verlieren ist unkritisch — ein erneuter Lauf stellt es wieder her.
 
@@ -12,9 +12,9 @@ Ein [Long-Horizon](../reference/glossary.md#长程)-Lauf verstärkt das bis zum 
 
 Also braucht es einen Kanal, der „anhalten und nachfragen" kann — und der muss **vor** dem Arbeitsbeginn liegen.
 
-## Verwendung (minimaler Code)
+## Verwendung (minimaler Code) {#怎么用最小代码}
 
-### Ohne Code: Kommandozeile
+### Ohne Code: Kommandozeile {#零代码命令行}
 
 Ins Projektverzeichnis wechseln und direkt starten:
 
@@ -48,7 +48,7 @@ Nur sehen, was gefragt wird, ohne die Arbeit anzustoßen: `flower --clarify-only
 !!! warning "Antworten laufen über stdin — das braucht ein echtes Terminal"
     In Pipes, unter `nohup` oder in CI kann niemand antworten: Sobald stdin EOF liefert, gilt die gerade offene Frage als „Eingabe geschlossen" und wird übersprungen, und jede weitere Frage wartet den vollen `--timeout` ab. In solchen Fällen direkt `--timeout 0` setzen — alle Rückfragen laufen sofort ins Leere, das Modell entscheidet selbst und schreibt die Annahmen unter „未知与假设".
 
-### Selbst verdrahten
+### Selbst verdrahten {#自己接线}
 
 ```python
 from pathlib import Path
@@ -97,9 +97,9 @@ Wenn es hakt, zuerst an diesen Stellschrauben drehen:
 | Hängt, obwohl niemand davor sitzt | `timeout_s=0` |
 | Soll jedes Mal neu klären | `always_ask=True`, oder die Brief-Datei löschen |
 
-## Was es tatsächlich tut
+## Was es tatsächlich tut {#它实际做了什么}
 
-### Auslösezeitpunkte: drei Einhängepunkte, kein einziges neues Feld
+### Auslösezeitpunkte: drei Einhängepunkte, kein einziges neues Feld {#触发时机三处接线一个新字段都没加}
 
 Was `clarify_step()` erzeugt, ist ein ganz normaler `Step` — lediglich mit drei ausgefüllten Callbacks:
 
@@ -115,7 +115,7 @@ Was `clarify_step()` erzeugt, ist ein ganz normaler `Step` — lediglich mit dre
 
 Bei der [Fortsetzung](../reference/glossary.md#接续) eröffnet dieser Schritt mit einem anderen Satz — `CLARIFY_RESUME`: „接着刚才那次没问完的需求确认继续 —— **不是重新开始**……". Ohne diesen Satz würde die Fortsetzung das ursprüngliche Anliegen als neue Aufgabe erneut abschicken, und der Clarifier könnte bereits gestellte Fragen wiederholen.
 
-### Grenze: Der Frage-Antwort-Verlauf gelangt nicht in den nachgelagerten Kontext
+### Grenze: Der Frage-Antwort-Verlauf gelangt nicht in den nachgelagerten Kontext {#边界问答不进下游的上下文}
 
 ```text
 Klärung           eigene Session  ────→  eingefrorener Brief (4 Abschnitte) auf Platte
@@ -127,7 +127,7 @@ Das `resume_from` von `clarify_step` bleibt beim Default `None`, der nächste Sc
 
 Der Frage-Antwort-Verlauf selbst wird **an `log_path` angehängt**. Diese Kopie belegt keinen Kontext, ist von Compact nicht betroffen und existiert auch noch auf einer anderen Maschine — dieselbe Idee wie bei der Workbench.
 
-### Jeder der vier Abschnitte blockt eine Fehlerklasse
+### Jeder der vier Abschnitte blockt eine Fehlerklasse {#四段各挡一类失败}
 
 | Abschnitt | Inhalt | Was passiert, wenn er fehlt |
 |---|---|---|
@@ -145,7 +145,7 @@ Das Parsen ist bei der Schreibweise sehr nachsichtig: `## 目标` / `**目标**`
 - `Brief.parse()` **entfernt zuerst eingezäunte Codeblöcke**; trifft es auf einen **nicht geschlossenen** Zaun, wird ab dort alles Weitere verworfen. Wird die Modellausgabe abgeschnitten, lassen sich die nachfolgenden Abschnitte nicht mehr parsen → vier Abschnitte unvollständig → `gate` schickt es zurück.
 - `Brief.load()` behandelt `"(未填)"` als leer. Wer den Brief von Hand bearbeitet und den Platzhaltertext von `to_markdown()` stehen lässt, hat diesen Abschnitt weiterhin als fehlend.
 
-### Grenze: Was der Clarifier anfassen darf
+### Grenze: Was der Clarifier anfassen darf {#边界确认者能碰什么}
 
 Es lief einmal ein **unbeschränkter** Clarifier (`/tmp/probe_ask.py`, **$0.8908 / 230 Sekunden**): Nach zwei Fragen **fing er direkt an, Code zu schreiben**; nachdem die Berechtigungsschicht ihn stoppte, **klebte er den kompletten Code in den Antworttext**. Ein „schreib keinen Code" im Prompt hält das nicht auf — genau so etwas stand damals bereits in seinem System-Prompt. Deshalb gibt es zwei Mechanismen:
 
@@ -162,7 +162,7 @@ Lesen zu erlauben lohnt sich: Ein Blick ins Repository spart mehrere Fragen, und
 
 **Zweitens: Das Framework parst nur die vier Abschnitte, alles andere fliegt weg.** `Brief.parse()` entfernt erst eingezäunte Codeblöcke und sucht dann Überschriften — eingeklebter Code gelangt also nicht stromabwärts. Das ist die letzte Schleuse gegen „er verschmutzt den nachgelagerten Kontext".
 
-### Grenze: Der Rückfragekanal
+### Grenze: Der Rückfragekanal {#边界提问通道}
 
 Das Rückfragewerkzeug auf Modellseite heißt `mcp__human__ask` (Parameter `question`, optional `options`). `HumanChannel` ist ein prozessinterner MCP-Server und **registriert zwei Werkzeuge** — `mcp__human__ask` und `mcp__human__inbox`; in der genehmigungsfreien Liste des Clarifiers steht nur das erste (der Posteingang ist für den Koordinator).
 
@@ -202,7 +202,7 @@ Eine nachgemessene Eigenschaft des Mechanismus: In einem prozessinternen MCP-Wer
 !!! warning "Ein zu kleines `max_turns` macht „so lange fragen, bis es klar ist" zur leeren Behauptung"
     Das `max_turns` von `clarify()` ist standardmäßig `None` (unbegrenzt). **Jede gestellte Frage ist eine Runde** — der Wert 16 bedeutet also „höchstens gut ein Dutzend Fragen", und das greift **still**: Auf der Kanalseite steht weiterhin `max_asks=None`, also „unbegrenzt", und niemand sieht, wer die Fragen abgewürgt hat. Um Rückfragen wirklich freizugeben, müssen **beide Defaults auf `None` bleiben**: `HumanChannel.max_asks` und `clarify(max_turns=...)`.
 
-### Wo der Brief landet: zwingend in der eingehängten Workbench
+### Wo der Brief landet: zwingend in der eingehängten Workbench {#确认书落在哪必须是挂上去的那个工作台}
 
 Der Workbench-Index wird in den System-Prompt injiziert; der Koordinator weiß also von Anfang an, wo die Anforderungsdatei liegt, und muss beim Verteilen der Arbeit nur den Pfad weitergeben, statt den Inhalt in den [Task Brief](../reference/glossary.md#任务书) zu kopieren.
 
@@ -235,7 +235,7 @@ rt = Runtime(workspace="repo", workbench=True); wb = rt.workbench
 
 Wer einen eigenen Treiber schreibt (also nicht über `cli.py` geht), legt zuerst die `Workbench` an und gibt **dasselbe Objekt** sowohl an `Workflow(workbench=wb)` als auch an `Runtime(workbench=wb)`. Punkt 5 von `tests/trial_offline.py` assertet direkt, dass der Brief in `prompt_block()` auftaucht; Punkt 11 bestätigt, dass diese Assertion die Regression auch fängt.
 
-### Verifikationsstand
+### Verifikationsstand {#验证状态}
 
 **Offline alles grün** (`tests/clarify.py`, **52 Punkte**, kostenlos): die fünf Semantiken des Rückfragekanals (blockierend auf Antwort warten / Kontingent erschöpft / Timeout ins Leere / Überspringen / threadübergreifend antworten), das Parsen der vier Abschnitte (inklusive einer Probe mit eingeklebtem Code), dass die `clarify()`-Rolle **keine** Schreibwerkzeuge hat, und die drei Einhängepunkte von `clarify_step`.
 
@@ -243,7 +243,7 @@ Wer einen eigenen Treiber schreibt (also nicht über `cli.py` geht), legt zuerst
 
 **Kein Lauf gegen die echte API.** Die Sonde für $0.8908 war ein **echter Request**, aber sie hat getestet, was ein unbeschränkter Clarifier tut, nicht diesen Pfad in seiner heutigen Form.
 
-## Wann man es nicht verwenden sollte
+## Wann man es nicht verwenden sollte {#什么时候不该用它}
 
 **Die Anforderung ist bereits eingefroren.** Steht die Anforderung in einer Datei, kommt sie von einem vorgelagerten System, oder ist es ohnehin ein erneuter Lauf derselben Sache — dann gibt es nichts zu fragen. Den Anforderungstext direkt in den Arbeitsschritt geben, oder `clarify_step` stehen lassen und es per `when` überspringen (existiert der Brief, fragt es ohnehin nicht).
 

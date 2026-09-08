@@ -10,7 +10,7 @@ Relancer `flower` dans le même répertoire, et il reprend la conversation là o
     Les deux s'emboîtent automatiquement, sans câblage supplémentaire : le [lignage](../reference/glossary.md#血缘) retient toujours la **dernière**
     session ayant pris le relais pour cette étape, donc le réveil suivant reprend celle du successeur.
 
-## Quel problème ça résout
+## Quel problème ça résout {#解决什么问题}
 
 Tout est en fait sur le disque. `runs/sessions.db` contient le transcript **complet** de chaque session historique, `需求.md` / `目标.md`
 sont des artefacts gelés, et le code est dans l'espace de travail.
@@ -21,7 +21,7 @@ quelles impasses il a explorées, pourquoi il a écarté telle approche — tout
 
 Dans [HT002](../cases/ht002.md), il a passé une heure à tester des flags de compilation. Changez de processus, et cette heure est perdue.
 
-## Comment s'en servir (code minimal)
+## Comment s'en servir (code minimal) {#怎么用最小代码}
 
 Rien à configurer en ligne de commande, la continuité est activée par défaut sur ce chemin `flower` :
 
@@ -81,9 +81,9 @@ asyncio.run(main())
     `checks` = nombre d'entrées dans la liste de vérification ; `woke` = nombre de réveils déjà effectués ; `steps` = correspondance nom d'étape → session_id.
     C'est là-dessus que la ligne de commande décide si l'invite doit demander « que faire » ou « continuer ».
 
-## Ce que ça fait réellement
+## Ce que ça fait réellement {#它实际做了什么}
 
-### Les trois fichiers posés sur le disque
+### Les trois fichiers posés sur le disque {#落在磁盘上的三个文件}
 
 `run_dir` vaut `./runs` par défaut, **relatif au répertoire de travail courant, pas au workspace**.
 
@@ -115,7 +115,7 @@ Le nom d'étape y prend quatre formes, qui montrent d'un coup d'œil comment l'�
 L'écriture est **en append, pas en écrasement** : à chaque écriture le fichier est relu, la déduplication se fait sur le champ `run` — les lignes de ce processus sont remplacées par les plus récentes,
 celles des autres sont laissées telles quelles. Faire tourner plusieurs flower en parallèle dans le même répertoire est donc sûr.
 
-### `continuous=True` change la sémantique de `resume_from`
+### `continuous=True` change la sémantique de `resume_from` {#continuoustrue-改变了-resume_from-的语义}
 
 C'est le point le plus facile à manquer : `Workflow.continuous` vaut `True` par défaut, donc `resume_from=None`
 **ne signifie pas « nouvelle session »**.
@@ -136,7 +136,7 @@ et un resume sur une session inexistante n'explose qu'une fois le sous-processus
     Le lignage est indexé par `Step.name`. **Changer le nom d'une étape revient à couper le lignage** — sans erreur, simplement une session neuve au run suivant.
     Les noms suffixés (`#retry`, `#round`, `·判定#`) n'entrent pas dans le lignage, `Lineage.remember` utilise toujours le nom d'origine.
 
-### Deux invariants
+### Deux invariants {#两条不变式}
 
 **Un. On écrit sur disque dès qu'on a le session_id, sans attendre la fin de l'étape.**
 
@@ -161,7 +161,7 @@ et après copie du répertoire, l'ancien session_id est introuvable au nouvel em
 
 **La continuité est un bonus, sa défaillance ne doit pas empêcher de travailler.**
 
-### Processus tué, et redémarrage machine
+### Processus tué, et redémarrage machine {#进程被杀和机器重启}
 
 Les deux cas donnent le même résultat — ça reprend — mais le déroulé diffère :
 
@@ -175,7 +175,7 @@ Les deux cas donnent le même résultat — ça reprend — mais le déroulé di
 Une seule condition : **même `workspace` et même `run_dir`**. `run_dir` est relatif au répertoire de travail courant,
 donc lancer `flower` depuis un autre répertoire cherchera un autre `runs/`, et ne reprendra pas.
 
-### Le juge est toujours une session neuve
+### Le juge est toujours une session neuve {#判定者永远是新会话}
 
 C'est **garanti par construction**, pas par mémoire.
 
@@ -187,7 +187,7 @@ Le faire suivre la continuité dégraderait le gardien d'objectif en auto-audit.
 
 La section 4 de `tests/lineage_offline.py` verrouille ce point.
 
-### La phrase dite au réveil doit atterrir à trois endroits
+### La phrase dite au réveil doit atterrir à trois endroits {#唤醒时说的那句话要落到三个地方}
 
 `flower "顺便支持代码块高亮"` dans un répertoire déjà utilisé, ce **n'est pas une nouvelle tâche, c'est une phrase de plus**.
 Elle fait trois choses à la fois — s'il en manque une, l'échec est silencieux :
@@ -204,7 +204,7 @@ $0.41 / 3 minutes).
 
 **Un réveil sans rien dire** (entrée directe) n'ajoute rien, ne re-dérive rien, et ne coûte pas un centime de plus.
 
-### Un plantage à l'intérieur de la première étape (确认需求) est aussi reprenable
+### Un plantage à l'intérieur de la première étape (确认需求) est aussi reprenable {#崩在第一步确认需求之内也能接上}
 
 `clarify_step` embarque un `resume_prompt` (constante `CLARIFY_RESUME`) : en cas de plantage pendant la clarification, au redémarrage
 on dit au [clarificateur](../reference/glossary.md#确认者) « 接着刚才那次没问完的需求确认继续 ——
@@ -214,7 +214,7 @@ un run mort dans la première étape, avec `需求.md` pas encore gelé, est dé
 Inversement, les étapes préalables déjà gelées sont **entièrement sautées** : si les quatre sections de `需求.md` sont complètes, 确认需求 est sautée (mais son contenu est tout de même injecté dans ctx),
 et si `目标.md` est complet, 设定目标 est sautée.
 
-### À la reprise, ce n'est pas la même phrase qui est envoyée
+### À la reprise, ce n'est pas la même phrase qui est envoyée {#接续时发的不是同一句话}
 
 C'est le rôle de `Step.resume_prompt`. L'interlocuteur a **déjà** dans son contexte le brief, l'objectif, et où il en était — lui renvoyer tel quel
 « fais selon ce brief : <brief intégral> » n'est que du bruit, et pire, ça peut se lire comme « le besoin a changé, relis tout ».
@@ -222,7 +222,7 @@ C'est le rôle de `Step.resume_prompt`. L'interlocuteur a **déjà** dans son co
 Sans `resume_prompt`, on retombe sur `prompt` — certaines étapes doivent effectivement renvoyer le texte intégral (quand 设定目标 re-dérive la liste,
 c'est précisément le brief complet qu'il lui faut).
 
-### Au réveil, une ligne de rapport d'abord
+### Au réveil, une ligne de rapport d'abord {#唤醒时先报一行}
 
 ```text
 <- 在 ~/explore/test-ide 接上上次  需求已确认 · 目标 15 条 · 干活上下文 80.2K · 第 3 次唤醒
@@ -236,7 +236,7 @@ la taille de contexte du dernier tour de cette session.
 
 **Ce chiffre de contexte est affiché délibérément** — la raison est dans la section « Coût » plus bas.
 
-### Résilience : attendre quand le réseau tombe, et ne pas laisser les erreurs entrer dans le contexte repris
+### Résilience : attendre quand le réseau tombe, et ne pas laisser les erreurs entrer dans le contexte repris {#韧性断网时挂着等而且错误不进接续后的上下文}
 
 La [résilience](../reference/glossary.md#韧性) va de pair avec la continuité : sur plusieurs heures d'exécution, le réseau tombera forcément une fois, et le comportement par défaut est mauvais —
 à l'instant de la coupure, le harness insère dans le transcript un **message assistant synthétique** (`isApiErrorMessage=true`,
@@ -285,7 +285,7 @@ mais il ne désactive que la couche de **[trim](../reference/glossary.md#裁剪)
 neutraliser les résidus d'interruption, marquer comme périmés les résultats de [commandes éphémères](../reference/glossary.md#一次性命令) — ces quatre choses restent faites
 (`ephemeral` vaut `True` par défaut, `keep_denials` vaut `1` par défaut).
 
-### Coût : le contexte ne fait que monter, sans fin
+### Coût : le contexte ne fait que monter, sans fin {#代价上下文会一直涨而且没有尽头}
 
 C'est le coût intrinsèque de la continuité, pas un bug.
 
@@ -306,7 +306,7 @@ Deux mécanismes gèrent ça :
 Au passage : `--rounds` (nombre total de rounds de travail) **est remis à zéro à chaque réveil**. C'est intentionnel — un nouveau réveil est une nouvelle intention,
 il n'a pas à hériter des rounds consommés la fois précédente.
 
-### Repartir sur autre chose
+### Repartir sur autre chose {#重开一件事}
 
 ```bash
 flower --new "另一件事"
@@ -329,7 +329,7 @@ et les champs `steps` et `woke` du lignage sont remis à zéro en même temps. C
 
 Côté code, cela correspond à `Lineage.archive(into, extra=[...])`.
 
-## Quand ne pas s'en servir
+## Quand ne pas s'en servir {#什么时候不该用它}
 
 - **Les cas qui exigent un point de départ propre à chaque fois.** Exécuter le même workflow en lot, faire une évaluation comparative, reproduire un bug pour quelqu'un —
   rien de tout ça ne doit traîner le contexte précédent. Écrivez `Workflow(..., continuous=False)`, ou changez de `run_dir` à chaque fois.
@@ -342,7 +342,7 @@ Côté code, cela correspond à `Lineage.archive(into, extra=[...])`.
 - **Prendre la continuité pour une sauvegarde.** Elle ne retient que « quelle étape a utilisé quelle session ». Le code, les livrables et les décisions doivent atterrir dans l'espace de travail et le
   [workbench](../reference/glossary.md#工作台), on ne doit pas espérer les déterrer du transcript.
 
-## Voir aussi
+## Voir aussi {#相关}
 
 - [Handoff](handoff.md) — que faire quand le contexte est plein à l'intérieur d'un même run ; c'est la même chose vue dans l'autre sens
 - [Gardien d'objectif](goal.md) — pourquoi le juge ne reprend pas

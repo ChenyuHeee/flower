@@ -2,7 +2,7 @@
 
 Avant de mettre les mains dedans, on tire le besoin au clair. Le [clarificateur](../reference/glossary.md#确认者) est un rôle qui **pose des questions et ne touche à rien**, jusqu'à ce que ce soit clair ; il produit à la fin un [brief](../reference/glossary.md#需求确认书) de très exactement quatre sections, figé sur le disque. Chaque [étape](../reference/glossary.md#步骤) suivante démarre en lisant ce document au lieu de deviner le besoin à nouveau — et cet échange de questions-réponses **n'est jamais entré** dans le contexte en aval.
 
-## Le problème résolu
+## Le problème résolu {#解决什么问题}
 
 Tout ce que les mécanismes de nettoyage de contexte de flower éliminent, c'est du **matériel de terrain** : expiration par obsolescence, retrait des appels refusés, retrait des messages d'erreur, [déversement](../reference/glossary.md#落盘) des gros résultats sur le disque. Perdre le matériel de terrain n'est pas grave : il suffit de relancer pour le ravoir.
 
@@ -12,9 +12,9 @@ Le [long-horizon](../reference/glossary.md#长程) amplifie ça au pire : la pr�
 
 Il faut donc un canal capable de « s'arrêter pour demander », et il doit être **avant** le début du travail.
 
-## Comment s'en servir (code minimal)
+## Comment s'en servir (code minimal) {#怎么用最小代码}
 
-### Zéro code : la ligne de commande
+### Zéro code : la ligne de commande {#零代码命令行}
 
 Dans le répertoire du projet, lancez directement :
 
@@ -48,7 +48,7 @@ Voir seulement ses questions sans enchaîner sur le travail : `flower --clarify-
 !!! warning "Les réponses passent par l'entrée standard : il faut un vrai terminal"
     Dans un pipe, sous `nohup`, en CI, personne ne peut répondre : dès que stdin atteint EOF, la question en attente est traitée comme « entrée fermée » et sautée, puis chaque question suivante attend pour rien tout le `--timeout`. Dans ce cas, mettez directement `--timeout 0` — toutes les questions retombent immédiatement dans le vide, il tranche lui-même et écrit ses hypothèses dans « inconnues et hypothèses ».
 
-### Câbler soi-même
+### Câbler soi-même {#自己接线}
 
 ```python
 from pathlib import Path
@@ -97,9 +97,9 @@ Quand ça ne tourne pas rond, commencez par ces boutons :
 | Ça bloque alors que personne ne surveille | `timeout_s=0` |
 | Vous voulez reclarifier à chaque fois | `always_ask=True`, ou supprimez le fichier du brief |
 
-## Ce qu'il fait réellement
+## Ce qu'il fait réellement {#它实际做了什么}
 
-### Déclenchement : trois points de câblage, aucun champ nouveau
+### Déclenchement : trois points de câblage, aucun champ nouveau {#触发时机三处接线一个新字段都没加}
 
 Ce que fabrique `clarify_step()` est un `Step` ordinaire, avec simplement trois callbacks remplis :
 
@@ -115,7 +115,7 @@ Ce que fabrique `clarify_step()` est un `Step` ordinaire, avec simplement trois 
 
 En [continuité](../reference/glossary.md#接续), cette étape change sa phrase d'ouverture — `CLARIFY_RESUME` : « on reprend la clarification du besoin restée inachevée — **ce n'est pas un nouveau départ**… ». Sans cette phrase, la continuité renvoie la demande d'origine comme une tâche neuve et le clarificateur risque de reposer des questions déjà posées.
 
-### Frontière : les questions-réponses n'entrent pas dans le contexte aval
+### Frontière : les questions-réponses n'entrent pas dans le contexte aval {#边界问答不进下游的上下文}
 
 ```text
 确认需求        session isolée  ────→  un brief figé de quatre sections sur le disque
@@ -127,7 +127,7 @@ Le `resume_from` de `clarify_step` garde son défaut `None`, donc l'étape suiva
 
 Les questions-réponses elles-mêmes sont **ajoutées à la fin de `log_path`**. Ce fichier n'occupe pas de contexte, n'est pas affecté par le compact, et survit à un changement de machine — c'est la même idée que le workbench.
 
-### Les quatre sections bloquent chacune une classe d'échec
+### Les quatre sections bloquent chacune une classe d'échec {#四段各挡一类失败}
 
 | Section | Contenu | Ce qui arrive si elle manque |
 |---|---|---|
@@ -145,7 +145,7 @@ Le parsing est très tolérant sur la forme : `## 目标` / `**目标**` / `目�
 - `Brief.parse()` **retire d'abord les blocs de code délimités** ; s'il rencontre une clôture **non fermée**, tout ce qui suit est jeté à partir de là. Quand la sortie du modèle est tronquée, aucune des sections suivantes n'est parsée → quatre sections incomplètes → `gate` renvoie l'étape à zéro.
 - `Brief.load()` traite `"(未填)"` comme vide. Si en éditant le brief à la main vous recopiez le texte de remplissage produit par `to_markdown()`, cette section compte toujours comme manquante.
 
-### Frontière : à quoi le clarificateur peut toucher
+### Frontière : à quoi le clarificateur peut toucher {#边界确认者能碰什么}
 
 Un clarificateur **non contraint** a été exécuté (`/tmp/probe_ask.py`, **$0.8908 / 230 secondes**) : après deux questions, il **s'est mis à écrire du code** ; bloqué par les permissions, il a **collé l'intégralité du code dans le corps de sa réponse**. Écrire « n'écris pas de code » dans le prompt n'arrête pas ça — son system prompt de l'époque contenait déjà une phrase de ce genre. Il y a donc deux mécanismes :
 
@@ -162,7 +162,7 @@ Lui donner la lecture est rentable : un coup d'œil au dépôt économise plusie
 
 **Deux : le framework ne parse que ces quatre sections et jette tout le reste.** `Brief.parse()` extrait d'abord les blocs de code délimités puis cherche les titres — même collé, le code n'atteint pas l'aval. C'est le dernier verrou contre « il pollue l'aval ».
 
-### Frontière : le canal de questions
+### Frontière : le canal de questions {#边界提问通道}
 
 Côté modèle, l'outil de question s'appelle `mcp__human__ask` (paramètre `question`, `options` facultatif). `HumanChannel` est un serveur MCP in-process qui **enregistre deux outils** — `mcp__human__ask` et `mcp__human__inbox` ; la liste sans approbation du clarificateur ne contient que le premier (la boîte de réception est pour le coordinateur).
 
@@ -201,7 +201,7 @@ Un fait de mécanique vérifié en mesure réelle : dans un handler d'outil MCP 
 !!! warning "`max_turns` trop petit et « questionner jusqu'à ce que ce soit clair » devient un vœu pieux"
     Le `max_turns` de `clarify()` vaut `None` par défaut (illimité). **Chaque question posée est un tour** — le mettre à 16 revient à dire « une dizaine de questions au maximum », et cela prend effet **en silence** : du côté du canal, `max_asks=None` continue d'annoncer « pas de limite », et personne ne voit qui a coupé le robinet. Pour laisser les questions ouvertes, **les deux valeurs par défaut doivent rester à `None`** : `HumanChannel.max_asks` et `clarify(max_turns=...)`.
 
-### Où le brief atterrit : forcément le workbench rattaché
+### Où le brief atterrit : forcément le workbench rattaché {#确认书落在哪必须是挂上去的那个工作台}
 
 L'index du workbench est injecté dans le system prompt : le coordinateur sait dès le départ où est le fichier de besoin et n'a qu'à passer le chemin quand il distribue le travail, sans recopier le contenu dans le [brief de tâche](../reference/glossary.md#任务书).
 
@@ -234,7 +234,7 @@ rt = Runtime(workspace="repo", workbench=True); wb = rt.workbench
 
 Quand vous écrivez votre propre pilote (sans passer par `cli.py`), créez d'abord le `Workbench`, puis donnez **le même objet** à la fois à `Workflow(workbench=wb)` et à `Runtime(workbench=wb)`. Le point 5 de `tests/trial_offline.py` assère directement que « le brief apparaît dans `prompt_block()` », et le point 11 confirme que cette assertion attrape bien la régression.
 
-### État de la validation
+### État de la validation {#验证状态}
 
 **Tout vert hors ligne** (`tests/clarify.py`, **52 points**, sans dépense) : les cinq sémantiques du canal de questions (attente bloquante d'une réponse / quota épuisé / retombée par timeout / question sautée / réponse depuis un autre thread), le parsing des quatre sections (dont un échantillon « du code a été collé dedans »), l'**absence** d'outils d'écriture pour le rôle `clarify()`, les trois points de câblage de `clarify_step`.
 
@@ -242,7 +242,7 @@ Quand vous écrivez votre propre pilote (sans passer par `cli.py`), créez d'abo
 
 **Jamais exécuté contre l'API réelle.** La sonde à $0.8908 était une **requête réelle**, mais elle mesurait « ce que fait un clarificateur non contraint », pas le chemin actuel.
 
-## Quand ne pas l'utiliser
+## Quand ne pas l'utiliser {#什么时候不该用它}
 
 **Le besoin est déjà un artefact figé.** Le besoin est écrit dans un fichier, imposé par un système en amont, ou bien il s'agit de refaire exactement la même chose — il n'y a rien à demander. Passez directement le texte du besoin à l'étape de travail, ou gardez `clarify_step` et laissez son `when` sauter l'étape (avec le brief présent, il ne demande de toute façon rien).
 

@@ -4,7 +4,7 @@ El núcleo de flower no sabe que exista una UI. Todo lo que ocurre dentro de una
 **La [capa de interacción](../reference/glossary.md#交互层) solo conoce `Event`, no importa ningún tipo del SDK.**
 Esa es la frontera que permite cambiar de UI sin tocar el núcleo: terminal, web, servicio HTTP, modo totalmente automático sin supervisión — lo que se sustituye es el consumidor de `Event`, y nada más.
 
-## Qué problema resuelve
+## Qué problema resuelve {#解决什么问题}
 
 El flujo de mensajes del SDK son **tipos internos**: `AssistantMessage`, `ToolUseBlock`, `ToolResultBlock`,
 `ResultMessage`, `SystemMessage`… Consumirlos directamente desde la UI tiene dos consecuencias: cada vez que el SDK sube de versión, el frontend tiene que cambiar; y como cada mensaje tiene una forma distinta, cada UI vuelve a escribir desde cero la lógica de «esto es texto o es una llamada a herramienta».
@@ -23,7 +23,7 @@ Esa frontera resuelve de paso cuatro cosas menos evidentes, las cuatro dentro de
 4. **El nivel de contexto sale con cada mensaje** (`payload["context"]` = `input_tokens` +
    `cache_read_input_tokens` + `cache_creation_input_tokens`). Es la única fuente del criterio de [handoff](../reference/glossary.md#换代).
 
-## Cómo se usa (código mínimo)
+## Cómo se usa (código mínimo) {#怎么用最小代码}
 
 Una capa de interacción tiene que conectar tres cosas: **la salida de eventos** (dónde se renderiza), **el canal de preguntas** (quién responde) y **la interrupción** (cómo se para). El fragmento siguiente las conecta todas y se puede ejecutar tal cual:
 
@@ -86,7 +86,7 @@ Dos remates que se olvidan con facilidad: `rt.close()` siempre en `finally`; y s
     O le pasas a `Runtime` el que ya creó el workflow (como arriba),
     o usas la sonda de solo lectura `wake_state()` para preguntarle dónde está.
 
-### Tres salidas de eventos
+### Tres salidas de eventos {#三个事件出口}
 
 ```python
 await rt.run(spec, "…", on_event=sink)                  # 1. un solo agente
@@ -102,7 +102,7 @@ ch = HumanChannel(on_event=my_own_sink)     # lo conectas tú, Workflow no lo to
 
 `on_step(step, result)` es otro callback: se llama una vez al terminar cada paso (**incluidos los fallidos**) y recibe el `StepResult` completo. Barra de progreso, escritura a disco y alertas van aquí; no intentes reconstruirlo a partir del flujo de `Event` — el texto queda partido en varios trozos por los handoff y los reintentos.
 
-### Terminal: la que viene por defecto
+### Terminal: la que viene por defecto {#终端默认的那个}
 
 Hay una sin escribir código. `flower "帮我做一个 X"` pasa por
 [`flower/cli.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/cli.py),
@@ -150,7 +150,7 @@ Los tres puntos salen de tropezar con ellos:
 - **Usa `select` con polling, no `input()` directamente dentro del bucle.** Mismo problema de cancelación: a un hilo bloqueado en `input()`, `stop.set()` ya no lo despierta.
 - **Lee siempre, no solo cuando hay una pregunta.** Si solo lees cuando hay pregunta, todo lo que se teclee durante esas horas de trabajo queda en el búfer de la terminal y, en la siguiente pregunta, se consume como respuesta — la persona ni siquiera ha visto la pregunta y ya está «respondida».
 
-### Web: cola + WebSocket
+### Web: cola + WebSocket {#web队列--websocket}
 
 ```python
 events: asyncio.Queue[dict] = asyncio.Queue()
@@ -176,7 +176,7 @@ def answer(ask_id: str, text: str) -> dict:
 
 `ev.raw` es el objeto original del SDK (en los eventos `ask`, un `Ask`), **no es serializable a JSON y tampoco lo mandes al frontend** — usar `raw` equivale a atar el frontend otra vez a los tipos del SDK, y entonces esta capa no sirve de nada. Con los cuatro campos `kind` / `text` / `tool` / `payload` hay de sobra.
 
-### HTTP: número de secuencia + polling
+### HTTP: número de secuencia + polling {#http序号--轮询}
 
 Cuando no hay conexión persistente, numera los eventos para que el cliente los tire:
 
@@ -211,7 +211,7 @@ def answer(ask_id: str, text: str) -> dict:
 
 Hay que asumir dos límites: cuando `maxlen` se llena se pierden los más antiguos, así que si el cliente vuelve con un `after` muy viejo ya no lo recupera todo, y el intervalo de polling tiene que estar a la altura de esa longitud; y además **hay que darle a `timeout_s` un valor finito** — si nadie hace polling, la pregunta no termina sola, y `timeout_s=None` deja la ejecución entera colgada para siempre. El valor por defecto de `1800.0` segundos es adecuado.
 
-### Totalmente automático, sin supervisión: no hay nadie
+### Totalmente automático, sin supervisión: no hay nadie {#全自动无人值守没有人}
 
 ```python
 wf = starter_flow("帮我做一个 X", workspace=".", run_dir="runs", timeout_s=0)
@@ -235,9 +235,9 @@ Ojo: esto **no es** «quitarle la herramienta» — `allowed_tools` no es excluy
 !!! warning "Sin supervisión, no dejes preguntas esperando para siempre"
     `timeout_s=None` significa «esperar siempre». Cuando no hay nadie mirando, una sola pregunta puede dejar clavada una ejecución de diez horas, sin error, sin timeout y sin que se note nada en el log. Sin supervisión solo hay dos valores correctos: `0` (falla al instante) o un número finito de segundos.
 
-## Qué hace en realidad
+## Qué hace en realidad {#它实际做了什么}
 
-### La forma de `Event`
+### La forma de `Event` {#event-的形状}
 
 ```python
 @dataclass
@@ -251,7 +251,7 @@ class Event:
 
 `str(ev)`: en `tool_call` es `[nombre de la herramienta] resumen`, en el resto es `text`; si `text` está vacío, es `<kind>`.
 
-### Los 15 `EventKind`
+### Los 15 `EventKind` {#15-个-eventkind}
 
 | `kind` | Quién lo emite | Cuándo aparece | `text` | `payload` |
 |---|---|---|---|---|
@@ -275,7 +275,7 @@ class Event:
 
 Cuando escribas la UI, deja una rama `else`. `EventKind` seguirá ganando miembros nuevos, y una UI vieja no debería romperse por eso.
 
-### Las tres phase de `handoff`
+### Las tres phase de `handoff` {#handoff-的三个-phase}
 
 | `phase` | Cuándo se emite | Extra en `payload` |
 |---|---|---|
@@ -285,7 +285,7 @@ Cuando escribas la UI, deja una rama `else`. `EventKind` seguirá ganando miembr
 
 El mecanismo en sí está en [handoff](handoff.md).
 
-### Las dos identidades de `ask`
+### Las dos identidades de `ask` {#ask-的两种身份}
 
 `Event("ask")` transporta a la vez «una pregunta» y «algo que dijo una persona por su cuenta»; **la UI tiene que mirar primero `payload["kind"]`**:
 
@@ -296,7 +296,7 @@ El mecanismo en sí está en [handoff](handoff.md).
 
 Una pregunta emite eventos **dos veces o más**: una al preguntar (`state="asked"`) y otra al terminar (`answered` / `timeout` / `declined` / `over_budget` / `invalid`). A la UI le basta con actualizar la misma entrada según `payload["id"]`.
 
-### Preguntar a una persona: `Ask` y `HumanChannel`
+### Preguntar a una persona: `Ask` y `HumanChannel` {#问人ask-与-humanchannel}
 
 ```python
 @dataclass
@@ -374,7 +374,7 @@ Los tres «0 / None» tienen semánticas distintas, y confundirlos significa que
 | `timeout_s<=0` | No espera, la pregunta falla al instante |
 | `remaining` devuelve `-1` | Es el valor con `max_asks=None`, no 0 |
 
-### Interrupción: cualquier hilo puede parar
+### Interrupción: cualquier hilo puede parar {#打断任何线程都能喊停}
 
 `rt.interrupt("别改 Makefile,那两行直接改")`; con la cadena vacía, solo interrumpe sin decir nada. Tres propiedades:
 
@@ -386,7 +386,7 @@ Digamos el coste tal cual: una interrupción hace que **un subagent en vuelo pie
 
 Si no quieres interrumpir y solo quieres añadir un requisito, usa la bandeja de entrada (`ch.send(...)`) — no interrumpe nada, y la latencia es hasta el siguiente punto de control del agente.
 
-### Oráculo: preguntar sin molestar a la ejecución
+### Oráculo: preguntar sin molestar a la ejecución {#旁路顾问问一句而不打扰运行}
 
 Si quieres saber «por dónde va ahora», no hace falta interrumpir, y tampoco deberías preguntárselo al coordinador: ese intercambio **ocupa el contexto del hilo principal de forma permanente** (que está para decisiones, no para registros de preguntas y respuestas), y además le obliga a soltar lo que tiene entre manos. En una ejecución de diez horas, tres preguntas sueltas ya pagan ambos costes.
 
@@ -395,7 +395,7 @@ Usa un `Runtime` independiente (`<run_dir>/aside`), así que el coste y el [lina
 
 Medido: dos preguntas por un total de $0.5190, y el manifiesto de la ejecución principal no creció ni un byte.
 
-### Dos reglas duras
+### Dos reglas duras {#两条硬规矩}
 
 !!! warning "on_event ni puede bloquear ni puede dejar escapar excepciones"
     **Una: `on_event` es una función síncrona y se llama en el hilo del bucle de eventos.** Por eso
@@ -406,9 +406,9 @@ Medido: dos preguntas por un total de $0.5190, y el manifiesto de la ejecución 
 
     Excepción: los eventos `ask` que emite el propio `HumanChannel` ya vienen envueltos; la excepción se recoge en `channel.ui_errors` y no interrumpe la ejecución.
 
-## Cuándo no usarlo
+## Cuándo no usarlo {#什么时候不该用它}
 
-### Lo que no se debe hacer en la capa de interacción
+### Lo que no se debe hacer en la capa de interacción {#交互层里不该做的事}
 
 | Qué no hacer | Por qué | Qué hacer en su lugar |
 |---|---|---|
@@ -422,7 +422,7 @@ Medido: dos preguntas por un total de $0.5190, y el manifiesto de la ejecución 
 | Reconstruir progreso y resultados a partir del flujo de `Event` | El texto queda partido en varios trozos por los handoff y los reintentos | `on_step(step, result)` te da el `StepResult` completo |
 | Usar `timeout_s=None` sin supervisión | No hay quien responda, la ejecución queda colgada para siempre, sin error y sin timeout | `0`, o un número finito de segundos |
 
-### Cuándo no hace falta cambiar nada
+### Cuándo no hace falta cambiar nada {#什么时候根本不用换}
 
 - **Solo quieres cambiar colores o imprimir una línea más o menos** — con modificar la función de renderizado basta. Reescribir desde cero la interrupción, el oráculo, los acuses de la bandeja, el rescate ante SIGHUP / SIGTERM y la espera al cierre de la vía lateral que hay en la implementación de referencia de terminal no sale barato.
 - **Solo quieres ejecutar un paso, sin interacción** — usa `flower once`. No pasa por la vía dirigida por interacción, así que de entrada no tiene interrupción con Ctrl+C, ni hilo de respuesta por entrada estándar, ni oráculo, ni rescate por señales.

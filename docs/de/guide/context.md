@@ -2,7 +2,7 @@
 
 Der Kontext des [Main Thread](../reference/glossary.md#主线程) ist das Einzige, was einen [Long-Horizon](../reference/glossary.md#长程)-Lauf von Anfang bis Ende durchzieht; was darin liegt und was nicht, entscheidet, wie weit dieser Lauf kommt. Die Form von flower — der [Koordinator](../reference/glossary.md#协调者) legt nicht selbst Hand an, lange Ausgaben landen auf Platte, Hooks schneiden sofort weg — folgt vollständig aus diesem einen Satz. Diese Seite erklärt, warum.
 
-## Welches Problem das löst
+## Welches Problem das löst {#解决什么问题}
 
 [Compact](../reference/glossary.md#压缩) wartet, bis der Kontext voll ist, und fasst dann rückblickend zusammen — Symptombehandlung. Das eigentliche Problem lautet:
 **Kleinkram hat im Main Thread von Anfang an nichts zu suchen.**
@@ -22,7 +22,7 @@ flower löst das in vier Schichten, die Reihenfolge ist zugleich die Priorität 
 
 Die ersten beiden Schichten regeln, **ob etwas überhaupt hereinkommt**, die letzten beiden, **ob das bereits Hereingekommene bleibt**. Die Reihenfolge lässt sich nicht umkehren: Schicht vier kann noch so hart sein, sie holt die Menge nicht wieder ein, die Schicht eins durchgelassen hat.
 
-## Wie man es benutzt (minimaler Code)
+## Wie man es benutzt (minimaler Code) {#怎么用最小代码}
 
 ```python
 from flower import Runtime, coordinator, worker
@@ -41,9 +41,9 @@ Diese paar Zeilen installieren die ersten drei Schichten: `coordinator()` setzt 
     Der `delegate_guard`, der den Koordinator vom Handanlegen abhält, hängt in `workbench_hooks`, und `workbench_hooks` wird nur installiert, wenn `Runtime` eine Workbench hat; `whitelist_guard` wiederum wird wegen `delegate_only=True` übersprungen.
     Fazit: **Bei `Runtime(workbench=False)` zusammen mit `coordinator()` steht vor Bash / Write / Edit im Main Thread keine einzige Mauer.**
 
-## Was es tatsächlich tut
+## Was es tatsächlich tut {#它实际做了什么}
 
-### Schicht eins: Arbeitsteilung (spart am meisten)
+### Schicht eins: Arbeitsteilung (spart am meisten) {#第一层分工省得最多}
 
 Der Koordinator spielt „einen Menschen, der Claude Code bedienen kann": zerlegen, delegieren, Berichte lesen, entscheiden. Er bekommt kein Bash / Write / Edit — die Tools sind nur `Agent`, `TodoWrite`, `Read`
 (bei `glance=True` zusätzlich ein eingeschränktes `Bash`, siehe unten). Alles Handanlegen geht an
@@ -68,7 +68,7 @@ Gespart wird Kontext, nicht Modellklasse: `worker()` setzt standardmäßig `mode
 Der einzige Gegenposten der Arbeitsteilung ist der [Task Brief](../reference/glossary.md#任务书) — der Text, den der Koordinator beim Delegieren schreibt; er geht in den Main Thread und bleibt dort dauerhaft. Gemessen wiederholten 8/8 Task Briefs Disziplinregeln, die der Gegenseite längst bekannt sind; im kürzesten mit 521 Zeichen waren nur rund 120 Zeichen aufgabenspezifisch, eine Runde verschenkt so etwa 4.8k dauerhaften Kontext. Deshalb steht in `COORDINATOR_RULES` fest verdrahtet:
 **Ein Task Brief enthält nur das, was für diese Aufgabe spezifisch ist.** Die einzige Regel, die trotzdem mitgegeben werden muss, ist „wo die Workbench liegt + lange Ausgaben nach `artifacts/` + Antwort nur mit Pfad und Schlussfolgerung" — denn der Workbench-Index erreicht den subagent nicht, der Task Brief ist der einzige Kanal.
 
-### Schicht zwei: Workbench (behebt das „jedes Mal neu schreiben")
+### Schicht zwei: Workbench (behebt das „jedes Mal neu schreiben") {#第二层工作台治每次重写}
 
 Drei Verzeichnisse unter `.flower/` wandern mit dem Workspace mit:
 
@@ -90,7 +90,7 @@ Diese Schicht wirkt wegen eines Unterschieds: Der Compact räumt den Kontext ab,
     **erbt ihn nicht** (gemessen $0.2461, `tests/prelude_live.py`). Deshalb muss „wo die Workbench liegt + lange Ausgaben nach
     `artifacts/`" vom Koordinator im Task Brief weitergegeben werden — das ist der einzige Kanal, keine Redundanz.
 
-### Schicht drei: Sofortiges Spill
+### Schicht drei: Sofortiges Spill {#第三层当场落盘}
 
 `spill_guard` ist ein `PostToolUse`-Hook, der Tool-Ergebnisse **bevor sie ins Modell gehen** einmal ansieht: Alles über `threshold`
 (Default **4000** Zeichen) wird in das `spill/`-Verzeichnis der Workbench [gespillt](../reference/glossary.md#落盘),
@@ -109,7 +109,7 @@ Runtime(workspace="repo", workbench=True, spill_threshold=4000)   # None oder 0 
 
 **Wie viel es spart**: In dem Lauf aus [HT001](../cases/ht001.md) wurden 103-mal gespillt, 791.4K Zeichen durch Pfadzeiger ersetzt, ohne dauerhaft im Kontext zu liegen.
 
-### Schicht vier: Trim und Prune
+### Schicht vier: Trim und Prune {#第四层裁剪与剪除}
 
 Diese Schicht sitzt im [Session-Store](../reference/glossary.md#会话存储). Der Store von `Runtime` ist immer ein
 `PruningSessionStore` (Vererbungskette `SqliteSessionStore` ← `TrimmingSessionStore` ←
@@ -146,7 +146,7 @@ Wichtiger als Token ist, dass es **in die Irre führt**: Gemessen las der Koordi
 
 `Runtime(trim=False)` (Default) **heißt nicht, dass gar nichts geräumt wird**: Es schaltet nur das Trimmen großer Ergebnisse ab; Alterung, abgelehnte Aufrufe und Verbindungsabbruch-Reste werden weiterhin bearbeitet.
 
-### Gegenbeispiel: kurz hinschauen macht man selbst
+### Gegenbeispiel: kurz hinschauen macht man selbst {#反例看一眼的活自己干}
 
 Die ersten drei Schichten sagen alle „delegieren", aber es gibt ein Gegenbeispiel: Kommandos wie `git status`, `ls`, `cat` liefern ein paar Dutzend Zeichen Ergebnis, während **allein der Start eines subagent rund 4.3k Kontext kostet** (gemessen, nicht amortisierbar). Für ein einzelnes `ls` diesen Preis zu zahlen, ist ein Nettoverlust.
 
@@ -165,7 +165,7 @@ Beide Seiten müssen dieselbe Tabelle sein, sonst schadet jede für sich allein:
 `&&` / `|` / `2>&1` enthielt, Ergebnis: **glance war komplett wirkungslos** — gemessen wurden alle drei Versuche des Koordinators abgefangen, er musste doch wieder einen subagent schicken. Jetzt wird segmentweise zerlegt und geprüft: Nur wenn jedes Segment auf der Whitelist steht, wird durchgelassen; `git status && rm -rf x` wird weiterhin abgefangen
 (die hintere Hälfte steht nicht in der Tabelle).
 
-### Append, nicht ersetzen
+### Append, nicht ersetzen {#叠加不替换}
 
 ```python
 system_prompt = {"type": "preset", "preset": "claude_code", "append": spec.instructions}
@@ -191,7 +191,7 @@ Der Workbench-Index läuft über denselben Kanal. Er ist in jeder Runde da, aber
     Nur auf `allowed_tools` zu setzen reicht ebenfalls nicht: Das ist eine **Freigabeliste ohne Nachfrage, keine exklusive Whitelist**. Gemessen kann das Modell Tools aufrufen, die nicht darin stehen — in einer Sonde für $0.1 rief ein Agent mit `allowed_tools=["Read"]` problemlos Write / Bash auf.
     Was tatsächlich abfängt, ist der Hook.
 
-## Wann man es nicht benutzen sollte
+## Wann man es nicht benutzen sollte {#什么时候不该用它}
 
 Was diese vier Schichten sparen, ist immer das **Rohmaterial**. Die folgenden Probleme lösen sie nicht, manche werden durch sie sogar schwerer sichtbar:
 

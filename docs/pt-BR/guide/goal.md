@@ -6,7 +6,7 @@ checklist verificável; depois disso, ao fim de cada rodada de trabalho, **julga
 alcançado, segue em frente; não alcançado, devolve com o "o que falta" para continuar;
 julgado como impossível, para e pergunta a uma pessoa.
 
-## Que problema isso resolve
+## Que problema isso resolve {#解决什么问题}
 
 O [clarify](clarify.md) barra **"o que está sendo feito não é o que se queria"**. Esta camada barra outra coisa:
 **"na verdade não terminou, mas ele disse que terminou"**. As duas coisas precisam ficar separadas, porque falham de formas diferentes:
@@ -23,9 +23,9 @@ Por isso o verdict fica com um papel que **não participou do trabalho e roda na
 Ele vê só o objetivo e o estado real; não sabe quantas tentativas o worker fez nem o quanto sofreu, e portanto não arruma desculpas por ele.
 É a mesma razão pela qual o clarifier roda numa sessão independente.
 
-## Como usar (código mínimo)
+## Como usar (código mínimo) {#怎么用最小代码}
 
-### Zero código: linha de comando
+### Zero código: linha de comando {#零代码命令行}
 
 ```bash
 flower                      # já vem com goal guard por padrão
@@ -34,7 +34,7 @@ flower --rounds 5           # no máximo cinco rodadas de trabalho (padrão 3)
 flower --judge-can-run      # deixa o judge rodar comandos (verdict mais duro)
 ```
 
-### Ligação manual
+### Ligação manual {#自己接线}
 
 Duas funções, cada uma com metade da tarefa; não misture: `goal_step()` **define o objetivo** (um step independente),
 e `with_goal()` é o **loop de verdict** (embrulha um step de trabalho).
@@ -101,9 +101,9 @@ Quando não estiver saindo redondo, mexa primeiro nestes botões:
 | Caro demais | `--rounds 1`, ou `--no-goal` para desligar por completo |
 | Não quer ser interrompido | `--timeout 0`: em caso de inalcançável, não pergunta a ninguém, simplesmente para (o motivo fica em disco) |
 
-## O que ele realmente faz
+## O que ele realmente faz {#它实际做了什么}
 
-### Como é um objetivo
+### Como é um objetivo {#目标长什么样}
 
 `goal_step` lê o brief, produz duas seções e congela em `.flower/notes/目标.md`:
 
@@ -121,7 +121,7 @@ Quando não estiver saindo redondo, mexa primeiro nestes botões:
 A checklist sai dos «critérios de aceitação» do brief, mas precisa ser reescrita de forma que cada linha possa ser verificada na hora — as linhas vagas o judge completa.
 Só é considerada completa quando as duas seções não estão vazias (`statement` com conteúdo, `checks` não vazio); caso contrário, este step não libera.
 
-### O tamanho da checklist é decidido por "quantos modos de falha existem"
+### O tamanho da checklist é decidido por "quantos modos de falha existem" {#清单的长度由有多少种失败方式决定}
 
 Não pelo rigor do judge. Para uma tarefa do tipo `git clone && make && ./app`, **três a cinco linhas bastam**:
 build ok, roda, dá para usar.
@@ -131,7 +131,7 @@ das quais apenas **5** verificavam "se a coisa funciona", **6** verificavam "se 
 (incluindo checar o mtime de `~/.zshrc` e se o diretório `.flower/` foi alterado — que é o diretório do próprio framework),
 e **4** eram inverificáveis por princípio.
 
-#### Fronteiras não são itens de verificação
+#### Fronteiras não são itens de verificação {#边界不是判定项}
 
 Essa foi a causa principal daquele caso:
 
@@ -143,7 +143,7 @@ Essa foi a causa principal daquele caso:
 Transformar "não rodei `brew install`" num item de verificação equivale a somar uma checagem a cada fronteira acrescentada —
 e é justamente na fase de clarify que se incentiva listar todas as fronteiras. Se realmente precisar prestar contas, uma frase resolve; não desdobre em seis itens.
 
-### Itens inverificáveis são apontados já na definição do objetivo
+### Itens inverificáveis são apontados já na definição do objetivo {#验不了的条目设目标时就会喊}
 
 Para itens marcados com `[此环境无法验证:原因]` na checklist, o `goal_step` emite um aviso **no exato momento em que congela o objetivo**:
 
@@ -161,7 +161,7 @@ antecipando a descoberta para o step de definição do objetivo, a mesma informa
 Apenas avisa, não bloqueia: a pessoa pode escolher rodar assim mesmo (no HT002 a escolha final foi "aceitar este resultado").
 `Goal.unverifiable` é essa lista, e o payload do evento traz os dados estruturados para a UI.
 
-### Três conclusões, não duas
+### Três conclusões, não duas {#三个结论不是两个}
 
 ```text
 trabalho ──> verdict ──alcançado─────> segue em frente
@@ -199,7 +199,7 @@ continuar rodando é queimar dinheiro rodada após rodada, e é exatamente isso 
     `UNREACHABLE`. Tratar "aqui não dá para verificar" como "alcançado" é fechar o trabalho com um "parece que deve funcionar";
     tratar como "ainda não" é obrigá-lo a refazer, rodada após rodada, algo que nunca poderia ser verificado.
 
-### Verdict ambíguo = não alcançado
+### Verdict ambíguo = não alcançado {#判定含糊--未达成}
 
 Ordem de reconhecimento do `Verdict.parse`: primeiro pega a seção "结论 / 判定" pelo título; se não houver seção com título,
 um texto inteiro igual a `1` / `true` conta como alcançado, e `0` / `false` como não alcançado (quando se pede ao judge para "responder só 0/1",
@@ -209,7 +209,7 @@ um texto inteiro igual a `1` / `true` conta como alcançado, e `0` / `false` com
 "não deu para julgar" e "está pronto" são coisas diferentes; ambiguidade é sempre não alcançado, com um motivo padrão anexado
 ("判定者没给出明确结论,按未达成处理").
 
-### Julga-se o artefato entregue, não o código-fonte
+### Julga-se o artefato entregue, não o código-fonte {#判的是产出物不是源码}
 
 !!! warning "Verdict que só lê código-fonte não julga o entregável"
     No [HT001](../cases/ht001.md), o critério de aceitação dizia literalmente "compilar um executável independente, rodando direto
@@ -235,7 +235,7 @@ lsof -p 96040      → 起于 16:10,16:15 仍活着
 Aquela frase no prompt de verdict quer dizer o mesmo: vá ver com os próprios olhos, confira item por item da checklist, e **item de verificação sem evidência
 visível é item não aprovado**.
 
-### "Devolver" é continuar, não recomeçar
+### "Devolver" é continuar, não recomeçar {#打回是接着做不是重头做}
 
 A devolução usa `Step.on_reject`: na rodada seguinte, **faz `resume` na sessão que acabou de ser rejeitada**, trocando o prompt pelo feedback do verdict
 (`Verdict.feedback()` só entrega "o que falta", não entrega solução). Assim, o trabalho já feito, os arquivos já lidos e os desvios já percorridos
@@ -253,7 +253,7 @@ Já o judge **é sempre uma sessão nova**: o gate do `with_goal` chama `Runtime
 o nome do step carrega a rodada (`干活·判定#1`), e nomes com sufixo não entram na [lineage](../reference/glossary.md#血缘) entre processos.
 Quando o gate não consegue obter `ctx["_runtime"]`, lança `StepAbort` — **não finge que passou**.
 
-### Pular e redefinir
+### Pular e redefinir {#跳过与重设}
 
 Quando o arquivo de objetivo já existe e está completo, este step é **pulado** (igual ao brief) — se uma run [long-horizon](../reference/glossary.md#长程)
 quebrou e foi reiniciada, não se deve recalcular as conclusões anteriores. Para redefinir, apague o arquivo, ou use `always_set=True`.
@@ -263,7 +263,7 @@ quebrou e foi reiniciada, não se deve recalcular as conclusões anteriores. Par
 nem entraria no verdict — ele daria "alcançado" pela lista velha. O custo medido da rededução é **$0.41 / 3 minutos**.
 Veja [continuity](continuity.md).
 
-### O judge pode rodar comandos?
+### O judge pode rodar comandos? {#判定者能不能跑命令}
 
 Por padrão, **não**. A lista de pré-aprovação de `judge()` são as ferramentas de pergunta mais `Read` / `Glob` / `Grep`;
 só com `can_run=True` entra `Bash`. O trade-off:
@@ -286,7 +286,7 @@ um agent com `allowed_tools=["Read"]` emitiu chamadas de `Write` e `Bash` do mes
     e aí ele pode escrever uma checklist que nesta máquina não tem como ser verificada. `with_goal()` é outra história:
     tem um parâmetro `can_run` próprio (padrão `False`).
 
-### Por que as rodadas têm teto e as perguntas não
+### Por que as rodadas têm teto e as perguntas não {#为什么轮数有上限而提问次数没有}
 
 Perguntar quase não custa nada; uma rodada de trabalho é dinheiro vivo. Portanto:
 
@@ -294,7 +294,7 @@ Perguntar quase não custa nada; uma rodada de trabalho é dinheiro vivo. Portan
 - **Rodadas com teto** (`rounds=3`) — mas a rede de segurança real não é esse número, e sim a terceira conclusão «inalcançável»:
   assim que ela aparece, para e pergunta a alguém, sem depender de esgotar as rodadas
 
-## Quando não usar
+## Quando não usar {#什么时候不该用它}
 
 **A tarefa é tão pequena que o verdict é mais prolixo que o trabalho.** Esta camada complica o simples, e isso foi medido:
 no HT002, aquele "clonar um repositório, instalar e rodar no macOS" virou uma checklist de 15 linhas,

@@ -5,7 +5,7 @@
 알아서도 안 된다. 이 페이지는 워크플로를 어떻게 설계하는지 다룬다. `Step`과 `Workflow`의 전체 필드 표는
 [Python API](../reference/api.md)에 있다.
 
-## 무엇을 해결하는가
+## 무엇을 해결하는가 {#解决什么问题}
 
 한 번의 [long-horizon](../reference/glossary.md#长程) 실행은 프롬프트 한 줄로 끝나는 일이 아니다. 먼저 요구사항을 확인하고,
 조사하고, 구현하고, 재검토한다. 각 구간마다 자기 역할, 자기 컨텍스트, 자기 인수 조건이 있다.
@@ -20,7 +20,7 @@ Python 코드가 된다.** 읽을 수 있고, 테스트할 수 있고, 망가진
 
 도메인 가정은 전혀 들어 있지 않다. 어디서 자를지, 각 스텝에서 무엇을 인수할지, 통과하지 못하면 어떻게 할지 — 이 네 가지가 곧 "워크플로 설계"다.
 
-## 어떻게 쓰나 (최소 코드)
+## 어떻게 쓰나 (최소 코드) {#怎么用最小代码}
 
 ```python
 # flows.py
@@ -56,9 +56,9 @@ flower run flows.py:main -w /path/to/repo
 ctx = await wf.run(rt, on_step=lambda step, r: print(f"{step.name} ok={r.ok} ${r.cost_usd:.4f}"))
 ```
 
-## 실제로 무엇을 하는가
+## 실제로 무엇을 하는가 {#它实际做了什么}
 
-### Step은 무엇을 받고, 무엇을 반드시 반환하는가
+### Step은 무엇을 받고, 무엇을 반드시 반환하는가 {#一个-step-收到什么必须返回什么}
 
 `Step`은 함수가 아니라 **선언**이다. 실제로 실행되는 것은 `Runtime.run(step.spec, 렌더링된 prompt, ...)`이다.
 **한 스텝 = `Runtime.run` 한 번 = [세션](../reference/glossary.md#会话) 하나.**
@@ -80,7 +80,7 @@ ctx = await wf.run(rt, on_step=lambda step, r: print(f"{step.name} ok={r.ok} ${r
 [태스크 브리프](../reference/glossary.md#任务书)는 `kind="prompt"`, 연결 끊김으로 합성된 오류는 `kind="error"`다.
 셋 다 들어오지 않는다.
 
-### reduce: 설탕이 아니다
+### reduce: 설탕이 아니다 {#reduce不是糖}
 
 기본적으로 아래로 전달되는 것은 모델이 말한 원문이다. 어떤 스텝의 원문은 **그대로 내려보내면 안 된다.**
 
@@ -94,7 +94,7 @@ Step("确认需求", spec=확인자, prompt="帮我做一个 X",
 
 `reduce`는 **반드시 동기 함수여야 한다.** `gate` / `when` / `on_reject`는 async여도 된다.
 
-### 상태는 ctx 안에서 어떻게 흐르는가
+### 상태는 ctx 안에서 어떻게 흐르는가 {#状态怎么在-ctx-里流动}
 
 `ctx`는 `dict[str, Any]`이고, 바로 `Workflow.context` 자체다. 각 스텝이 끝나면 이 표대로 쓴다.
 
@@ -126,7 +126,7 @@ Step("确认需求", spec=확인자, prompt="帮我做一个 X",
     하류에서 `lambda ctx: ctx["某步"]`라고 쓰면 그대로 `KeyError`가 난다. 불완전한 결과를 들고 아래로 가려면
     `on_fail="continue"`를 쓰고, 정말 스킵할 거라면 하류가 스스로 `ctx.get(...)`으로 받쳐야 한다.
 
-### 판정과 반려: gate, on_reject, StepAbort
+### 판정과 반려: gate, on_reject, StepAbort {#判定与打回gateon_rejectstepabort}
 
 `gate(result, ctx) -> bool`이 판정하는 것은 "다 돌긴 했는데, 합격인가"다. 반드시 알아야 할 두 가지가 있다.
 
@@ -161,7 +161,7 @@ def gate(result, ctx):
 차이를 기억해 두라. **False 반환은 "이번엔 안 됐으니 한 번 더", `StepAbort`는 "또 해도 소용없다"이다.**
 전형적인 상황은 목표가 이 환경에서는 불가능하다고 판정되었고 물어볼 사람도 없을 때다. 계속 헛도는 것이 가장 비싼 선택이다.
 
-### 두 층위의 재시도를 섞지 마라
+### 두 층위의 재시도를 섞지 마라 {#两层重试别混}
 
 | | `Step.retries` | `Runtime(resilience=...)` |
 |---|---|---|
@@ -173,7 +173,7 @@ def gate(result, ctx):
 이어서 실행할 때 쓰는 그 prompt에는 **의도적으로 어떤 오류 세부도 담기지 않는다.** 모델은 "중단됐다, 이어서 하라"만 알면 되고,
 ENOTFOUND인지 503인지는 알 필요가 없다.
 
-### 스텝을 엮기
+### 스텝을 엮기 {#把步骤串起来}
 
 스텝 사이에 상태를 전달하는 방식은 세 가지이고, 어느 것을 고르느냐가 다음 스텝이 무엇을 볼 수 있는지를 결정한다.
 
@@ -203,7 +203,7 @@ ENOTFOUND인지 503인지는 알 필요가 없다.
 6. **같은 저장소를 병렬로 고친다면 `worker(isolate=True)`.** 마무리(머지, worktree 정리, PR 열기)는 현재
    당신의 워크플로 몫이다. harness는 변경이 각자의 worktree 안에 떨어지는 것만 보장한다.
 
-### 워크벤치는 Workflow에 매달아야 한다
+### 워크벤치는 Workflow에 매달아야 한다 {#工作台要挂在-workflow-上}
 
 워크플로가 [워크벤치](../reference/glossary.md#工作台)에 파일을 써야 하는 모든 경우 — 전형적으로는
 `clarify_step(brief_path=...)` — `Workbench`를 직접 하나 만들어 `Workflow.workbench`와 `Runtime` **양쪽에**
@@ -245,7 +245,7 @@ rt = Runtime(workspace=Path.cwd(), run_dir="runs", workbench=wb)
     **게다가 오류도 나지 않는다.** 객체를 하나 만들어 양쪽에서 공유하면 이 문제가 없다. `Workflow.workbench`가
     존재하면 커맨드라인의 `-W`는 무시되고, 이쪽이 기준이 된다.
 
-### `continuous=True`: 같은 경로에서 한 번 더 돌리기
+### `continuous=True`: 같은 경로에서 한 번 더 돌리기 {#continuoustrue同一个路径再跑一次}
 
 위의 세 가지 연결 방식은 **한 번의 실행 안에서** 스텝 사이의 이야기다. 프로세스를 넘는 것은 별개의 축이다.
 
@@ -273,7 +273,7 @@ Workflow([...], continuous=True)     # 기본값
 
 전체 설계와 `--new`는 [continuity](continuity.md)를 보라.
 
-## 언제 쓰면 안 되는가
+## 언제 쓰면 안 되는가 {#什么时候不该用它}
 
 - **agent 하나만 돌리고 판정도 필요 없을 때** — `Workflow`를 씌우지 마라. 그냥 `await rt.run(spec, "…")`이나
   커맨드라인 `flower once "读一眼这个仓库"`를 쓰라.

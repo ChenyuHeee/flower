@@ -5,7 +5,7 @@ The framework only handles mechanism: how a step runs, how sessions connect, wha
 and it shouldn't. This page is about designing one; the full field tables for `Step` and `Workflow` are in the
 [Python API](../reference/api.md).
 
-## What problem it solves
+## What problem it solves {#解决什么问题}
 
 A [long-horizon](../reference/glossary.md#长程) run isn't something a single prompt can express: first clarify the requirement,
 then research, then implement, then review — each segment has its own role, its own context, its own acceptance condition.
@@ -20,7 +20,7 @@ Cram it all into one prompt and the model decides for itself which segments to s
 
 It carries no domain assumptions. Where to cut, what each step accepts, what to do on rejection — those four things *are* "designing a workflow".
 
-## How to use it (minimal code)
+## How to use it (minimal code) {#怎么用最小代码}
 
 ```python
 # flows.py
@@ -56,9 +56,9 @@ Writing your own driver works too — the first argument to `Workflow.run` is a 
 ctx = await wf.run(rt, on_step=lambda step, r: print(f"{step.name} ok={r.ok} ${r.cost_usd:.4f}"))
 ```
 
-## What it actually does
+## What it actually does {#它实际做了什么}
 
-### What a Step receives, and what it must return
+### What a Step receives, and what it must return {#一个-step-收到什么必须返回什么}
 
 A `Step` is not a function, it's a **declaration**. What actually executes is `Runtime.run(step.spec, the_rendered_prompt, ...)` —
 **one step = one `Runtime.run` = one [session](../reference/glossary.md#会话)**.
@@ -80,7 +80,7 @@ What a step "returns" is a `StepResult`, but in the workflow you get two things:
 [task brief](../reference/glossary.md#任务书) dispatched to it is `kind="prompt"`, a synthesized disconnect error is `kind="error"`
 — none of the three get in.
 
-### reduce: not sugar
+### reduce: not sugar {#reduce不是糖}
 
 By default what flows downstream is the model's literal words. Some steps' literal words **shouldn't** flow downstream as-is:
 
@@ -94,7 +94,7 @@ otherwise that pile of code lands in the next step's prompt. `clarify_step` is h
 
 `reduce` **must be synchronous**; `gate` / `when` / `on_reject` may be async.
 
-### How state flows through ctx
+### How state flows through ctx {#状态怎么在-ctx-里流动}
 
 `ctx` is a `dict[str, Any]` — it *is* `Workflow.context`. After each step it's written per this table:
 
@@ -126,7 +126,7 @@ For a clean restart, build a new one, or pass `context={}` explicitly.
     A downstream `lambda ctx: ctx["某步"]` will raise `KeyError` outright. To carry a partial result forward use
     `on_fail="continue"`; if you really want to skip, downstream code must fall back with `ctx.get(...)`.
 
-### Verdict and rejection: gate, on_reject, StepAbort
+### Verdict and rejection: gate, on_reject, StepAbort {#判定与打回gateon_rejectstepabort}
 
 `gate(result, ctx) -> bool` judges "it ran, but is it acceptable?". Two details you must know:
 
@@ -161,7 +161,7 @@ After it's raised: the reason is recorded in `ctx["_aborted"]`, the step is trea
 Keep the distinction: **returning False means "not this time, go another round"; `StepAbort` means "another round won't help".**
 The typical case is a goal judged impossible in this environment with nobody to ask — spinning on is the most expensive option.
 
-### Don't conflate the two retry layers
+### Don't conflate the two retry layers {#两层重试别混}
 
 | | `Step.retries` | `Runtime(resilience=...)` |
 |---|---|---|
@@ -173,7 +173,7 @@ The typical case is a goal judged impossible in this environment with nobody to 
 The prompt used for resuming **deliberately contains no error detail** — the model needs to know "you were interrupted, carry on",
 not whether it was ENOTFOUND or 503.
 
-### Connecting steps
+### Connecting steps {#把步骤串起来}
 
 There are three ways to pass state between steps, and the choice determines what the next step can see:
 
@@ -203,7 +203,7 @@ A few design lessons paid for repeatedly:
 6. **Parallel edits to the same repo mean `worker(isolate=True)`.** Wrap-up (merging, cleaning worktrees, opening a PR) is currently left to
    your workflow; the harness only guarantees changes land in their own worktrees.
 
-### The workbench must be attached to the Workflow
+### The workbench must be attached to the Workflow {#工作台要挂在-workflow-上}
 
 Any time the workflow writes files into the [workbench](../reference/glossary.md#工作台) — typically
 `clarify_step(brief_path=...)` — you must build a `Workbench` yourself and attach it **both** to `Workflow.workbench`
@@ -245,7 +245,7 @@ There are two reasons `channel` hangs off the workflow: `run()` wires its `on_ev
     **and nothing raises an error**. Build one object and share it on both sides and the problem disappears; when `Workflow.workbench` exists,
     the command line's `-W` is ignored in its favour.
 
-### `continuous=True`: running the same path again
+### `continuous=True`: running the same path again {#continuoustrue同一个路径再跑一次}
 
 The three connection forms above are about steps **within one run**. Across processes is a different axis:
 
@@ -273,7 +273,7 @@ Three consequences:
 
 For the full design and `--new`, see [continuity](continuity.md).
 
-## When not to use it
+## When not to use it {#什么时候不该用它}
 
 - **A single agent, no verdict needed** — don't wrap it in a `Workflow`. Just `await rt.run(spec, "…")`,
   or on the command line `flower once "读一眼这个仓库"`.

@@ -10,7 +10,7 @@ término por otro.
 
 ---
 
-## Framework y ejecución
+## Framework y ejecución {#框架与运行}
 
 ### Largo horizonte {#长程}
 
@@ -61,7 +61,7 @@ salir antes de tiempo.
 
 ---
 
-## Roles
+## Roles {#角色}
 
 Los roles son la división del trabajo que flower impone a los agentes. Cada rol = un texto de
 reglas inyectado + un conjunto de herramientas + un conjunto de hooks. Los cinco roles son
@@ -147,7 +147,7 @@ Esta es la primera capa de ahorro de contexto de flower, y la que más ahorra. V
 
 ---
 
-## Los cuatro mecanismos
+## Los cuatro mecanismos {#四个机制}
 
 ### Clarificación previa {#前置确认}
 
@@ -243,7 +243,7 @@ está en disco, y puedes abrirlo, cambiar una línea y dejar que siga.
 
 ---
 
-## Gestión del contexto
+## Gestión del contexto {#上下文管理}
 
 ### Hilo principal {#主线程}
 
@@ -335,7 +335,7 @@ descarta según «¿es un error o no?».
 
 ---
 
-## Runtime
+## Runtime {#运行时}
 
 ### Aislamiento {#隔离}
 
@@ -418,7 +418,7 @@ horizonte sale cara: [HT001](../cases/ht001.md) costó $171.62.
 
 ---
 
-## Portabilidad
+## Portabilidad {#可移植性}
 
 ### Portátil {#可移植}
 

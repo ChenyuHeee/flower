@@ -7,9 +7,9 @@ host machine has installed), and the documentation site (push to `main` and it p
 `install.sh` is served from the Pages domain). The three sections are independent — read what you
 need.
 
-## 1. Containers
+## 1. Containers {#一容器}
 
-### Why a container
+### Why a container {#为什么要容器}
 
 **First, to fence things in.** The [worker](glossary.md#执行者) doing the actual work has
 **unrestricted Bash** — flower's Bash allowlist (`delegate_guard`) only covers the
@@ -32,7 +32,7 @@ Verified in practice (2026-09-06, macOS 15 / arm64 / colima + docker 28.4.0):
 | File ownership | Files written to `/work` inside the container are `hechenyu:staff` on the host — the mapping is correct |
 | Host visibility | `ls /Users` inside the container → `No such file or directory` |
 
-### What is in the image
+### What is in the image {#镜像里装了什么}
 
 Base image `python:3.13-slim`, plus exactly three apt packages on top. Each has a reason:
 
@@ -55,7 +55,7 @@ The entrypoint is `ENTRYPOINT ["flower"]` and `CMD` is empty — running the con
 arguments drops into interactive input (it asks what you want done) rather than printing `--help`.
 That way you do not have to quote a Chinese request on the shell.
 
-### Why you cannot mount the host's `.venv`
+### Why you cannot mount the host's `.venv` {#为什么不能把宿主的-venv-挂进去}
 
 The SDK ships per-platform wheels, and the bundled binary is platform-specific:
 
@@ -69,7 +69,7 @@ Mounting it in does not work, so the image must run its own `pip install`. Turne
 also evidence of portability: the same `pyproject.toml`, a different native binary per platform,
 and not one line of framework code changes.
 
-### Two scripts
+### Two scripts {#两个脚本}
 
 | Script | What it does |
 |---|---|
@@ -99,7 +99,7 @@ build-args at all.
 `FLOWER_HOME` is derived from the script's own location rather than hard-coded, so the repo works
 wherever it is cloned.
 
-### Running it
+### Running it {#跑起来}
 
 ```bash
 docker/build                       # once is enough
@@ -133,7 +133,7 @@ docker run -i $TTY --rm \
     "$IMAGE" "$@"
 ```
 
-### Mount boundary and persistence
+### Mount boundary and persistence {#挂载边界与持久化}
 
 ```text
 host $PWD  ──mount──>  /work       ← the agent works here, output stays on the host
@@ -161,7 +161,7 @@ So running inside an in-repo subdirectory such as `flower/human-test/HT001` is a
     `test -f /work/<probe>` (extra mounts pass too). If that fails it exits 1 and tells you
     `colima start --mount '<path>:w'`. The probe needs a container, so run `docker/build` first.
 
-### Credentials
+### Credentials {#凭证}
 
 Passed via `docker run --env-file`; they **never enter an image layer**. `flowerbox` reads
 `$FLOWER_HOME/.env`, which by default is the `.env` at the repo root:
@@ -190,7 +190,7 @@ Key names, precedence, and how to fill in the gateway are in [configuration](con
     the full `--timeout` (1800 seconds by default). Unattended runs need an explicit
     `--timeout 0`. The script prints a warning line when it detects there is no TTY.
 
-### git submodule
+### git submodule {#git-submodule}
 
 `.gitmodules` has exactly one entry:
 
@@ -206,7 +206,7 @@ leading `-` in `git submodule status` means exactly this state). Whether you nee
 | Run flower, build the image | **No.** `.dockerignore` excludes `human-test/`, and the `Dockerfile` only `COPY`s `pyproject.toml` / `flower` / `examples` anyway |
 | Read HT001's output code locally | Yes: `git submodule update --init human-test/HT001`, or `git clone --recurse-submodules` from the start |
 
-### Networks inside China: why all those mirror substitutions
+### Networks inside China: why all those mirror substitutions {#国内网络为什么有那一堆镜像替换}
 
 Installing this behind the GFW, the bottleneck is not bandwidth but the international route. The
 default `docker/build` already substitutes everything that needs substituting, and
@@ -305,7 +305,7 @@ behind the four substitution points — skip it if your network does not have th
 
 ## 2. plugin {#plugin}
 
-### What it is
+### What it is {#它是什么}
 
 A **domain capability package that travels with the repo**. The framework code contains no domain
 knowledge at all; domain knowledge lives entirely in the `plugin/` directory at the repo root, and
@@ -325,7 +325,7 @@ Together with `setting_sources=[]` (covered separately below), this is why flowe
 "[portable](glossary.md#可移植)" and "aware of your domain" at the same time: it does not ask what
 the host machine has installed, it only recognizes this one directory that came with the repo.
 
-### Directory layout
+### Directory layout {#目录布局}
 
 | Path | What goes there | When it takes effect | Who decides |
 |---|---|---|---|
@@ -354,7 +354,7 @@ Right now `plugin/` in the repo contains only two things: `.claude-plugin/plugin
 `skills/example/SKILL.md`. `agents/`, `hooks/` and `.mcp.json` **do not exist yet** — create them
 yourself if you need them, with the directory names exactly as in the table above.
 
-### Writing a skill: a complete example
+### Writing a skill: a complete example {#写一个-skill完整例子}
 
 Take "generate release notes", from nothing to confirmed loaded.
 
@@ -452,7 +452,7 @@ use the `name` from `SKILL.md`, and the SDK also accepts the qualified form
     the `PLUGIN_DIR` command above to check: `False` means this installation has no domain
     capability package. To use one, you currently have to run from a source checkout.
 
-### Why `setting_sources=[]` forces domain capability through plugins
+### Why `setting_sources=[]` forces domain capability through plugins {#setting_sources-为什么逼着领域能力走-plugin}
 
 The same function also has this line:
 
@@ -488,7 +488,7 @@ Incidentally: `instructions` goes through [append](glossary.md#叠加) (the `app
 latter is loaded on demand. Put short, mandatory discipline in `instructions`; put long,
 occasionally-useful knowledge in a skill.
 
-## 3. Documentation site
+## 3. Documentation site {#三文档站}
 
 The site you are reading is built with mkdocs-material; the sources are under `docs/` in the repo,
 and pushing to `main` publishes it automatically.
@@ -517,7 +517,7 @@ trigger it manually from the Actions page via `workflow_dispatch`:
 docs/**  mkdocs.yml  hooks/**  docs-requirements.txt  install.sh  .github/workflows/docs.yml
 ```
 
-### Why `install.sh` is served from Pages
+### Why `install.sh` is served from Pages {#installsh-为什么从-pages-发}
 
 The end of the build step has one line:
 

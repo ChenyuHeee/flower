@@ -7,7 +7,7 @@ Arbeitsrunde **einmal unabhängig** und liefert ein [Verdict](../reference/gloss
 erreicht heißt weiter, nicht erreicht heißt zurück in die Arbeit mit der Angabe „woran es fehlt",
 und lautet das Urteil „nicht machbar", wird angehalten und der Mensch gefragt.
 
-## Welches Problem das löst
+## Welches Problem das löst {#解决什么问题}
 
 [Clarify](clarify.md) fängt ab: **„gebaut wird nicht das, was gewollt war"**. Diese Schicht fängt etwas anderes ab:
 **„eigentlich ist es nicht fertig, aber es sagt selbst, es sei fertig"**. Beides muss getrennt bleiben, weil die Fehlermodi verschieden sind:
@@ -24,9 +24,9 @@ Deshalb geht das Verdict an eine Rolle, die **nicht mitgearbeitet hat und in ein
 Sie sieht nur das Ziel und den Ist-Zustand, weiß nicht, wie oft der Worker es versucht hat und wie mühsam es war — und sucht deshalb auch keine Entschuldigungen für ihn.
 Das ist derselbe Grund, aus dem der Clarifier in einer eigenen Session läuft.
 
-## Benutzung (minimaler Code)
+## Benutzung (minimaler Code) {#怎么用最小代码}
 
-### Ohne Code: Kommandozeile
+### Ohne Code: Kommandozeile {#零代码命令行}
 
 ```bash
 flower                      # Goal Guard ist standardmäßig dabei
@@ -35,7 +35,7 @@ flower --rounds 5           # höchstens fünf Arbeitsrunden (Default 3)
 flower --judge-can-run      # Judge darf Kommandos ausführen (härteres Verdict)
 ```
 
-### Selbst verdrahten
+### Selbst verdrahten {#自己接线}
 
 Zwei Funktionen, je eine Hälfte, nicht vermischen: `goal_step()` **setzt das Ziel** (ein eigener Schritt),
 `with_goal()` ist die **Verdict-Schleife** (legt sich um einen Arbeitsschritt).
@@ -102,9 +102,9 @@ Wenn es nicht rundläuft, zuerst an diesen Stellschrauben drehen:
 | Zu teuer | `--rounds 1`, oder mit `--no-goal` ganz abschalten |
 | Keine Unterbrechungen erwünscht | `--timeout 0`: bei „nicht machbar" wird niemand gefragt, es wird direkt gestoppt (Begründung bleibt auf der Platte) |
 
-## Was es tatsächlich tut
+## Was es tatsächlich tut {#它实际做了什么}
 
-### Wie ein Ziel aussieht
+### Wie ein Ziel aussieht {#目标长什么样}
 
 `goal_step` liest den Brief, gibt zwei Abschnitte aus und friert sie in `.flower/notes/目标.md` ein:
 
@@ -122,7 +122,7 @@ Wenn es nicht rundläuft, zuerst an diesen Stellschrauben drehen:
 Die Liste kommt aus den Abnahmekriterien des Briefs, muss aber so umgeschrieben werden, dass jeder Punkt an Ort und Stelle überprüfbar ist — unscharfe Punkte ergänzt der Judge.
 Erst wenn beide Abschnitte nicht leer sind (`statement` hat Inhalt, `checks` ist nicht leer), gilt das Ziel als vollständig, sonst lässt dieser Schritt nicht durch.
 
-### Die Länge der Liste bestimmt sich danach, wie viele Fehlermodi es gibt
+### Die Länge der Liste bestimmt sich danach, wie viele Fehlermodi es gibt {#清单的长度由有多少种失败方式决定}
 
 Nicht danach, wie gründlich der Judge ist. Für eine Aufgabe wie `git clone && make && ./app` reichen **drei bis fünf Punkte**:
 Build erfolgreich, läuft an, benutzbar.
@@ -132,7 +132,7 @@ davon prüften nur **5**, „ob das Ding benutzbar ist", **6** prüften „ob de
 (inklusive Prüfung der mtime von `~/.zshrc` und ob das Verzeichnis `.flower/` verändert wurde — das ist das Verzeichnis des Frameworks selbst),
 und **4** waren prinzipiell nicht prüfbar.
 
-#### Grenzen sind keine Prüfpunkte
+#### Grenzen sind keine Prüfpunkte {#边界不是判定项}
 
 Das war damals die Hauptursache:
 
@@ -144,7 +144,7 @@ Das war damals die Hauptursache:
 „Es wurde kein `brew install` ausgeführt" als Prüfpunkt zu schreiben heißt: jede zusätzliche Grenze erzeugt einen weiteren Check —
 und Grenzen werden in der Clarify-Phase gerade dazu ermutigt, ausführlich aufgeschrieben zu werden. Wenn wirklich Rechenschaft nötig ist, ein Satz, nicht sechs Punkte.
 
-### Nicht prüfbare Punkte werden schon beim Zielsetzen gemeldet
+### Nicht prüfbare Punkte werden schon beim Zielsetzen gemeldet {#验不了的条目设目标时就会喊}
 
 Punkte, die in der Liste mit `[此环境无法验证:原因]` markiert sind, meldet `goal_step` **im Moment des Einfrierens des Ziels**:
 
@@ -162,7 +162,7 @@ verlegt man die Erkenntnis auf den Schritt des Zielsetzens, sinken die Kosten f�
 Nur ein Hinweis, keine Blockade: Man kann sich entscheiden, trotzdem so zu laufen (bei HT002 wurde am Ende genau „dieses Ergebnis akzeptieren" gewählt).
 `Goal.unverifiable` ist diese Liste, im Event-Payload liegen strukturierte Daten für die UI.
 
-### Drei Ergebnisse, nicht zwei
+### Drei Ergebnisse, nicht zwei {#三个结论不是两个}
 
 ```text
 干活 ──> 判定 ──达成────> 往下走
@@ -200,7 +200,7 @@ heißt Weiterlaufen: Runde um Runde Geld verbrennen, und genau das soll vermiede
     `UNREACHABLE`. „Hier nicht prüfbar" als „erreicht" zu werten heißt, die Arbeit mit einem „sieht so aus, als ginge es" abzuschließen;
     als „nicht erreicht" zu werten heißt, es Runde um Runde etwas wiederholen zu lassen, das von vornherein nicht prüfbar war.
 
-### Unklares Verdict = nicht erreicht
+### Unklares Verdict = nicht erreicht {#判定含糊--未达成}
 
 Die Erkennungsreihenfolge von `Verdict.parse`: zuerst wird über die Überschriften der Abschnitt „结论 / 判定" genommen; gibt es keine Überschriften,
 zählt ein ganzer Abschnitt `1` / `true` als erreicht, `0` / `false` als nicht erreicht (wenn der Judge angewiesen ist, „nur 0/1 zu liefern",
@@ -210,7 +210,7 @@ kommt sehr wahrscheinlich tatsächlich nur eine Zahl zurück); trifft das nicht 
 „lässt sich nicht beurteilen" und „ist fertig" sind zwei verschiedene Dinge, Unklarheit gilt durchweg als nicht erreicht, plus eine Standardbegründung
 („der Judge hat kein klares Ergebnis geliefert, wird als nicht erreicht behandelt").
 
-### Geurteilt wird über das Artefakt, nicht über den Quellcode
+### Geurteilt wird über das Artefakt, nicht über den Quellcode {#判的是产出物不是源码}
 
 !!! warning "Ein Verdict, das nur Quellcode liest, prüft nicht das Artefakt"
     In [HT001](../cases/ht001.md) lautete das Abnahmekriterium im Original „eine eigenständige ausführbare Datei kompilieren, die direkt im macOS-Terminal läuft",
@@ -236,7 +236,7 @@ lsof -p 96040      → 起于 16:10,16:15 仍活着
 Der entsprechende Satz im Verdict-Prompt meint genau das: selbst nachsehen, Punkt für Punkt gegen die Prüfliste, und **ein Prüfpunkt, für den kein Beleg zu sehen ist,
 ist nicht bestanden**.
 
-### „Zurückschicken" heißt weiterarbeiten, nicht von vorn anfangen
+### „Zurückschicken" heißt weiterarbeiten, nicht von vorn anfangen {#打回是接着做不是重头做}
 
 Das Zurückschicken nutzt `Step.on_reject`: die nächste Runde macht **`resume` auf genau der Session, die gerade abgelehnt wurde**, der Prompt wird durch das Verdict-Feedback ersetzt
 (`Verdict.feedback()` gibt nur „woran es fehlt", keine Lösung). Also stehen die bereits erledigte Arbeit, die gelesenen Dateien und die Umwege
@@ -254,7 +254,7 @@ Der Judge selbst läuft dagegen **immer in einer neuen Session**: das gate von `
 der Schrittname trägt die Rundennummer (`干活·判定#1`), und Namen mit Suffix gehen nicht in die prozessübergreifende [Lineage](../reference/glossary.md#血缘) ein.
 Ist im gate kein `ctx["_runtime"]` verfügbar, wird `StepAbort` geworfen, **es wird kein Bestehen vorgetäuscht**.
 
-### Überspringen und Neusetzen
+### Überspringen und Neusetzen {#跳过与重设}
 
 Existiert die Zieldatei bereits und ist vollständig, wird dieser Schritt **übersprungen** (wie beim Brief) — wenn ein
 [Long-Horizon](../reference/glossary.md#长程)-Run abgestürzt ist und neu startet, sollen die früheren Schlüsse nicht noch einmal berechnet werden. Zum Neusetzen die Datei löschen oder `always_set=True`.
@@ -264,7 +264,7 @@ Existiert die Zieldatei bereits und ist vollständig, wird dieser Schritt **übe
 geht gar nicht ins Verdict ein — er würde nach der alten Liste auf „erreicht" urteilen. Die Kosten der Neuableitung liegen gemessen bei **$0.41 / 3 Minuten**.
 Siehe [Continuity](continuity.md).
 
-### Darf der Judge Kommandos ausführen
+### Darf der Judge Kommandos ausführen {#判定者能不能跑命令}
 
 Per Default **nein**. Die genehmigungsfreie Liste von `judge()` besteht aus den Frage-Tools plus `Read` / `Glob` / `Grep`,
 `Bash` kommt erst bei `can_run=True` dazu. Der Trade-off:
@@ -287,7 +287,7 @@ obwohl `Bash` damals in seiner genehmigungsfreien Liste überhaupt nicht stand; 
     also schreibt er dir womöglich eine Prüfliste, die auf dieser Maschine gar nicht verifizierbar ist. `with_goal()` ist eine andere Sache,
     es hat einen eigenen Parameter `can_run` (Default `False`).
 
-### Warum die Rundenzahl begrenzt ist, die Zahl der Rückfragen aber nicht
+### Warum die Rundenzahl begrenzt ist, die Zahl der Rückfragen aber nicht {#为什么轮数有上限而提问次数没有}
 
 Fragen kostet fast nichts, eine Arbeitsrunde kostet echtes Geld. Also:
 
@@ -295,7 +295,7 @@ Fragen kostet fast nichts, eine Arbeitsrunde kostet echtes Geld. Also:
 - **Runden mit Obergrenze** (`rounds=3`) — aber die eigentliche Absicherung ist nicht diese Zahl, sondern das dritte Ergebnis „nicht machbar":
   sobald es auftritt, wird angehalten und der Mensch gefragt, statt auf das Ablaufen der Runden zu warten
 
-## Wann man es nicht einsetzen sollte
+## Wann man es nicht einsetzen sollte {#什么时候不该用它}
 
 **Die Aufgabe ist so klein, dass das Verdict umständlicher ist als die Arbeit.** Diese Schicht macht einfache Probleme kompliziert, und das ist gemessen:
 Bei HT002 — „ein Repo klonen, unter macOS installieren und starten" — wurde die Prüfliste auf 15 Punkte aufgebläht,

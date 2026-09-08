@@ -7,7 +7,7 @@ flower의 코어는 UI의 존재를 모른다. 실행 중에 일어나는 모든
 UI를 바꿔도 코어를 건드리지 않게 해주는 경계가 이것이다. 터미널, 웹, HTTP 서비스, 완전 자동 무인 실행 —
 바뀌는 것은 `Event`의 소비자뿐이고, 나머지는 한 줄도 고칠 필요가 없다.
 
-## 무엇을 해결하는가
+## 무엇을 해결하는가 {#解决什么问题}
 
 SDK의 메시지 스트림은 **내부 타입**이다. `AssistantMessage`, `ToolUseBlock`, `ToolResultBlock`,
 `ResultMessage`, `SystemMessage`…… UI가 이것들을 직접 소비하면 결과는 두 가지다. SDK가 올라가면
@@ -35,7 +35,7 @@ SDK의 메시지 스트림은 **내부 타입**이다. `AssistantMessage`, `Tool
    `cache_read_input_tokens` + `cache_creation_input_tokens`). 이것이
    [핸드오프](../reference/glossary.md#换代) 판정의 유일한 근거다.
 
-## 어떻게 쓰는가(최소 코드)
+## 어떻게 쓰는가(최소 코드) {#怎么用最小代码}
 
 인터랙션 레이어는 세 가지를 연결해야 한다. **이벤트 출구**(어디에 렌더링할지), **질문 채널**(누가 답할지),
 **인터럽트**(어떻게 멈추라고 외칠지). 아래 코드는 셋 다 연결되어 있고 그대로 실행된다.
@@ -100,7 +100,7 @@ asyncio.run(main())
     workflow가 만든 그것을 `Runtime`에 넘기거나(위의 방식),
     읽기 전용 탐색 `wake_state()`로 어디에 있는지 물어라.
 
-### 세 개의 이벤트 출구
+### 세 개의 이벤트 출구 {#三个事件出口}
 
 ```python
 await rt.run(spec, "…", on_event=sink)                  # 1. 에이전트 하나
@@ -119,7 +119,7 @@ ch = HumanChannel(on_event=my_own_sink)     # 직접 연결하면 Workflow는 �
 `StepResult`를 받는다. 진행 표시, 디스크 기록, 알림은 여기에 걸어라. 이걸 하겠다고 `Event` 스트림에서
 짜맞추지 마라 — 본문은 핸드오프와 재시도에 의해 여러 토막으로 끊긴다.
 
-### 터미널: 기본으로 딸려 있는 것
+### 터미널: 기본으로 딸려 있는 것 {#终端默认的那个}
 
 코드를 쓰지 않아도 하나 있다. `flower "帮我做一个 X"`가 타는 경로는
 [`flower/cli.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/cli.py)이고,
@@ -176,7 +176,7 @@ def start_input(ch: HumanChannel) -> threading.Event:
 - **질문이 있을 때만 읽는 게 아니라 계속 읽는다.** 질문이 있을 때만 읽으면, 일하는 그 몇 시간 동안 친 것이
   터미널 버퍼에 남아 있다가 다음 질문 때 답으로 먹힌다 — 사람이 질문을 보기도 전에 질문이 "답해진다".
 
-### 웹: 큐 + WebSocket
+### 웹: 큐 + WebSocket {#web队列--websocket}
 
 ```python
 events: asyncio.Queue[dict] = asyncio.Queue()
@@ -204,7 +204,7 @@ def answer(ask_id: str, text: str) -> dict:
 `raw`를 쓰는 순간 프런트엔드를 다시 SDK 타입에 묶는 것이고, 이 레이어는 헛일이 된다.
 `kind` / `text` / `tool` / `payload` 네 필드면 충분하다.
 
-### HTTP: 시퀀스 번호 + 폴링
+### HTTP: 시퀀스 번호 + 폴링 {#http序号--轮询}
 
 롱 커넥션이 없을 때는 이벤트에 번호를 매겨 클라이언트가 당겨가게 한다.
 
@@ -242,7 +242,7 @@ def answer(ask_id: str, text: str) -> dict:
 값을 줘야 한다** —— 아무도 폴링하지 않을 때 질문은 스스로 끝나지 않고, `timeout_s=None`이면 실행 전체가
 거기 영원히 매달린다. 기본값 `1800.0`초면 적당하다.
 
-### 완전 자동 무인 실행: 사람이 없다
+### 완전 자동 무인 실행: 사람이 없다 {#全自动无人值守没有人}
 
 ```python
 wf = starter_flow("帮我做一个 X", workspace=".", run_dir="runs", timeout_s=0)
@@ -274,9 +274,9 @@ ctx = await wf.run(rt, on_event=None)       # 이벤트를 전부 버린다
     제자리에 멈춰 선다. 게다가 에러도 없고 타임아웃도 없으며 로그상으로도 구분되지 않는다.
     무인 실행에서 올바른 값은 둘뿐이다. `0`(즉시 불발) 또는 유한한 초.
 
-## 실제로 무엇을 하는가
+## 실제로 무엇을 하는가 {#它实际做了什么}
 
-### `Event`의 모양
+### `Event`의 모양 {#event-的形状}
 
 ```python
 @dataclass
@@ -290,7 +290,7 @@ class Event:
 
 `str(ev)`: `tool_call`은 `[도구명] 요약`, 나머지는 `text`. `text`가 비어 있으면 `<kind>`다.
 
-### 15가지 `EventKind`
+### 15가지 `EventKind` {#15-个-eventkind}
 
 | `kind` | 누가 보내는가 | 언제 나오는가 | `text` | `payload` |
 |---|---|---|---|---|
@@ -317,7 +317,7 @@ class Event:
 UI를 쓸 때는 `else` 분기를 하나 남겨라. `EventKind`에는 앞으로도 멤버가 추가되고, 그것 때문에 옛 UI가
 죽어서는 안 된다.
 
-### `handoff`의 세 가지 phase
+### `handoff`의 세 가지 phase {#handoff-的三个-phase}
 
 | `phase` | 언제 보내는가 | `payload`가 추가로 싣는 것 |
 |---|---|---|
@@ -327,7 +327,7 @@ UI를 쓸 때는 `else` 분기를 하나 남겨라. `EventKind`에는 앞으로�
 
 메커니즘 자체는 [핸드오프](handoff.md)를 보라.
 
-### `ask`의 두 가지 신분
+### `ask`의 두 가지 신분 {#ask-的两种身份}
 
 `Event("ask")`는 "질문"과 "사람이 먼저 한 말"을 동시에 실어 나른다. **UI는 반드시 `payload["kind"]`를 먼저 봐야 한다.**
 
@@ -340,7 +340,7 @@ UI를 쓸 때는 `else` 분기를 하나 남겨라. `EventKind`에는 앞으로�
 (`answered` / `timeout` / `declined` / `over_budget` / `invalid`). UI는 `payload["id"]`로 같은 항목을
 갱신하면 된다.
 
-### 사람에게 묻기: `Ask`와 `HumanChannel`
+### 사람에게 묻기: `Ask`와 `HumanChannel` {#问人ask-与-humanchannel}
 
 ```python
 @dataclass
@@ -428,7 +428,7 @@ HumanChannel(
 | `timeout_s<=0` | 기다리지 않음, 질문은 즉시 불발 |
 | `remaining`이 `-1` 반환 | `max_asks=None`일 때의 값이지 0이 아니다 |
 
-### 인터럽트: 어느 스레드에서든 멈추라고 외칠 수 있다
+### 인터럽트: 어느 스레드에서든 멈추라고 외칠 수 있다 {#打断任何线程都能喊停}
 
 `rt.interrupt("别改 Makefile,那两行直接改")`, 빈 문자열이면 말 없이 끊기만 한다. 성질은 셋이다.
 
@@ -446,7 +446,7 @@ HumanChannel(
 끊고 싶지는 않고 요구만 하나 더 얹고 싶다면 인박스를 쓴다(`ch.send(...)`) —— 아무것도 끊지 않고, 지연은
 에이전트의 다음 체크포인트까지다.
 
-### 오라클: 실행을 방해하지 않고 한마디 묻기
+### 오라클: 실행을 방해하지 않고 한마디 묻기 {#旁路顾问问一句而不打扰运行}
 
 "지금 어디까지 왔나"를 알고 싶다고 해서 끊을 필요는 없고, 코디네이터에게 물어서도 안 된다. 그 문답은
 **메인 스레드의 컨텍스트를 영구히 차지하며**(거기 담기는 것은 결정이지 문답 기록이 아니다), 게다가
@@ -462,7 +462,7 @@ HumanChannel(
 
 실측으로 두 번 물어 합계 $0.5190, 메인 실행의 manifest는 1바이트도 늘지 않았다.
 
-### 두 가지 철칙
+### 두 가지 철칙 {#两条硬规矩}
 
 !!! warning "on_event는 블로킹해서도 안 되고, 예외를 밖으로 내보내서도 안 된다"
     **하나, `on_event`는 동기 함수이며 이벤트 루프가 있는 스레드에서 호출된다.** 그래서
@@ -477,9 +477,9 @@ HumanChannel(
     예외: `HumanChannel`이 스스로 보내는 `ask` 이벤트는 이미 감싸져 있고, 예외는 `channel.ui_errors`에
     모이며 실행을 중단시키지 않는다.
 
-## 언제 쓰면 안 되는가
+## 언제 쓰면 안 되는가 {#什么时候不该用它}
 
-### 인터랙션 레이어에서 하면 안 되는 것
+### 인터랙션 레이어에서 하면 안 되는 것 {#交互层里不该做的事}
 
 | 하면 안 되는 것 | 왜 | 어떻게 해야 하나 |
 |---|---|---|
@@ -493,7 +493,7 @@ HumanChannel(
 | `Event` 스트림으로 진행 상황과 결과를 짜맞추는 것 | 본문은 핸드오프와 재시도에 의해 여러 토막으로 끊긴다 | `on_step(step, result)`로 완전한 `StepResult`를 받는다 |
 | 무인 실행에서 `timeout_s=None`을 쓰는 것 | 아무도 답하지 않으면 실행이 영원히 걸려 있고, 에러도 타임아웃도 나지 않는다 | `0`, 또는 유한한 초 |
 
-### 애초에 바꿀 필요가 없을 때
+### 애초에 바꿀 필요가 없을 때 {#什么时候根本不用换}
 
 - **색만 바꾸거나 한 줄 더/덜 찍고 싶을 때** —— 렌더링 함수만 고치면 된다. 터미널 참조 구현의 인터럽트,
   오라클, 인박스 수신 확인, SIGHUP / SIGTERM 구조, 종료 전 우회로 마무리 대기를 다시 쓰는 비용은 작지 않다.

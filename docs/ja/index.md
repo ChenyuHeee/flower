@@ -22,7 +22,7 @@ main thread 上の agent は判断だけを行い、手を動かす作業はす�
 
 4 つの数字は [HT001](cases/ht001.md) —— ある agent が flower の下でゼロからターミナル IDE を書き上げた、あの run のもの。
 
-## インストール
+## インストール {#装}
 
 ```bash
 curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
@@ -33,33 +33,33 @@ Claude Code CLI も要らない。インストール後は任意のプロジェ�
 かゲートウェイのアドレスを訊かれる。一度設定すれば `~/.config/flower/.env` に保存され、どこでも効く。すでに Claude Code をインストールして設定済みなら、
 そのトークンをそのまま借りるので、何も訊かれない。詳しい手順とトラブルシューティングは[インストール](getting-started/install.md)を参照。
 
-## 4 種類の失敗を肩代わりする
+## 4 種類の失敗を肩代わりする {#四类失败}
 
 <div class="fl-grid" markdown>
 
 <div class="fl-card" markdown>
-### [clarify](guide/clarify.md)
+### [clarify](guide/clarify.md) {#前置确认}
 
 出来上がったものが望んだものと違うのが怖い —— 着手前に、質問だけして手を動かさない役割が、明確になるまで問い詰め、要件を 1 通の文書に凍結する。
 以降のすべての step はそれを読んで開始する。
 </div>
 
 <div class="fl-card" markdown>
-### [goal guard](guide/goal.md)
+### [goal guard](guide/goal.md) {#目标看守}
 
 「完了しました」と言われても実は終わっていないのが怖い —— 各ラウンドの作業が終わるたびに別の役割が独立に 1 回判定する。達成なら先へ進み、未達成なら差し戻す。
 その環境では検証できない場合は止まって人に訊く。
 </div>
 
 <div class="fl-card" markdown>
-### [continuity](guide/continuity.md)
+### [continuity](guide/continuity.md) {#接续}
 
 数時間走ったあとにクラッシュしてゼロからやり直しになるのが怖い —— 同じディレクトリでもう一度 `flower` と叩けば前回の進捗に接続する。プロセスが kill されても、
 マシンが再起動しても同じ。id を覚えておく必要はない。
 </div>
 
 <div class="fl-card" markdown>
-### [handoff](guide/handoff.md)
+### [handoff](guide/handoff.md) {#换代}
 
 コンテキストが満杯になって要約 1 段落に潰されるのが怖い —— 現在の session が自分で、人が読めて編集もできる handoff document を書き、新しい session が引き継ぐ。
 compact は使わない。
@@ -67,7 +67,7 @@ compact は使わない。
 
 </div>
 
-## なぜ "long-horizon" なのか
+## なぜ "long-horizon" なのか {#长程}
 
 main thread 上の [coordinator](reference/glossary.md#协调者) には判断だけを載せ、`Write` と `Edit` は渡さない ——
 コードを書く、テストを走らせる、資料を調べるはすべて [subagent](reference/glossary.md#subagent) に委ねる。
@@ -77,7 +77,7 @@ HT001 の 10.4 hours の run では、**本文文字数の 94.8% が subagent �
 だから main thread は 70 ラウンドかけてようやく 185.9K に達し、全行程で compact は一度も起きなかった —— この層をどう作ったのか、残る 3 層は何かは、
 [コンテキスト経済学](guide/context.md)を参照。
 
-## 実際に走らせた
+## 実際に走らせた {#真的跑过}
 
 - **[HT001](cases/ht001.md)** —— ゼロからターミナル IDE を書く。$171.62 / 10.4 hours /
   main thread のコンテキストは 185.9K まで伸び、12,212 行のプロダクトコードを提出。途中で一度ネットが切れたが、自力で最後まで走り切った。
@@ -88,7 +88,7 @@ HT001 の 10.4 hours の run では、**本文文字数の 94.8% が subagent �
 HT002 では `git clone && make && ./cppide` に 1 時間かけた。すべての数字は `runs/manifest.json`
 と `sessions.db` で再計算できる —— これは生の記録であって、宣伝ではない。
 
-## どこから読むか
+## どこから読むか {#从哪读起}
 
 - **すぐ動かしたい** —— [クイックスタート](getting-started/quickstart.md):まず 0.2 元ぶんだけ使って認証情報を一発検証し、
   次にコードを書かずに 3 step の workflow を最後まで走らせる。

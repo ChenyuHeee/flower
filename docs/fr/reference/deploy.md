@@ -7,9 +7,9 @@ la machine hôte) et le site de documentation (un push sur `main` publie automat
 `install.sh` est servi depuis le domaine Pages). Les trois sections sont indépendantes, lisez ce
 dont vous avez besoin.
 
-## I. Le conteneur
+## I. Le conteneur {#一容器}
 
-### Pourquoi un conteneur
+### Pourquoi un conteneur {#为什么要容器}
 
 **D'abord, pour enfermer.** Le [worker](glossary.md#执行者) qui travaille dispose d'un **Bash non
 restreint** — la liste blanche Bash de flower (`delegate_guard`) ne couvre que le
@@ -32,7 +32,7 @@ Validé en conditions réelles (2026-09-06, macOS 15 / arm64 / colima + docker 2
 | Propriété des fichiers | Un fichier écrit dans `/work` depuis le conteneur apparaît en `hechenyu:staff` sur l'hôte, mapping correct |
 | Visibilité de l'hôte | Dans le conteneur, `ls /Users` → `No such file or directory` |
 
-### Ce qui est installé dans l'image
+### Ce qui est installé dans l'image {#镜像里装了什么}
 
 Image de base `python:3.13-slim`, plus trois paquets apt. Chacun a sa raison :
 
@@ -56,7 +56,7 @@ argument ouvre la saisie interactive (il vous demande ce que vous voulez faire) 
 `--help`. On évite ainsi d'avoir à mettre entre guillemets une demande en langue naturelle dans le
 shell.
 
-### Pourquoi on ne peut pas monter le `.venv` de l'hôte
+### Pourquoi on ne peut pas monter le `.venv` de l'hôte {#为什么不能把宿主的-venv-挂进去}
 
 Le SDK publie une wheel par plateforme, et le binaire embarqué est spécifique à la plateforme :
 
@@ -70,7 +70,7 @@ Le monter ne fonctionne pas, donc l'image doit faire son propre `pip install`. �
 aussi une preuve de portabilité : un même `pyproject.toml`, un binaire natif différent selon la
 plateforme, et pas une ligne de code du framework à changer.
 
-### Les deux scripts
+### Les deux scripts {#两个脚本}
 
 | Script | Rôle |
 |---|---|
@@ -100,7 +100,7 @@ tout simplement aucun build-arg.
 `FLOWER_HOME` est déduit de l'emplacement du script, sans chemin en dur : le dépôt fonctionne où
 qu'il soit cloné.
 
-### Lancer
+### Lancer {#跑起来}
 
 ```bash
 docker/build                       # une fois suffit
@@ -135,7 +135,7 @@ docker run -i $TTY --rm \
     "$IMAGE" "$@"
 ```
 
-### Limites de montage et persistance
+### Limites de montage et persistance {#挂载边界与持久化}
 
 ```text
 宿主 $PWD  ──挂载──>  /work       ← l'agent travaille ici, les livrables restent sur l'hôte
@@ -164,7 +164,7 @@ seul `HT001` est monté, le code source du framework est hors du périmètre de 
     d'échec, sortie 1 avec l'indication `colima start --mount '<chemin>:w'`. La sonde nécessite de
     démarrer un conteneur, donc il faut avoir fait `docker/build` au préalable.
 
-### Identifiants
+### Identifiants {#凭证}
 
 Ils passent par `docker run --env-file`, et **n'entrent pas dans les couches de l'image**.
 `flowerbox` lit `$FLOWER_HOME/.env`, c'est-à-dire par défaut le `.env` à la racine du dépôt :
@@ -195,7 +195,7 @@ Noms de clés, priorités, configuration de la passerelle : voir [configuration]
     non supervisé, il faut passer explicitement `--timeout 0`. Le script affiche un avertissement
     quand il détecte l'absence de TTY.
 
-### Sous-module git
+### Sous-module git {#git-submodule}
 
 `.gitmodules` ne contient qu'une entrée :
 
@@ -211,7 +211,7 @@ l'état signalé par le `-` en tête de `git submodule status`). Faut-il s'en oc
 | Lancer flower, construire l'image | **Non**. `.dockerignore` exclut `human-test/`, et le `Dockerfile` ne fait de toute façon que `COPY` `pyproject.toml` / `flower` / `examples` |
 | Consulter localement le code produit par HT001 | Oui : `git submodule update --init human-test/HT001`, ou dès le départ `git clone --recurse-submodules` |
 
-### Réseau en Chine : pourquoi toutes ces substitutions de miroirs
+### Réseau en Chine : pourquoi toutes ces substitutions de miroirs {#国内网络为什么有那一堆镜像替换}
 
 Quand on installe tout ça derrière le pare-feu, ce n'est pas la bande passante qui est lente, ce
 sont les liaisons internationales. Le `docker/build` par défaut substitue déjà tout ce qu'il faut,
@@ -312,7 +312,7 @@ quatre substitutions — inutile de lire si votre réseau n'a pas ce problème.
 
 ## II. plugin {#plugin}
 
-### Ce que c'est
+### Ce que c'est {#它是什么}
 
 Un **paquet de capacités métier qui voyage avec le dépôt**. Le code du framework ne contient aucune
 connaissance métier ; toute la connaissance métier est placée dans le répertoire `plugin/` à la
@@ -332,7 +332,7 @@ Combiné à `setting_sources=[]` (traité plus bas), c'est ce qui permet à flow
 « [portable](glossary.md#可移植) » et « au fait de votre domaine » : il ne demande pas ce qui est
 installé sur la machine hôte, il ne connaît que ce répertoire apporté par le dépôt.
 
-### Structure du répertoire
+### Structure du répertoire {#目录布局}
 
 | Chemin | Contenu | Quand ça s'applique | Qui décide |
 |---|---|---|---|
@@ -360,7 +360,7 @@ Aujourd'hui, `plugin/` ne contient que deux choses dans le dépôt : `.claude-pl
 `skills/example/SKILL.md`. `agents/`, `hooks/` et `.mcp.json` **n'existent pas encore** — créez-les
 vous-même si besoin, avec exactement les noms de répertoires du tableau ci-dessus.
 
-### Écrire une skill : exemple complet
+### Écrire une skill : exemple complet {#写一个-skill完整例子}
 
 Prenons « générer des notes de version », de zéro jusqu'à la confirmation que c'est actif.
 
@@ -463,7 +463,7 @@ les noms sont ceux du champ `name` de `SKILL.md`, et le SDK accepte aussi la for
     l'installation n'a pas de paquet de capacités métier. Pour utiliser un paquet de capacités
     métier, il faut aujourd'hui lancer depuis un checkout des sources.
 
-### Pourquoi `setting_sources=[]` force les capacités métier à passer par les plugins
+### Pourquoi `setting_sources=[]` force les capacités métier à passer par les plugins {#setting_sources-为什么逼着领域能力走-plugin}
 
 La même fonction contient aussi cette ligne :
 
@@ -500,7 +500,7 @@ c'est un canal différent des plugins — le premier est présent dans le contex
 second est chargé à la demande. Écrivez dans `instructions` les règles courtes et obligatoires, et
 dans une skill les connaissances longues et occasionnellement utiles.
 
-## III. Le site de documentation
+## III. Le site de documentation {#三文档站}
 
 Le site que vous lisez est construit avec mkdocs-material ; les sources sont dans `docs/` du dépôt,
 et un push sur `main` publie automatiquement.
@@ -529,7 +529,7 @@ peut par ailleurs déclencher manuellement un `workflow_dispatch` depuis la page
 docs/**  mkdocs.yml  hooks/**  docs-requirements.txt  install.sh  .github/workflows/docs.yml
 ```
 
-### Pourquoi `install.sh` est servi depuis Pages
+### Pourquoi `install.sh` est servi depuis Pages {#installsh-为什么从-pages-发}
 
 L'étape de construction se termine par cette ligne :
 

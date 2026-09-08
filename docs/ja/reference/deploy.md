@@ -5,9 +5,9 @@ flower を別の場所へ持っていくときに片づけることは 3 つあ�
 リポジトリに付いて回り、ホストに何が入っているかを見ない)、ドキュメントサイト(`main` に push すれば
 自動で公開され、`install.sh` は Pages のドメインにぶら下がる)。3 節は互いに独立しているので、必要なところだけ読めばいい。
 
-## 一、コンテナ
+## 一、コンテナ {#一容器}
 
-### なぜコンテナが要るのか
+### なぜコンテナが要るのか {#为什么要容器}
 
 **一つは囲い込むため。** 実作業をする[ワーカー](glossary.md#执行者)は **制限のない Bash** を持つ ——
 flower の Bash ホワイトリスト(`delegate_guard`)は[メインスレッド](glossary.md#主线程)だけを見ており、
@@ -30,7 +30,7 @@ Claude Code CLI も Node も入っておらず、あるのは Python と `claude
 | ファイルの所有者 | コンテナ内から `/work` に書いたファイルはホスト側で `hechenyu:staff`、マッピングは正しい |
 | ホストの可視性 | コンテナ内で `ls /Users` → `No such file or directory` |
 
-### イメージに何が入っているか
+### イメージに何が入っているか {#镜像里装了什么}
 
 ベースイメージは `python:3.13-slim`、その上に apt で 3 パッケージだけ。どれにも理由がある:
 
@@ -53,7 +53,7 @@ agent はホストのフレームワークソースに触れない:
 (何をしたいか聞かれる)。`--help` を出すのではない。こうしておけば、日本語の要望を shell 上でクォートで
 くくる必要がなくなる。
 
-### ホストの `.venv` をマウントできない理由
+### ホストの `.venv` をマウントできない理由 {#为什么不能把宿主的-venv-挂进去}
 
 SDK はプラットフォームごとに wheel を配っており、同梱バイナリはプラットフォーム専用だ:
 
@@ -67,7 +67,7 @@ SDK はプラットフォームごとに wheel を配っており、同梱バイ
 証拠でもある:同じ `pyproject.toml` で、プラットフォームが変わればネイティブバイナリが差し替わるだけ、
 フレームワークのコードは 1 行も変えない。
 
-### 2 つのスクリプト
+### 2 つのスクリプト {#两个脚本}
 
 | スクリプト | 何をするか |
 |---|---|
@@ -96,7 +96,7 @@ SDK はプラットフォームごとに wheel を配っており、同梱バイ
 `FLOWER_HOME` はスクリプト自身の位置から導出しており、パスをハードコードしていないので、
 リポジトリをどこにクローンしても動く。
 
-### 動かす
+### 動かす {#跑起来}
 
 ```bash
 docker/build                       # 一度やれば十分
@@ -129,7 +129,7 @@ docker run -i $TTY --rm \
     "$IMAGE" "$@"
 ```
 
-### マウント境界と永続化
+### マウント境界と永続化 {#挂载边界与持久化}
 
 ```text
 宿主 $PWD  ──挂载──>  /work       ← agent 在这里干活,产出留在宿主
@@ -155,7 +155,7 @@ docker run -i $TTY --rm \
     プローブファイルを書き、もう 1 つコンテナを起こして `test -f /work/<プローブ>` で実測する(追加マウントを設定していれば通る)。
     通らなければ exit 1 し、`colima start --mount '<パス>:w'` を教える。プローブはコンテナを起こすので、先に `docker/build` が必要。
 
-### 認証情報
+### 認証情報 {#凭证}
 
 `docker run --env-file` 経由で渡し、**イメージレイヤーには入らない**。`flowerbox` が読むのは
 `$FLOWER_HOME/.env`、既定ではリポジトリルートの `.env`:
@@ -182,7 +182,7 @@ FLOWER_HOME=~/.config/flower /path/to/flower/docker/flowerbox
     `--timeout`(既定 1800 秒)を丸ごと待つしかない。無人運転では明示的に `--timeout 0` を指定すること。
     スクリプトは TTY がないことを検出すると、先に注意を 1 行出す。
 
-### git submodule
+### git submodule {#git-submodule}
 
 `.gitmodules` にあるのは 1 件だけ:
 
@@ -198,7 +198,7 @@ FLOWER_HOME=~/.config/flower /path/to/flower/docker/flowerbox
 | flower を走らせる、イメージをビルドする | **不要**。`.dockerignore` が `human-test/` を除外しており、`Dockerfile` もそもそも `pyproject.toml` / `flower` / `examples` しか `COPY` しない |
 | ローカルで HT001 の成果コードを読む | 必要:`git submodule update --init human-test/HT001`、または最初から `git clone --recurse-submodules` |
 
-### 中国国内ネットワーク:あのミラー置換の山は何なのか
+### 中国国内ネットワーク:あのミラー置換の山は何なのか {#国内网络为什么有那一堆镜像替换}
 
 この一式を中国国内でインストールするとき、遅いのは帯域ではなく国際回線だ。既定の `docker/build` は
 置換すべきところをすべて置換済みで、`FLOWER_MIRRORS=0` で一括オフにできる。以下は実測データと 4 箇所の置換の経緯 ——
@@ -291,7 +291,7 @@ FLOWER_HOME=~/.config/flower /path/to/flower/docker/flowerbox
 
 ## 二、plugin {#plugin}
 
-### それは何か
+### それは何か {#它是什么}
 
 リポジトリに付いて回る**ドメイン能力パッケージ**。フレームワークのコードはドメイン知識を一切含まず、
 ドメイン知識はすべてリポジトリルートの `plugin/` ディレクトリに置かれ、コードと一緒に clone され、
@@ -312,7 +312,7 @@ if use_plugin and PLUGIN_DIR.is_dir():
 「あなたのドメインを理解している」を同時に成立させられる理由だ:ホストに何が入っているかを問わず、
 リポジトリが持ち込んだこの 1 ディレクトリだけを見る。
 
-### ディレクトリ構成
+### ディレクトリ構成 {#目录布局}
 
 | パス | 何を置くか | いつ効くか | 誰が決めるか |
 |---|---|---|---|
@@ -338,7 +338,7 @@ if use_plugin and PLUGIN_DIR.is_dir():
 いま、リポジトリの `plugin/` には 2 つしかない:`.claude-plugin/plugin.json` と `skills/example/SKILL.md`。
 `agents/`、`hooks/`、`.mcp.json` は**まだ存在しない** —— 使うなら自分で作る。ディレクトリ名は上の表のとおりに固定。
 
-### skill を書く:完全な例
+### skill を書く:完全な例 {#写一个-skill完整例子}
 
 「リリースノートを生成する」を例に、ゼロから有効化の確認まで。
 
@@ -428,7 +428,7 @@ python3 -c "from flower.core.agent import PLUGIN_DIR; print(PLUGIN_DIR, PLUGIN_D
     `PLUGIN_DIR` コマンドを走らせて自己確認すること:`False` が出れば、そのインストールにはドメイン能力パッケージがない。
     ドメイン能力パッケージを使うなら、いまのところソースの checkout から走らせるしかない。
 
-### `setting_sources=[]` がドメイン能力を plugin に追い込む理由
+### `setting_sources=[]` がドメイン能力を plugin に追い込む理由 {#setting_sources-为什么逼着领域能力走-plugin}
 
 同じ関数にはこの 1 行もある:
 
@@ -462,7 +462,7 @@ SDK の既定は `None` = 3 つのソースをすべて読む:`~/.claude/setting
 plugin とは別の通り道だ —— 前者は毎ラウンドコンテキストに載り、後者は必要に応じてロードされる。
 短くて必須の規律は `instructions` に、長くてたまに役立つ知識は skill に書く。
 
-## 三、ドキュメントサイト
+## 三、ドキュメントサイト {#三文档站}
 
 いま読んでいるこのサイトは mkdocs-material で作っている。ソースはリポジトリの `docs/` 配下にあり、
 `main` に push すれば自動で公開される。
@@ -491,7 +491,7 @@ CI のトリガー条件は `main` への push、**かつ**変更が以下のパ
 docs/**  mkdocs.yml  hooks/**  docs-requirements.txt  install.sh  .github/workflows/docs.yml
 ```
 
-### `install.sh` を Pages から配る理由
+### `install.sh` を Pages から配る理由 {#installsh-为什么从-pages-发}
 
 ビルドステップの末尾にこの 1 行がある:
 

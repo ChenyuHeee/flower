@@ -7,7 +7,7 @@ sur quel projet vous travaillez ni dans quel langage, et il n'a pas à le savoir
 comment concevoir un workflow ; le tableau complet des champs de `Step` et `Workflow` est dans
 [l'API Python](../reference/api.md).
 
-## Le problème résolu
+## Le problème résolu {#解决什么问题}
 
 Une exécution [long-horizon](../reference/glossary.md#长程) ne tient pas dans un seul prompt :
 d'abord clarifier le besoin, puis enquêter, puis implémenter, puis relire — chaque segment a son
@@ -26,7 +26,7 @@ l'étape cassée.
 Il ne contient aucune hypothèse métier. Où découper, ce que chaque étape doit valider, que faire en
 cas de refus — ces quatre choses, c'est cela « concevoir un workflow ».
 
-## Comment s'en servir (code minimal)
+## Comment s'en servir (code minimal) {#怎么用最小代码}
 
 ```python
 # flows.py
@@ -65,9 +65,9 @@ terminal affiche le coût total et le chemin du manifeste d'exécution.
 ctx = await wf.run(rt, on_step=lambda step, r: print(f"{step.name} ok={r.ok} ${r.cost_usd:.4f}"))
 ```
 
-## Ce qu'il fait réellement
+## Ce qu'il fait réellement {#它实际做了什么}
 
-### Ce qu'une Step reçoit, ce qu'elle doit renvoyer
+### Ce qu'une Step reçoit, ce qu'elle doit renvoyer {#一个-step-收到什么必须返回什么}
 
 `Step` n'est pas une fonction, c'est une **déclaration**. Ce qui s'exécute vraiment, c'est
 `Runtime.run(step.spec, prompt rendu, ...)` — **une étape = un appel à `Runtime.run` = une
@@ -95,7 +95,7 @@ subagent sont dans son propre transcript, le [task brief](../reference/glossary.
 est confié est de `kind="prompt"`, et l'erreur synthétique d'une coupure réseau est de
 `kind="error"` — aucun des trois n'y entre.
 
-### reduce : ce n'est pas du sucre
+### reduce : ce n'est pas du sucre {#reduce不是糖}
 
 Par défaut, ce qui est transmis en aval, ce sont les mots exacts du modèle. Pour certaines étapes,
 ces mots exacts **ne doivent pas** être transmis tels quels :
@@ -111,7 +111,7 @@ de l'étape suivante. `clarify_step` s'appuie précisément sur ce champ pour l'
 
 `reduce` **doit être une fonction synchrone** ; `gate` / `when` / `on_reject` peuvent être async.
 
-### Comment l'état circule dans ctx
+### Comment l'état circule dans ctx {#状态怎么在-ctx-里流动}
 
 `ctx` est un `dict[str, Any]` — c'est `Workflow.context` lui-même. Après chaque étape, l'écriture
 suit ce tableau :
@@ -149,7 +149,7 @@ explicitement `context={}`.
     un résultat partiel, utilisez `on_fail="continue"` ; si vous voulez vraiment sauter, l'aval doit
     se protéger lui-même avec `ctx.get(...)`.
 
-### Verdict et renvoi : gate, on_reject, StepAbort
+### Verdict et renvoi : gate, on_reject, StepAbort {#判定与打回gateon_rejectstepabort}
 
 `gate(result, ctx) -> bool` juge « ça a tourné jusqu'au bout, mais est-ce conforme ? ». Deux détails
 indispensables :
@@ -191,7 +191,7 @@ aucun des `retries` restants n'est consommé.
 « refaire ne changera rien ».** Le cas typique est un objectif jugé irréalisable dans cet
 environnement, sans personne à qui demander — continuer à tourner à vide est l'option la plus chère.
 
-### Ne confondez pas les deux niveaux de retry
+### Ne confondez pas les deux niveaux de retry {#两层重试别混}
 
 | | `Step.retries` | `Runtime(resilience=...)` |
 |---|---|---|
@@ -203,7 +203,7 @@ environnement, sans personne à qui demander — continuer à tourner à vide es
 Le prompt utilisé pour la reprise **ne contient volontairement aucun détail d'erreur** — le modèle a
 besoin de savoir « tu as été interrompu, continue », pas de savoir si c'était un ENOTFOUND ou un 503.
 
-### Enchaîner les étapes
+### Enchaîner les étapes {#把步骤串起来}
 
 Il existe trois façons de faire passer l'état d'une étape à l'autre ; le choix détermine ce que
 l'étape suivante voit :
@@ -241,7 +241,7 @@ Quelques principes de conception payés cher :
    nettoyage des worktrees, ouverture de PR) reste pour l'instant à la charge de votre workflow ; le
    harness garantit seulement que les modifications atterrissent chacune dans son propre worktree.
 
-### Le workbench doit être accroché au Workflow
+### Le workbench doit être accroché au Workflow {#工作台要挂在-workflow-上}
 
 Dès que le workflow doit écrire des fichiers dans le [workbench](../reference/glossary.md#工作台) —
 cas typique : `clarify_step(brief_path=...)` — vous devez créer vous-même un `Workbench` et
@@ -286,7 +286,7 @@ ce champ pour savoir à qui répondre.
     disparaît ; quand `Workflow.workbench` existe, le `-W` de la ligne de commande est ignoré, c'est
     lui qui fait foi.
 
-### `continuous=True` : relancer une seconde fois sur le même chemin
+### `continuous=True` : relancer une seconde fois sur le même chemin {#continuoustrue同一个路径再跑一次}
 
 Les trois modes ci-dessus concernent l'enchaînement des étapes **à l'intérieur d'une exécution**.
 L'inter-processus est un autre axe :
@@ -319,7 +319,7 @@ Trois conséquences :
 
 Conception complète et `--new` : voir [Continuité](continuity.md).
 
-## Quand ne pas l'utiliser
+## Quand ne pas l'utiliser {#什么时候不该用它}
 
 - **Un seul agent à lancer, sans verdict** — n'enveloppez pas dans un `Workflow`. Faites directement
   `await rt.run(spec, "…")`, ou en ligne de commande `flower once "读一眼这个仓库"`.

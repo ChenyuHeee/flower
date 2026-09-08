@@ -23,7 +23,7 @@ Auf einer anderen Maschine verhält es sich identisch — es liest keine Einstel
 
 Die vier Zahlen stammen aus [HT001](cases/ht001.md) — dem Run, in dem ein Agent unter flower von Null eine Terminal-IDE geschrieben hat.
 
-## Installieren
+## Installieren {#装}
 
 ```bash
 curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
@@ -34,33 +34,33 @@ und auch keine Claude Code CLI. Nach der Installation `cd` in ein beliebiges Pro
 oder Gateway-Adresse, einmal konfiguriert liegt das in `~/.config/flower/.env` und gilt überall; wenn auf der Maschine bereits Claude Code installiert und eingerichtet ist,
 borgt es sich dieses Token direkt, ganz ohne Nachfrage. Vollständige Schritte und Fehlersuche siehe [Installation](getting-started/install.md).
 
-## Es fängt vier Arten von Fehlschlägen für dich ab
+## Es fängt vier Arten von Fehlschlägen für dich ab {#四类失败}
 
 <div class="fl-grid" markdown>
 
 <div class="fl-card" markdown>
-### [Clarify](guide/clarify.md)
+### [Clarify](guide/clarify.md) {#前置确认}
 
 Angst, dass am Ende nicht das herauskommt, was du wolltest — vor dem Loslegen gibt es eine Rolle, die nur fragt und nichts anfasst, so lange, bis alles klar ist, und friert die Anforderung in einem Dokument ein,
 das jeder folgende Schritt zum Start liest.
 </div>
 
 <div class="fl-card" markdown>
-### [Goal Guard](guide/goal.md)
+### [Goal Guard](guide/goal.md) {#目标看守}
 
 Angst, dass es "fertig" sagt, obwohl es nicht fertig ist — nach jeder Arbeitsrunde urteilt eine andere Rolle unabhängig: erreicht, dann weiter; nicht erreicht, dann zurück;
 lässt sich das in dieser Umgebung nicht verifizieren, hält es an und fragt einen Menschen.
 </div>
 
 <div class="fl-card" markdown>
-### [Continuity](guide/continuity.md)
+### [Continuity](guide/continuity.md) {#接续}
 
 Angst, dass nach Stunden alles abstürzt und du von vorn anfängst — tippe im selben Verzeichnis noch einmal `flower` und du bist wieder beim letzten Stand, auch wenn der Prozess gekillt wurde
 oder die Maschine neu gestartet ist; du musst dir keine ID merken.
 </div>
 
 <div class="fl-card" markdown>
-### [Handoff](guide/handoff.md)
+### [Handoff](guide/handoff.md) {#换代}
 
 Angst, dass der volle Kontext zu einer Zusammenfassung zusammengepresst wird — die aktuelle Session schreibt selbst ein Handoff-Dokument, das Menschen lesen und ändern können, eine neue Session übernimmt,
 ganz ohne Compact.
@@ -68,7 +68,7 @@ ganz ohne Compact.
 
 </div>
 
-## Warum es "long-horizon" ist
+## Warum es "long-horizon" ist {#长程}
 
 Der [Coordinator](reference/glossary.md#协调者) im Main Thread enthält nur Entscheidungen und bekommt weder `Write` noch `Edit` —
 Code schreiben, Tests laufen lassen, Recherche geht alles an [Subagents](reference/glossary.md#subagent),
@@ -78,7 +78,7 @@ von 1.893 handanlegenden Tool-Aufrufen kamen nur 32 dem Coordinator zu Gesicht.
 Deshalb wuchs der Main Thread erst nach 70 Runden auf 185.9K und es kam durchgehend zu keinem Compact — wie diese Schicht gebaut ist und was die anderen drei sind,
 steht unter [Kontextökonomie](guide/context.md).
 
-## Wirklich gelaufen
+## Wirklich gelaufen {#真的跑过}
 
 - **[HT001](cases/ht001.md)** — eine Terminal-IDE von Null geschrieben. $171.62 / 10.4 Stunden /
   Main-Thread-Kontext auf 185.9K gewachsen, 12.212 Zeilen Produktcode abgeliefert, unterwegs einmal Netzabbruch, danach selbst weitergelaufen.
@@ -89,7 +89,7 @@ Beide Seiten schreiben auch, was nicht haltbar ist: In HT001 hat der Agent bei d
 in HT002 wurde aus `git clone && make && ./cppide` eine Stunde. Jede Zahl lässt sich in `runs/manifest.json`
 und `sessions.db` nachrechnen — das sind Rohaufzeichnungen, keine Werbung.
 
-## Wo anfangen zu lesen
+## Wo anfangen zu lesen {#从哪读起}
 
 - **Sofort loslegen** — [Schnellstart](getting-started/quickstart.md): erst für ein paar Cent die Credentials verifizieren,
   dann ohne eine Zeile Code einen dreistufigen Workflow durchlaufen.

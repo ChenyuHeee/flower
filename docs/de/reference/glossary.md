@@ -10,7 +10,7 @@ weil ein Begriff für einen anderen gehalten wird.
 
 ---
 
-## Framework und Run
+## Framework und Run {#框架与运行}
 
 ### Long-Horizon {#长程}
 
@@ -62,7 +62,7 @@ Steps weitergegeben wird und wann vorzeitig abgebrochen wird.
 
 ---
 
-## Rollen
+## Rollen {#角色}
 
 Rollen sind flowers Arbeitsteilung unter den Agents. Jede Rolle = ein Stück injizierter Regeltext
 + ein Satz Tools + ein Satz Hooks. Alle fünf Rollen sind Factory-Funktionen, siehe
@@ -148,7 +148,7 @@ Das ist flowers erste Schicht der Kontexteinsparung — und die mit dem größte
 
 ---
 
-## Die vier Mechanismen
+## Die vier Mechanismen {#四个机制}
 
 ### Clarify {#前置确认}
 
@@ -245,7 +245,7 @@ verloren geht; das Handoff-Dokument ist strukturiert, auf Platte geschrieben, un
 
 ---
 
-## Kontextverwaltung
+## Kontextverwaltung {#上下文管理}
 
 ### Main Thread {#主线程}
 
@@ -337,7 +337,7 @@ das ein Fehler“.
 
 ---
 
-## Laufzeit
+## Laufzeit {#运行时}
 
 ### Isolation {#隔离}
 
@@ -420,7 +420,7 @@ Long-Horizon-Run schnell teuer — [HT001](../cases/ht001.md) hat $171.62 gekost
 
 ---
 
-## Portabilität
+## Portabilität {#可移植性}
 
 ### portabel {#可移植}
 

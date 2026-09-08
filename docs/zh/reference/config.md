@@ -187,7 +187,7 @@ ANTHROPIC_DEFAULT_HAIKU_MODEL    CLAUDE_CODE_SUBAGENT_MODEL    CLAUDE_CODE_EFFOR
 `portable=True` 是 `Runtime` 的默认值,**命令行没有开关能关掉它** —— 要关只能走 Python API
 写 `Runtime(portable=False)`,那会变成 `["project"]`,即读项目的 `.claude/`。
 
-### 被隔绝的东西
+### 被隔绝的东西 {#被隔绝的东西}
 
 | 被隔绝的 | 后果 |
 |---|---|
@@ -198,7 +198,7 @@ ANTHROPIC_DEFAULT_HAIKU_MODEL    CLAUDE_CODE_SUBAGENT_MODEL    CLAUDE_CODE_EFFOR
 (`agent.py:26`、`:210-212`),见[部署](deploy.md)。领域指令则是**叠加**在 Claude Code 原生系统
 提示词之后,不是替换(`agent.py:198-202`),所以专业化不以损失通用能力为代价。
 
-### 换台机器要带什么
+### 换台机器要带什么 {#换台机器要带什么}
 
 - **凭证:一个文件**。`~/.config/flower/.env` 拷过去就行,或者在新机器上重新配一次。
   不带的话什么都跑不起来 —— 不会有任何东西被自动继承。

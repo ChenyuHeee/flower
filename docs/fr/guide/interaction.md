@@ -8,7 +8,7 @@ aucun type du SDK.** C'est la frontière qui permet de changer d'UI sans toucher
 Web, service HTTP, autonome sans surveillance — ce qui change, c'est le consommateur d'`Event`,
 pas une ligne d'autre chose.
 
-## Quel problème ça résout
+## Quel problème ça résout {#解决什么问题}
 
 Le flux de messages du SDK est fait de **types internes** : `AssistantMessage`, `ToolUseBlock`,
 `ToolResultBlock`, `ResultMessage`, `SystemMessage`… Les consommer directement depuis l'UI a deux
@@ -39,7 +39,7 @@ Cette frontière règle au passage quatre choses moins évidentes, toutes les qu
    `cache_read_input_tokens` + `cache_creation_input_tokens`). C'est l'unique source du critère de
    [handoff](../reference/glossary.md#换代).
 
-## Comment s'en servir (code minimal)
+## Comment s'en servir (code minimal) {#怎么用最小代码}
 
 Une couche d'interaction doit brancher trois choses : **la sortie d'événements** (où afficher),
 **le canal de questions** (qui répond) et **l'interruption** (comment dire stop). Le bloc ci-dessous
@@ -107,7 +107,7 @@ succès.
     créé (l'écriture ci-dessus), soit vous demandez où il est avec la sonde en lecture seule
     `wake_state()`.
 
-### Trois sorties d'événements
+### Trois sorties d'événements {#三个事件出口}
 
 ```python
 await rt.run(spec, "…", on_event=sink)                  # 1. un seul agent
@@ -128,7 +128,7 @@ compris**), qui reçoit le `StepResult` complet. Barre de progression, écriture
 accrochez-les là, n'allez pas les reconstituer depuis le flux d'`Event` — le texte est découpé en
 plusieurs morceaux par les handoffs et les reprises.
 
-### Terminal : celui par défaut
+### Terminal : celui par défaut {#终端默认的那个}
 
 Il y en a déjà un, sans écrire une ligne. `flower "帮我做一个 X"` passe par
 [`flower/cli.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/cli.py), qui est une
@@ -193,7 +193,7 @@ Les trois points viennent de l'expérience :
   terminal et sera avalé comme réponse à la question suivante — la question est « répondue » avant
   même que l'humain l'ait vue.
 
-### Web : file d'attente + WebSocket
+### Web : file d'attente + WebSocket {#web队列--websocket}
 
 ```python
 events: asyncio.Queue[dict] = asyncio.Queue()
@@ -222,7 +222,7 @@ JSON, et ne doit pas partir vers le front** — utiliser `raw`, c'est rattacher 
 SDK, et cette couche n'aura servi à rien. Les quatre champs `kind` / `text` / `tool` / `payload`
 suffisent.
 
-### HTTP : numéros de séquence + polling
+### HTTP : numéros de séquence + polling {#http序号--轮询}
 
 Sans connexion longue, numérotez les événements pour que le client vienne les chercher :
 
@@ -261,7 +261,7 @@ cohérent avec cette longueur ; et **il faut donner une valeur finie à `timeout
 ne fait de polling, une question ne se termine pas d'elle-même, et `timeout_s=None` suspendra le run
 entier pour toujours. La valeur par défaut de `1800.0` secondes convient.
 
-### Autonome sans surveillance : personne
+### Autonome sans surveillance : personne {#全自动无人值守没有人}
 
 ```python
 wf = starter_flow("帮我做一个 X", workspace=".", run_dir="runs", timeout_s=0)
@@ -296,9 +296,9 @@ appeler. Seuls le quota et le timeout peuvent bloquer une question.
     rien de visible dans les logs. En mode sans surveillance, il n'y a que deux valeurs correctes :
     `0` (échec immédiat) ou un nombre fini de secondes.
 
-## Ce qu'elle fait réellement
+## Ce qu'elle fait réellement {#它实际做了什么}
 
-### La forme d'`Event`
+### La forme d'`Event` {#event-的形状}
 
 ```python
 @dataclass
@@ -313,7 +313,7 @@ class Event:
 `str(ev)` : pour `tool_call`, c'est `[nom d'outil] résumé` ; sinon c'est `text` ; et si `text` est
 vide, c'est `<kind>`.
 
-### Les 15 `EventKind`
+### Les 15 `EventKind` {#15-个-eventkind}
 
 | `kind` | Émis par | Quand | `text` | `payload` |
 |---|---|---|---|---|
@@ -341,7 +341,7 @@ est délibéré — **l'UI ne connaît qu'un seul type d'`Event`, sans avoir à 
 Quand vous écrivez une UI, laissez une branche `else`. `EventKind` gagnera de nouveaux membres, et
 une ancienne UI ne doit pas planter pour autant.
 
-### Les trois phases de `handoff`
+### Les trois phases de `handoff` {#handoff-的三个-phase}
 
 | `phase` | Quand | Extras dans `payload` |
 |---|---|---|
@@ -351,7 +351,7 @@ une ancienne UI ne doit pas planter pour autant.
 
 Pour le mécanisme lui-même, voir [handoff](handoff.md).
 
-### Les deux identités d'`ask`
+### Les deux identités d'`ask` {#ask-的两种身份}
 
 `Event("ask")` porte à la fois « une question » et « un message spontané de l'humain » : **l'UI doit
 d'abord regarder `payload["kind"]`**.
@@ -365,7 +365,7 @@ Une question émet **au moins deux** événements : un à la question (`state="a
 issue (`answered` / `timeout` / `declined` / `over_budget` / `invalid`). L'UI n'a qu'à mettre à jour
 la même entrée d'après `payload["id"]`.
 
-### Demander à l'humain : `Ask` et `HumanChannel`
+### Demander à l'humain : `Ask` et `HumanChannel` {#问人ask-与-humanchannel}
 
 ```python
 @dataclass
@@ -459,7 +459,7 @@ surveillance, ou un agent qui ne pose jamais aucune question.
 | `timeout_s<=0` | Aucune attente, la question échoue immédiatement |
 | `remaining` retourne `-1` | La valeur quand `max_asks=None`, pas 0 |
 
-### Interruption : n'importe quel thread peut dire stop
+### Interruption : n'importe quel thread peut dire stop {#打断任何线程都能喊停}
 
 `rt.interrupt("别改 Makefile,那两行直接改")` ; une chaîne vide interrompt sans rien dire. Trois
 propriétés :
@@ -482,7 +482,7 @@ UI devrait faire pareil.
 Si vous ne voulez pas interrompre mais seulement ajouter une exigence, passez par l'inbox
 (`ch.send(...)`) — elle n'interrompt rien, et le délai est le prochain point de contrôle de l'agent.
 
-### Oracle : poser une question sans déranger le run
+### Oracle : poser une question sans déranger le run {#旁路顾问问一句而不打扰运行}
 
 Pour savoir « où on en est », inutile d'interrompre, et il ne faut pas demander au coordinateur :
 cet échange **occuperait à jamais le contexte du thread principal** (qui contient des décisions, pas
@@ -501,7 +501,7 @@ run a exécutées », et une question posée en passant n'est pas une étape.
 Mesuré : deux questions pour $0.5190 au total, et pas un octet de plus dans le manifeste du run
 principal.
 
-### Deux règles dures
+### Deux règles dures {#两条硬规矩}
 
 !!! warning "on_event ne doit ni bloquer, ni laisser échapper d'exception"
     **Un : `on_event` est une fonction synchrone, appelée dans le thread de la boucle d'événements.**
@@ -518,9 +518,9 @@ principal.
     Exception : les événements `ask` émis par `HumanChannel` lui-même sont déjà enveloppés ; les
     exceptions sont collectées dans `channel.ui_errors` et n'interrompent pas le run.
 
-## Quand ne pas s'en servir
+## Quand ne pas s'en servir {#什么时候不该用它}
 
-### Ce qu'il ne faut pas faire dans la couche d'interaction
+### Ce qu'il ne faut pas faire dans la couche d'interaction {#交互层里不该做的事}
 
 | À ne pas faire | Pourquoi | À faire à la place |
 |---|---|---|
@@ -534,7 +534,7 @@ principal.
 | Reconstituer progression et résultats depuis le flux d'`Event` | Le texte est découpé en plusieurs morceaux par les handoffs et les reprises | `on_step(step, result)`, qui donne le `StepResult` complet |
 | `timeout_s=None` en mode sans surveillance | Personne ne répond, le run reste suspendu pour toujours, sans erreur ni timeout | `0`, ou un nombre fini de secondes |
 
-### Quand il n'y a carrément rien à changer
+### Quand il n'y a carrément rien à changer {#什么时候根本不用换}
 
 - **Vous voulez juste changer les couleurs, afficher une ligne de plus ou de moins** — modifiez la
   fonction de rendu, ça suffit. Réécrire l'interruption, l'oracle, les accusés de réception de

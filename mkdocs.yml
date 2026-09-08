@@ -367,3 +367,6 @@ validation:
   unrecognized_links: warn
   links:
     not_found: warn
+    # 没有这一条,锚点断了只记 INFO,--strict 抓不到 —— 而九种语言共用同一批
+    # 中文锚点,一个标题改名就是九处同时断。
+    anchors: warn

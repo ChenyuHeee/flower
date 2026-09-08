@@ -17,7 +17,7 @@ explica en qué se apoya, cuándo falla en silencio y cómo evitar reenganchar a
     registra siempre la **última** sesión que tomó el relevo en ese paso, así que el siguiente
     despertar reengancha con la sucesora.
 
-## Qué problema resuelve
+## Qué problema resuelve {#解决什么问题}
 
 En disco está todo, en realidad. `runs/sessions.db` tiene el transcript **completo** de cada sesión
 histórica, `需求.md` / `目标.md` son piezas congeladas y el código está en el espacio de trabajo.
@@ -31,7 +31,7 @@ desde cero.
 En [HT002](../cases/ht002.md) se pasó una hora dando vueltas probando flags de compilación. Cambia
 de proceso y esa hora se tira a la basura.
 
-## Cómo se usa (código mínimo)
+## Cómo se usa (código mínimo) {#怎么用最小代码}
 
 En la línea de comandos no hay nada que configurar: por la ruta `flower` la continuidad viene
 activada por defecto:
@@ -95,9 +95,9 @@ sesión en lugar de abrir una nueva.
     La línea de comandos se apoya en esto para decidir si el prompt pregunta «qué hay que hacer» o
     «seguir donde iba».
 
-## Qué hace realmente
+## Qué hace realmente {#它实际做了什么}
 
-### Los tres archivos que quedan en disco
+### Los tres archivos que quedan en disco {#落在磁盘上的三个文件}
 
 `run_dir` es `./runs` por defecto, **relativo al directorio de trabajo actual, no al workspace**.
 
@@ -131,7 +131,7 @@ La escritura es **append, no sobrescritura**: cada volcado relee el archivo y de
 `run` — las líneas de este proceso se reemplazan por las últimas, las de otros se dejan tal cual.
 Por eso es seguro correr varios flower en paralelo sobre el mismo directorio.
 
-### `continuous=True` cambia la semántica de `resume_from`
+### `continuous=True` cambia la semántica de `resume_from` {#continuoustrue-改变了-resume_from-的语义}
 
 Esta es la más fácil de pasar por alto: `Workflow.continuous` es `True` por defecto, así que
 `resume_from=None` **no equivale a «sesión nueva»**.
@@ -156,7 +156,7 @@ inexistente no revienta hasta que arranca el subproceso.
     Los nombres con sufijo (`#retry`, `#round`, `·判定#`) no entran en el linaje; `Lineage.remember`
     usa siempre el nombre original.
 
-### Dos invariantes
+### Dos invariantes {#两条不变式}
 
 **Uno: en cuanto se obtiene el session_id se escribe a disco, sin esperar a que el paso termine.**
 
@@ -190,7 +190,7 @@ existiera.
 
 **La continuidad es un extra; que falle no debe impedir que la gente trabaje.**
 
-### Proceso matado y reinicio de la máquina
+### Proceso matado y reinicio de la máquina {#进程被杀和机器重启}
 
 El resultado de ambas cosas es el mismo — reengancha — pero el camino es distinto:
 
@@ -205,7 +205,7 @@ La única condición es una: **el mismo `workspace` y el mismo `run_dir`**. `run
 directorio de trabajo actual, así que lanzar `flower` desde otro directorio busca otro `runs/` y no
 reengancha.
 
-### El juez siempre es una sesión nueva
+### El juez siempre es una sesión nueva {#判定者永远是新会话}
 
 Esto está **garantizado por construcción**, no por acordarse.
 
@@ -219,7 +219,7 @@ degenera en una autoauditoría.
 
 La sección 4 de `tests/lineage_offline.py` deja esto clavado.
 
-### Lo que dices al despertar tiene que llegar a tres sitios
+### Lo que dices al despertar tiene que llegar a tres sitios {#唤醒时说的那句话要落到三个地方}
 
 `flower "顺便支持代码块高亮"` en un directorio ya usado **no es una tarea nueva: es otra frase más en
 la misma conversación**. Hace tres cosas a la vez — si falta una, falla en silencio:
@@ -237,7 +237,7 @@ añadido (medido en [HT002](../cases/ht002.md): $0.41 / 3 minutos).
 
 **Despertar sin decir nada** (Enter directo) no añade ni rederiva, y no cuesta ni un céntimo más.
 
-### También reengancha si revienta dentro del primer paso (`确认需求`)
+### También reengancha si revienta dentro del primer paso (`确认需求`) {#崩在第一步确认需求之内也能接上}
 
 `clarify_step` lleva un `resume_prompt` (la constante `CLARIFY_RESUME`): si revienta a mitad de la
 clarificación y se vuelve a arrancar, al [clarificador](../reference/glossary.md#确认者) se le dice
@@ -250,7 +250,7 @@ A la inversa, los pasos previos ya congelados se **saltan enteros**: si `需求.
 secciones completas se salta `确认需求` (pero el contenido igualmente se inyecta en ctx), y si
 `目标.md` está completo se salta `设定目标`.
 
-### Al reenganchar no se envía la misma frase
+### Al reenganchar no se envía la misma frase {#接续时发的不是同一句话}
 
 De esto se encarga `Step.resume_prompt`. En el contexto del otro lado **ya están** el brief, los
 objetivos y por dónde iba la última vez; reenviar tal cual «haz esto según estos requisitos:
@@ -260,7 +260,7 @@ mirarlos».
 Si no das `resume_prompt`, se reutiliza `prompt` — hay pasos que sí deben reenviar el texto completo
 (cuando `设定目标` rederiva la lista, lo que necesita es exactamente ese brief completo).
 
-### Al despertar, una línea de informe
+### Al despertar, una línea de informe {#唤醒时先报一行}
 
 ```text
 <- 在 ~/explore/test-ide 接上上次  需求已确认 · 目标 15 条 · 干活上下文 80.2K · 第 3 次唤醒
@@ -275,7 +275,7 @@ contexto de la última ronda de esa sesión.
 
 **Ese número de contexto se muestra a propósito** — la razón está en la sección «El coste» de abajo.
 
-### Resiliencia: esperar colgado cuando se cae la red, y que los errores no entren en el contexto tras reenganchar
+### Resiliencia: esperar colgado cuando se cae la red, y que los errores no entren en el contexto tras reenganchar {#韧性断网时挂着等而且错误不进接续后的上下文}
 
 La [resiliencia](../reference/glossary.md#韧性) y la continuidad van juntas: en una ejecución de
 varias horas la red se cae seguro alguna vez, y el comportamiento por defecto es malísimo — en el
@@ -342,7 +342,7 @@ denegadas, neutralizar los restos de interrupción y marcar como caducados los r
 [comandos efímeros](../reference/glossary.md#一次性命令) — esas cuatro se siguen haciendo
 (`ephemeral` es `True` por defecto, `keep_denials` es `1` por defecto).
 
-### El coste: el contexto no para de crecer, y no tiene final
+### El coste: el contexto no para de crecer, y no tiene final {#代价上下文会一直涨而且没有尽头}
 
 Este es el coste inherente de la continuidad, no un bug.
 
@@ -371,7 +371,7 @@ Un apunte adicional: `--rounds` (el total de rondas de `干活`) **se reinicia e
 intencionado — un nuevo despertar es una nueva intención y no debe heredar las rondas gastadas la vez
 anterior.
 
-### Empezar otra cosa de cero
+### Empezar otra cosa de cero {#重开一件事}
 
 ```bash
 flower --new "另一件事"
@@ -396,7 +396,7 @@ consultable.
 
 En código, esto corresponde a `Lineage.archive(into, extra=[...])`.
 
-## Cuándo no usarlo
+## Cuándo no usarlo {#什么时候不该用它}
 
 - **Escenarios que exigen un punto de partida limpio cada vez.** Ejecutar el mismo workflow en lote,
   hacer evaluaciones comparativas, reproducirle un bug a otra persona — nada de eso debe arrastrar el
@@ -415,7 +415,7 @@ En código, esto corresponde a `Lineage.archive(into, extra=[...])`.
   código, los resultados y las decisiones deben aterrizar en el espacio de trabajo y en el
   [banco de trabajo](../reference/glossary.md#工作台); no cuentes con desenterrarlos del transcript.
 
-## Relacionado
+## Relacionado {#相关}
 
 - [Relevo](handoff.md) — qué hacer cuando el contexto se llena dentro de una misma ejecución; son las
   dos direcciones de lo mismo que esta página

@@ -2,7 +2,7 @@
 
 Antes de pôr a mão na massa, esclareça o que é preciso fazer. O [clarificador](../reference/glossary.md#确认者) é um papel que só pergunta e não executa nada; pergunta até estar claro e, no fim, emite um [brief](../reference/glossary.md#需求确认书) de exatamente quatro seções, congelado em disco. Cada [passo](../reference/glossary.md#步骤) seguinte abre lendo esse documento e não volta a adivinhar o requisito — e aquele diálogo de perguntas e respostas **nunca entrou** no contexto de quem vem depois.
 
-## Que problema isso resolve
+## Que problema isso resolve {#解决什么问题}
 
 Tudo o que os mecanismos de limpeza de contexto do flower removem é **material de trabalho transitório**: expiração por tempo, remoção de chamadas negadas, remoção de mensagens de erro, [spill](../reference/glossary.md#落盘) de resultados grandes. Perder esse material não é grave: basta reexecutar para tê-lo de volta.
 
@@ -12,9 +12,9 @@ O [longo horizonte](../reference/glossary.md#长程) amplifica isso até o pior 
 
 Por isso é preciso um canal capaz de "parar e perguntar" — e ele tem que estar **antes** do início do trabalho.
 
-## Como usar (código mínimo)
+## Como usar (código mínimo) {#怎么用最小代码}
 
-### Zero código: linha de comando
+### Zero código: linha de comando {#零代码命令行}
 
 Entre no diretório do projeto e rode:
 
@@ -48,7 +48,7 @@ Se você só quer ver o que ele pergunta, sem seguir para o trabalho: `flower --
 !!! warning "As respostas vêm da entrada padrão; rode num terminal de verdade"
     Em pipe, `nohup` ou CI não há ninguém para responder: assim que o stdin chega a EOF, a pergunta pendente naquele momento é tratada como "entrada fechada" e pulada, e todas as perguntas seguintes ficam esperando o `--timeout` inteiro. Nesses casos, passe direto `--timeout 0` — todas as perguntas caem no vazio imediatamente, ele decide sozinho e escreve as premissas em 「未知与假设」.
 
-### Ligando na mão
+### Ligando na mão {#自己接线}
 
 ```python
 from pathlib import Path
@@ -97,9 +97,9 @@ Quando não estiver saindo bem, mexa nestes botões primeiro:
 | Trava sem ninguém de plantão | `timeout_s=0` |
 | Quer reconfirmar toda vez | `always_ask=True`, ou apague o arquivo do brief |
 
-## O que ele faz de fato
+## O que ele faz de fato {#它实际做了什么}
 
-### Quando dispara: três pontos de ligação, nenhum campo novo
+### Quando dispara: três pontos de ligação, nenhum campo novo {#触发时机三处接线一个新字段都没加}
 
 O que `clarify_step()` produz é um `Step` comum, só com três callbacks preenchidos:
 
@@ -115,7 +115,7 @@ O `reduce` repassa `Brief.prompt_block()` e não o texto bruto do modelo, porque
 
 Na [continuidade](../reference/glossary.md#接续), esse passo abre com outra frase — `CLARIFY_RESUME`: "continue de onde a confirmação de requisitos parou — **não recomece do zero**…". Sem essa frase, a retomada reenvia a demanda original como se fosse uma tarefa nova, e o clarificador pode repetir perguntas já feitas.
 
-### Fronteira: o diálogo não entra no contexto de quem vem depois
+### Fronteira: o diálogo não entra no contexto de quem vem depois {#边界问答不进下游的上下文}
 
 ```text
 确认需求        独立会话  ────→  磁盘上一份冻结的四段确认书
@@ -127,7 +127,7 @@ O `resume_from` do `clarify_step` fica no padrão `None`, então o passo seguint
 
 O diálogo em si é **anexado ao `log_path`**. Essa cópia não ocupa contexto, não sofre com compact e sobrevive à troca de máquina — mesma ideia do workbench.
 
-### Cada uma das quatro seções barra um tipo de falha
+### Cada uma das quatro seções barra um tipo de falha {#四段各挡一类失败}
 
 | Seção | O que escrever | O que acontece se faltar |
 |---|---|---|
@@ -145,7 +145,7 @@ O parser é bem tolerante quanto à forma: `## 目标` / `**目标**` / `目标:
 - `Brief.parse()` **remove primeiro os blocos de código cercados** e, ao encontrar uma cerca **não fechada**, descarta tudo dali para a frente. Quando a saída do modelo é truncada, nenhuma seção posterior é parseada → faltam seções → o `gate` manda refazer.
 - `Brief.load()` trata `"(未填)"` como vazio. Se você editar o brief à mão e copiar o texto de placeholder de `to_markdown()`, aquela seção continua contando como ausente.
 
-### Fronteira: o que o clarificador pode tocar
+### Fronteira: o que o clarificador pode tocar {#边界确认者能碰什么}
 
 Já rodamos um clarificador **sem restrição** (`/tmp/probe_ask.py`, **$0.8908 / 230 segundos**): ele fez duas perguntas e **começou a escrever código na hora**; barrado pelas permissões, **colou o código inteiro no corpo da resposta**. Escrever "não escreva código" no prompt não segura isso — o system prompt dele já dizia algo assim. Por isso existem dois mecanismos:
 
@@ -162,7 +162,7 @@ Dar leitura a ele compensa: uma olhada no repositório economiza várias pergunt
 
 **Dois: o framework só parseia aquelas quatro seções e joga fora o resto.** `Brief.parse()` primeiro extrai os blocos de código cercados e depois procura os títulos — o que foi colado não chega adiante. Essa é a última comporta contra "ele contaminar quem vem depois".
 
-### Fronteira: o canal de perguntas
+### Fronteira: o canal de perguntas {#边界提问通道}
 
 Do lado do modelo, a ferramenta de perguntar se chama `mcp__human__ask` (parâmetro `question`, `options` opcional). O `HumanChannel` é um servidor MCP in-process e **registra duas ferramentas** — `mcp__human__ask` e `mcp__human__inbox`; a lista de pré-aprovação do clarificador só tem a primeira (a caixa de entrada é para o coordenador).
 
@@ -201,7 +201,7 @@ Um fato de mecânica já medido: dentro de um handler de ferramenta MCP in-proce
 !!! warning "Com `max_turns` baixo, "perguntar até estar claro" vira conversa fiada"
     O `max_turns` de `clarify()` é `None` por padrão (sem limite). **Cada pergunta é um turno** — colocar 16 equivale a "no máximo uma dúzia de perguntas", e o efeito é **silencioso**: do lado do canal, `max_asks=None` continua dizendo "sem limite", e ninguém percebe quem estrangulou. Para liberar as perguntas, **os dois padrões precisam continuar em `None`**: `HumanChannel.max_asks` e `clarify(max_turns=...)`.
 
-### Onde o brief é gravado: tem que ser o workbench que foi pendurado
+### Onde o brief é gravado: tem que ser o workbench que foi pendurado {#确认书落在哪必须是挂上去的那个工作台}
 
 O índice do workbench é injetado no system prompt, então o coordenador já sabe de saída onde está o arquivo de requisitos; ao distribuir trabalho basta passar o caminho adiante, sem copiar o conteúdo para dentro do [brief de tarefa](../reference/glossary.md#任务书).
 
@@ -233,7 +233,7 @@ rt = Runtime(workspace="repo", workbench=True); wb = rt.workbench
 
 Ao escrever seu próprio driver (sem passar pela `cli.py`), crie o `Workbench` primeiro e entregue **o mesmo objeto** tanto a `Workflow(workbench=wb)` quanto a `Runtime(workbench=wb)`. O item 5 de `tests/trial_offline.py` afirma diretamente que "o brief aparece dentro de `prompt_block()`"; o item 11 confirma que essa asserção pega a regressão.
 
-### Estado da validação
+### Estado da validação {#验证状态}
 
 **Offline todo verde** (`tests/clarify.py`, **52 itens**, sem custo): as cinco semânticas do canal de perguntas (bloquear esperando resposta / cota esgotada / vazio por timeout / pulado / resposta vinda de outra thread), o parse das quatro seções (incluindo a amostra com "código colado dentro"), o papel de `clarify()` **não ter** ferramentas de escrita, e os três pontos de ligação do `clarify_step`.
 
@@ -241,7 +241,7 @@ Ao escrever seu próprio driver (sem passar pela `cli.py`), crie o `Workbench` p
 
 **Nunca rodou contra a API real.** Aquela sonda de $0.8908 foi uma **requisição real**, mas ela testou "o que faz um clarificador sem restrição", não este caminho atual.
 
-## Quando não usar
+## Quando não usar {#什么时候不该用它}
 
 **Quando o requisito já é peça congelada.** Requisito escrito num arquivo, definido por um sistema a montante, ou esta execução é só refazer a mesma coisa — não há o que perguntar. Alimente o texto do requisito direto no passo de trabalho, ou mantenha o `clarify_step` e deixe o `when` pular (com o brief presente, ele já não pergunta).
 

@@ -4,7 +4,7 @@ Der Kern von flower weiß nichts von einer UI. Alles, was in einem Lauf passiert
 **Die [Interaktionsschicht](../reference/glossary.md#交互层) kennt nur `Event` und importiert keinen einzigen SDK-Typ.**
 Das ist die Grenze, an der man die UI austauscht, ohne den Kern anzufassen: Terminal, Web, HTTP-Dienst, vollautomatisch unbeaufsichtigt – ausgetauscht wird der Konsument der `Event`s, sonst keine Zeile.
 
-## Welches Problem das löst
+## Welches Problem das löst {#解决什么问题}
 
 Der Nachrichtenstrom des SDK besteht aus **internen Typen**: `AssistantMessage`, `ToolUseBlock`, `ToolResultBlock`, `ResultMessage`, `SystemMessage` … Konsumiert eine UI die direkt, hat das zwei Folgen: Bei jedem SDK-Upgrade muss das Frontend nachziehen; und weil jede Nachrichtenform anders aussieht, schreibt jede UI die Entscheidung „ist das Fließtext oder ein Tool-Aufruf" neu.
 
@@ -27,7 +27,7 @@ Diese Grenze erledigt nebenbei vier weniger offensichtliche Dinge, alle vier ste
    `cache_read_input_tokens` + `cache_creation_input_tokens`). Er ist die einzige Quelle für das
    [Handoff](../reference/glossary.md#换代)-Kriterium.
 
-## Wie man es benutzt (minimaler Code)
+## Wie man es benutzt (minimaler Code) {#怎么用最小代码}
 
 Eine Interaktionsschicht muss drei Dinge anschließen: **den Event-Ausgang** (wohin gerendert wird), **den Frage-Kanal** (wer antwortet) und **die Unterbrechung** (wie man Stopp ruft).
 Der folgende Ausschnitt schließt alle drei an und läuft direkt:
@@ -92,7 +92,7 @@ Zwei Aufräumschritte, die gern vergessen werden: `rt.close()` gehört unbedingt
     Entweder gibst du die vom Workflow angelegte Workbench an `Runtime` weiter (wie oben),
     oder du fragst über die reine Lesesonde `wake_state()` nach, wo sie liegt.
 
-### Drei Event-Ausgänge
+### Drei Event-Ausgänge {#三个事件出口}
 
 ```python
 await rt.run(spec, "…", on_event=sink)                  # 1. einzelner Agent
@@ -111,7 +111,7 @@ ch = HumanChannel(on_event=my_own_sink)     # selbst angeschlossen, Workflow rü
 `StepResult`. Fortschrittsbalken, Persistenz, Alarme hängen hier – bau das nicht aus dem `Event`-Strom zusammen: Der Fließtext wird von Handoffs und
 Retries in mehrere Stücke zerrissen.
 
-### Terminal: das Mitgelieferte
+### Terminal: das Mitgelieferte {#终端默认的那个}
 
 Auch ohne eigenen Code gibt es eins. `flower "帮我做一个 X"` läuft über
 [`flower/cli.py`](https://github.com/ChenyuHeee/flower/blob/main/flower/cli.py);
@@ -164,7 +164,7 @@ Alle drei Punkte sind Lehrgeld:
 - **Durchgehend lesen, nicht nur wenn eine Frage offen ist.** Liest man nur bei offener Frage, bleibt alles, was in den stundenlangen Arbeitsphasen getippt wurde, im Terminalpuffer liegen
   und wird bei der nächsten Frage als Antwort verschluckt – der Mensch hat die Frage noch nicht gesehen, da ist sie schon „beantwortet".
 
-### Web: Queue + WebSocket
+### Web: Queue + WebSocket {#web队列--websocket}
 
 ```python
 events: asyncio.Queue[dict] = asyncio.Queue()
@@ -192,7 +192,7 @@ def answer(ask_id: str, text: str) -> dict:
 wer `raw` benutzt, bindet das Frontend wieder an SDK-Typen und hat sich die ganze Schicht gespart. `kind` / `text` / `tool` / `payload`
 reichen aus.
 
-### HTTP: Sequenznummer + Polling
+### HTTP: Sequenznummer + Polling {#http序号--轮询}
 
 Ohne dauerhafte Verbindung nummeriert man die Events und lässt den Client ziehen:
 
@@ -229,7 +229,7 @@ Zwei Grenzen muss man kennen: Ist `maxlen` voll, fällt das Älteste raus – ko
 zu dieser Länge passen. Und **`timeout_s` braucht zwingend einen endlichen Wert** – wenn niemand pollt, endet eine Frage nicht von selbst,
 und `timeout_s=None` hängt den ganzen Lauf für immer auf. Die voreingestellten `1800.0` Sekunden sind passend.
 
-### Vollautomatisch unbeaufsichtigt: niemand da
+### Vollautomatisch unbeaufsichtigt: niemand da {#全自动无人值守没有人}
 
 ```python
 wf = starter_flow("帮我做一个 X", workspace=".", run_dir="runs", timeout_s=0)
@@ -259,9 +259,9 @@ sobald der [Koordinator](../reference/glossary.md#协调者) einen `channel` bek
     ohne Fehler, ohne Timeout, im Log nicht von normalem Betrieb zu unterscheiden. Unbeaufsichtigt gibt es nur zwei richtige Werte: `0` (sofort ins Leere)
     oder eine endliche Sekundenzahl.
 
-## Was es tatsächlich tut
+## Was es tatsächlich tut {#它实际做了什么}
 
-### Die Form von `Event`
+### Die Form von `Event` {#event-的形状}
 
 ```python
 @dataclass
@@ -275,7 +275,7 @@ class Event:
 
 `str(ev)`: bei `tool_call` ist es `[Toolname] Zusammenfassung`, sonst `text`; ist `text` leer, dann `<kind>`.
 
-### Die 15 `EventKind`s
+### Die 15 `EventKind`s {#15-个-eventkind}
 
 | `kind` | Wer sendet | Wann es auftritt | `text` | `payload` |
 |---|---|---|---|---|
@@ -301,7 +301,7 @@ class Event:
 
 Lass beim Schreiben der UI einen `else`-Zweig stehen. `EventKind` bekommt weitere Mitglieder, und eine alte UI soll daran nicht zerbrechen.
 
-### Die drei Phasen von `handoff`
+### Die drei Phasen von `handoff` {#handoff-的三个-phase}
 
 | `phase` | Wann gesendet | zusätzlich im `payload` |
 |---|---|---|
@@ -311,7 +311,7 @@ Lass beim Schreiben der UI einen `else`-Zweig stehen. `EventKind` bekommt weiter
 
 Zum Mechanismus selbst siehe [Handoff](handoff.md).
 
-### Die zwei Rollen von `ask`
+### Die zwei Rollen von `ask` {#ask-的两种身份}
 
 `Event("ask")` trägt gleichzeitig „eine Frage" und „etwas, das ein Mensch von sich aus gesagt hat"; **die UI muss zuerst `payload["kind"]` prüfen**:
 
@@ -323,7 +323,7 @@ Zum Mechanismus selbst siehe [Handoff](handoff.md).
 Eine Frage sendet **mindestens zwei** Events: eines beim Stellen (`state="asked"`) und eines beim Ergebnis
 (`answered` / `timeout` / `declined` / `over_budget` / `invalid`). Die UI aktualisiert anhand von `payload["id"]` denselben Eintrag.
 
-### Menschen fragen: `Ask` und `HumanChannel`
+### Menschen fragen: `Ask` und `HumanChannel` {#问人ask-与-humanchannel}
 
 ```python
 @dataclass
@@ -409,7 +409,7 @@ Die drei „0 / None" bedeuten jeweils etwas anderes; wer sie verwechselt, häng
 | `timeout_s<=0` | nicht warten, Frage läuft sofort ins Leere |
 | `remaining` gibt `-1` zurück | der Wert bei `max_asks=None`, nicht 0 |
 
-### Unterbrechen: jeder Thread darf Stopp rufen
+### Unterbrechen: jeder Thread darf Stopp rufen {#打断任何线程都能喊停}
 
 `rt.interrupt("别改 Makefile,那两行直接改")`, ein leerer String unterbricht nur, ohne etwas zu sagen. Drei Eigenschaften:
 
@@ -426,7 +426,7 @@ damit man es weiß, bevor man drückt; wer selbst eine UI schreibt, sollte es ge
 Wenn du nicht unterbrechen, sondern nur etwas ergänzen willst, nimm die Inbox (`ch.send(...)`) – sie unterbricht nichts, die Verzögerung ist der
 nächste Checkpoint des Agents.
 
-### Oracle: kurz nachfragen, ohne den Lauf zu stören
+### Oracle: kurz nachfragen, ohne den Lauf zu stören {#旁路顾问问一句而不打扰运行}
 
 Wer wissen will, „wo stehen wir gerade", muss nicht unterbrechen und sollte nicht den Koordinator fragen: Dieser Dialog **belegt dauerhaft Kontext im Main Thread**
 (dort stehen Entscheidungen, kein Frage-Antwort-Protokoll), und der Koordinator muss dafür seine Arbeit unterbrechen. Bei einem Zehn-Stunden-Lauf zahlt man mit drei beiläufigen Fragen
@@ -440,7 +440,7 @@ Es benutzt eine eigene `Runtime` (`<run_dir>/aside`), sodass Kosten und Session-
 
 Gemessen: zwei Fragen für zusammen $0.5190, und das Manifest des Hauptlaufs ist um kein einziges Byte gewachsen.
 
-### Zwei harte Regeln
+### Zwei harte Regeln {#两条硬规矩}
 
 !!! warning "on_event darf weder blockieren noch Exceptions herauslassen"
     **Erstens: `on_event` ist eine synchrone Funktion und wird im Thread der Event-Loop aufgerufen.** Deshalb ist
@@ -454,9 +454,9 @@ Gemessen: zwei Fragen für zusammen $0.5190, und das Manifest des Hauptlaufs ist
     Ausnahme: Die von `HumanChannel` selbst gesendeten `ask`-Events sind bereits gekapselt; Exceptions landen in `channel.ui_errors`
     und unterbrechen den Lauf nicht.
 
-## Wann man es nicht benutzen sollte
+## Wann man es nicht benutzen sollte {#什么时候不该用它}
 
-### Was in der Interaktionsschicht nichts zu suchen hat
+### Was in der Interaktionsschicht nichts zu suchen hat {#交互层里不该做的事}
 
 | Nicht tun | Warum | Stattdessen |
 |---|---|---|
@@ -470,7 +470,7 @@ Gemessen: zwei Fragen für zusammen $0.5190, und das Manifest des Hauptlaufs ist
 | Fortschritt und Ergebnis aus dem `Event`-Strom zusammensetzen | der Fließtext wird von Handoffs und Retries in mehrere Stücke zerrissen | über `on_step(step, result)` das vollständige `StepResult` nehmen |
 | unbeaufsichtigt `timeout_s=None` benutzen | niemand antwortet, der Lauf hängt für immer, ohne Fehler und ohne Timeout | `0` oder eine endliche Sekundenzahl |
 
-### Wann sich der Austausch gar nicht lohnt
+### Wann sich der Austausch gar nicht lohnt {#什么时候根本不用换}
 
 - **Nur Farben ändern, eine Zeile mehr oder weniger ausgeben** – dann reicht die Renderfunktion. Unterbrechung, Oracle,
   Inbox-Quittungen, SIGHUP-/SIGTERM-Rettung und das Abwarten des Nebenwegs vor dem Beenden aus der Terminal-Referenzimplementierung noch einmal zu schreiben, ist nicht billig.

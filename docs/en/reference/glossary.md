@@ -10,7 +10,7 @@ mistaking one of these terms for another.
 
 ---
 
-## Framework and execution
+## Framework and execution {#框架与运行}
 
 ### long-horizon {#长程}
 
@@ -60,7 +60,7 @@ exit early.
 
 ---
 
-## Roles
+## Roles {#角色}
 
 A role is how flower divides labour between agents. Each role is a block of injected rule text
 plus a tool set plus a set of hooks. All five roles are factory functions; see the
@@ -142,7 +142,7 @@ This is flower's first and largest context saving. See
 
 ---
 
-## The four mechanisms
+## The four mechanisms {#四个机制}
 
 ### clarify {#前置确认}
 
@@ -237,7 +237,7 @@ continue.
 
 ---
 
-## Context management
+## Context management {#上下文管理}
 
 ### main thread {#主线程}
 
@@ -326,7 +326,7 @@ error*.
 
 ---
 
-## Runtime
+## Runtime {#运行时}
 
 ### isolation {#隔离}
 
@@ -408,7 +408,7 @@ without one — [HT001](../cases/ht001.md) cost $171.62.
 
 ---
 
-## Portability
+## Portability {#可移植性}
 
 ### portable {#可移植}
 

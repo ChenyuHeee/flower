@@ -6,7 +6,7 @@ determina hasta dónde puede llegar esa ejecución. La forma de flower —el
 [coordinator](../reference/glossary.md#协调者) no ejecuta, las salidas largas hacen spill, los hooks
 podan en el acto— se deriva toda de esta única premisa. Esta página explica por qué.
 
-## Qué problema resuelve
+## Qué problema resuelve {#解决什么问题}
 
 El [compact](../reference/glossary.md#压缩) espera a que el contexto se llene para resumir en
 retrospectiva; trata el síntoma. El problema real es:
@@ -33,7 +33,7 @@ Las dos primeras capas gobiernan **si las cosas entran**, las dos últimas gobie
 entró se queda**. El orden no se puede invertir: por más agresiva que sea la cuarta capa, no puede
 recuperar el volumen que se coló en la primera.
 
-## Cómo se usa (código mínimo)
+## Cómo se usa (código mínimo) {#怎么用最小代码}
 
 ```python
 from flower import Runtime, coordinator, worker
@@ -60,9 +60,9 @@ instale `spill_guard` (capa tres). La cuarta capa está por defecto —el
     Conclusión: **con `Runtime(workbench=False)` junto a `coordinator()`, el Bash / Write / Edit del
     main thread no tiene ni un muro.**
 
-## Qué hace en realidad
+## Qué hace en realidad {#它实际做了什么}
 
-### Capa uno: división del trabajo (la que más ahorra)
+### Capa uno: división del trabajo (la que más ahorra) {#第一层分工省得最多}
 
 El coordinator interpreta el papel de "una persona que sabe usar Claude Code": descompone, delega,
 lee informes, decide. No tiene acceso a Bash / Write / Edit —sus únicas herramientas son `Agent`,
@@ -104,7 +104,7 @@ que transmitir es "dónde está el workbench + escribir salidas largas en `artif
 ruta y la conclusión" —porque el índice del workbench no llega al subagent, el task brief es el único
 canal.
 
-### Capa dos: workbench (trata el "reescribir cada vez")
+### Capa dos: workbench (trata el "reescribir cada vez") {#第二层工作台治每次重写}
 
 Bajo `.flower/`, tres directorios que acompañan al workspace:
 
@@ -133,7 +133,7 @@ limpiar el disco, ni el índice en el system prompt**.
     workbench + escribir salidas largas en `artifacts/`" tiene que transmitirlo el coordinator en el
     task brief —ese es el único canal, no es redundancia.
 
-### Capa tres: spill en el acto
+### Capa tres: spill en el acto {#第三层当场落盘}
 
 `spill_guard` es un hook `PostToolUse` que echa un vistazo a los resultados de herramienta **antes de
 que entren al modelo**: los que superan el `threshold` (por defecto **4000** caracteres) hacen
@@ -163,7 +163,7 @@ Runtime(workspace="repo", workbench=True, spill_threshold=4000)   # None o 0 = n
 **Cuánto ahorra**: en aquella ejecución de [HT001](../cases/ht001.md), 103 spills, 791.4K caracteres
 sustituidos por punteros de ruta, sin residir en el contexto.
 
-### Capa cuatro: trim y prune
+### Capa cuatro: trim y prune {#第四层裁剪与剪除}
 
 Esta capa está en el [session store](../reference/glossary.md#会话存储). El store de `Runtime` es
 siempre `PruningSessionStore` (cadena de herencia `SqliteSessionStore` ← `TrimmingSessionStore` ←
@@ -222,7 +222,7 @@ afectadas por error, y la cadena de `parentUuid` debe volver a empalmarse.
 `Runtime(trim=False)` (por defecto) **no equivale a no limpiar nada**: solo desactiva el trim de
 resultados grandes; caducidad, llamadas rechazadas y restos de desconexión se siguen haciendo.
 
-### Contraejemplo: el trabajo de echar un vistazo lo haces tú mismo
+### Contraejemplo: el trabajo de echar un vistazo lo haces tú mismo {#反例看一眼的活自己干}
 
 Las tres primeras capas dicen "delegar hacia fuera", pero hay un contraejemplo: comandos como
 `git status`, `ls`, `cat`, cuyo resultado son unas decenas de caracteres, mientras que **despachar un
@@ -252,7 +252,7 @@ completo** —medido: los tres intentos del coordinator fueron bloqueados, y no 
 despachar un subagent. Ahora se descompone segmento a segmento: solo se deja pasar si cada segmento está en
 la whitelist, y `git status && rm -rf x` se bloquea igual (el segundo segmento no está en la tabla).
 
-### Append, no reemplazo
+### Append, no reemplazo {#叠加不替换}
 
 ```python
 system_prompt = {"type": "preset", "preset": "claude_code", "append": spec.instructions}
@@ -284,7 +284,7 @@ arriba: **solo llega al coordinator**.
     un agent con `allowed_tools=["Read"]` seguía pudiendo invocar Write / Bash. Lo que de verdad bloquea es
     el hook.
 
-## Cuándo no deberías usarlo
+## Cuándo no deberías usarlo {#什么时候不该用它}
 
 Lo que ahorran estas cuatro capas es todo **material en vivo**. Los siguientes problemas no los resuelven,
 y algunos incluso se vuelven más difíciles de ver por su culpa:

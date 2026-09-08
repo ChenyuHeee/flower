@@ -5,7 +5,7 @@
 从源码安装、第一次配凭证、以及一条能证明"确实装对了"的命令。跑通之后去
 [快速上手](quickstart.md)。
 
-## 装之前:确认 Python
+## 装之前:确认 Python {#装之前确认-python}
 
 ```bash
 python3 -c 'import sys; print(sys.version_info >= (3, 10), sys.version.split()[0])'
@@ -23,7 +23,7 @@ python3 -c 'import sys; print(sys.version_info >= (3, 10), sys.version.split()[0
 包名 `flower`,版本 `0.1.0`,唯一运行时依赖 `claude-agent-sdk>=0.2.152`
 (`pyproject.toml:2-6`)。`mkdocs-material` 只在 CI 建文档站时用,跑 flower 不需要。
 
-## 一句话安装
+## 一句话安装 {#一句话安装}
 
 ```bash
 curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
@@ -47,7 +47,7 @@ curl -fsSL https://chenyuheee.github.io/flower/install.sh | sh
 关键是那一行 `== 装好了 <绝对路径>` —— 它是脚本自己跑了一次 `command -v flower` 的结果
 (`install.sh:60-61`)。打印出路径,就说明 `flower` 已经在 PATH 上。
 
-### 安装器实际做了什么
+### 安装器实际做了什么 {#安装器实际做了什么}
 
 [`install.sh`](https://github.com/ChenyuHeee/flower/blob/main/install.sh) 只做三件事:选一个
 Python 工具安装器、从 GitHub 装、告诉你下一步。**它一个字都不碰你的凭证**(`install.sh:7-8`)。
@@ -69,7 +69,7 @@ Python 工具安装器、从 GitHub 装、告诉你下一步。**它一个字都
     三个安装命令分别带 `--force`、`--force`、`--upgrade`(`install.sh:37`、`:40`、`:54`)。
     重跑一次就是把已有安装直接盖掉 —— 想升级正是这么做,但别指望它会先问你一句。
 
-### `flower` 命令怎么上 PATH
+### `flower` 命令怎么上 PATH {#flower-命令怎么上-path}
 
 `command -v flower` 查不到时,脚本会提示把 `$HOME/.local/bin` 加进 `~/.zshrc` 或 `~/.bashrc`
 (`install.sh:62-70`):
@@ -89,7 +89,7 @@ python3 -c "import sysconfig; print(sysconfig.get_path('scripts', 'posix_user'))
 输出比如 `/Users/you/Library/Python/3.13/bin` —— 把那个目录而不是 `~/.local/bin` 加进 PATH,
 然后重开终端或者 `source` 一下。
 
-## 从源码装
+## 从源码装 {#从源码装}
 
 要读代码、要改框架、要跑 `tests/` 里那些离线验证,就从源码装:
 
@@ -153,7 +153,7 @@ export FLOWER_NO_UPDATE=1
 
 任意非空值都算(`update.py:33`、`:121`)。CI、离线环境、要复现某个旧版本行为的时候用它。
 
-## 第一次跑:配凭证
+## 第一次跑:配凭证 {#第一次跑配凭证}
 
 `go`、`run`、`once` 三条跑活入口开头都调 `ensure_credentials()`(`cli.py:1192`、`:1160`、`:1225`),
 两道关:
@@ -198,7 +198,7 @@ export FLOWER_NO_UPDATE=1
 写完 `chmod 0o600`(`cli.py:1336-1347`)。这就是"装一次处处生效"的那个文件 ——
 换项目目录不用重配,每个变量的含义见[配置](../reference/config.md#环境变量)。
 
-### 本机装过 Claude Code 的话,可能一个问题都不问
+### 本机装过 Claude Code 的话,可能一个问题都不问 {#本机装过-claude-code-的话可能一个问题都不问}
 
 凭证查找有一条**最后的回退**:读 `~/.claude/settings.json`,再读 `~/.claude/settings.local.json`,
 从它们的 `env` 块里取 9 个凭证键(`env.py:56-75`、`:109-111`)。本机已经配好 Claude Code 的人,
@@ -212,7 +212,7 @@ export FLOWER_NO_UPDATE=1
     读到那句话时不要据此认定本机的 Claude Code 配置被忽略了。完整链条见
     [配置 · 凭证查找优先级](../reference/config.md#凭证查找优先级)。
 
-### 想重新配的时候
+### 想重新配的时候 {#想重新配的时候}
 
 `flower setup` 这个子命令注册过(`cli.py:1326-1328`),但 `_CMDS` 漏了它(`cli.py:937`),
 于是 `flower setup` 会被改写成 `flower go setup` —— 把 "setup" 当成一句诉求跑一遍完整流程。
@@ -226,7 +226,7 @@ $EDITOR ~/.config/flower/.env
 比如 `~/.claude/settings.json`)。凭证被拒(HTTP 401 / 403)时也会当场弹出同一个界面让你重配,
 最多给一次机会(`cli.py:1416-1428`)。
 
-## 验证装好了没有
+## 验证装好了没有 {#验证装好了没有}
 
 两级,由便宜到贵。
 
@@ -288,7 +288,7 @@ ANTHROPIC_MODEL = claude-opus-5[1m]
     轮数更多,花费也会比这个地板价高一些。
     完整的账在 `runs/manifest.json` 里,见[配置 · 磁盘布局](../reference/config.md#磁盘布局)。
 
-## 装不上的时候
+## 装不上的时候 {#装不上的时候}
 
 | 症状 | 原因 | 怎么办 |
 |---|---|---|
@@ -302,7 +302,7 @@ ANTHROPIC_MODEL = claude-opus-5[1m]
 | `! 标准输入不是终端,没人能回答提问` | 在管道或 CI 里跑 | 加 `--timeout 0` 让它自己判断,别等人 |
 | `flower setup` 跑起来在问"要做什么" | `_CMDS` 漏了 `setup`(`cli.py:937`) | 直接改 `~/.config/flower/.env`,见上面"想重新配的时候" |
 
-## 下一步
+## 下一步 {#下一步}
 
 - [快速上手](quickstart.md) —— 进一个项目目录,跑通第一件真活。
 - [配置](../reference/config.md) —— 全部环境变量、凭证优先级、`.env` 语法、磁盘上留下什么。

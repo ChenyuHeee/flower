@@ -5,7 +5,7 @@ O framework cuida apenas do mecanismo: como um passo roda, como as sessões se e
 e nem deveria saber. Esta página trata de como projetar um workflow; a tabela completa de campos de `Step` e `Workflow` está na
 [API Python](../reference/api.md).
 
-## Que problema resolve
+## Que problema resolve {#解决什么问题}
 
 Uma run [long-horizon](../reference/glossary.md#长程) não cabe em um único prompt: primeiro esclarecer o requisito,
 depois pesquisar, depois implementar, depois revisar — cada trecho tem seu próprio papel, seu próprio contexto, seus próprios critérios de aceitação.
@@ -20,7 +20,7 @@ O `Workflow` faz apenas três coisas:
 
 Ele não carrega nenhuma suposição de domínio. Onde cortar, o que aceitar em cada passo, o que fazer quando não passa — essas quatro coisas são "projetar um workflow".
 
-## Como usar (código mínimo)
+## Como usar (código mínimo) {#怎么用最小代码}
 
 ```python
 # flows.py
@@ -56,9 +56,9 @@ Escrever seu próprio driver também funciona; o primeiro argumento de `Workflow
 ctx = await wf.run(rt, on_step=lambda step, r: print(f"{step.name} ok={r.ok} ${r.cost_usd:.4f}"))
 ```
 
-## O que ele faz de fato
+## O que ele faz de fato {#它实际做了什么}
 
-### O que um Step recebe e o que precisa devolver
+### O que um Step recebe e o que precisa devolver {#一个-step-收到什么必须返回什么}
 
 `Step` não é uma função, é uma **declaração**. O que realmente executa é `Runtime.run(step.spec, prompt renderizado, ...)` —
 **um passo = uma chamada de `Runtime.run` = uma [sessão](../reference/glossary.md#会话)**.
@@ -80,7 +80,7 @@ O que o passo "devolve" é um `StepResult`, mas dentro do workflow você recebe 
 enviada a ele é `kind="prompt"`, e o erro sintético de desconexão é `kind="error"`
 — nenhum dos três entra.
 
-### reduce: não é açúcar sintático
+### reduce: não é açúcar sintático {#reduce不是糖}
 
 Por padrão, o que é repassado adiante é a fala literal do modelo. Em alguns passos, essa fala literal **não deveria** ser repassada como está:
 
@@ -94,7 +94,7 @@ senão aquele monte de código entra no prompt do passo seguinte. É esse campo 
 
 `reduce` **precisa ser uma função síncrona**; `gate` / `when` / `on_reject` podem ser async.
 
-### Como o estado flui pelo ctx
+### Como o estado flui pelo ctx {#状态怎么在-ctx-里流动}
 
 `ctx` é um `dict[str, Any]` — é o próprio `Workflow.context`. Ao fim de cada passo, a escrita segue esta tabela:
 
@@ -126,7 +126,7 @@ Para começar limpo, crie um novo, ou passe `context={}` explicitamente.
     Um passo a jusante que faça `lambda ctx: ctx["某步"]` vai levar `KeyError` direto. Para seguir adiante carregando o resultado incompleto, use
     `on_fail="continue"`; se você realmente quer pular, o passo a jusante precisa se defender com `ctx.get(...)`.
 
-### Verdict e devolução: gate, on_reject, StepAbort
+### Verdict e devolução: gate, on_reject, StepAbort {#判定与打回gateon_rejectstepabort}
 
 `gate(result, ctx) -> bool` julga "rodou até o fim, mas está aceitável?". Dois detalhes que você precisa saber:
 
@@ -161,7 +161,7 @@ o **loop de retry quebra na hora**, e nenhum dos `retries` restantes é consumid
 Guarde a diferença: **retornar False é "desta vez não deu, mais uma rodada"; `StepAbort` é "outra rodada não resolve".**
 O caso típico é quando o objetivo foi julgado impossível neste ambiente e não há a quem perguntar — continuar girando em falso é a opção mais cara.
 
-### Não confunda as duas camadas de retry
+### Não confunda as duas camadas de retry {#两层重试别混}
 
 | | `Step.retries` | `Runtime(resilience=...)` |
 |---|---|---|
@@ -173,7 +173,7 @@ O caso típico é quando o objetivo foi julgado impossível neste ambiente e nã
 O prompt usado na continuação **propositalmente não contém nenhum detalhe do erro** — o modelo precisa saber "você foi interrompido, continue",
 não precisa saber se foi ENOTFOUND ou 503.
 
-### Encadear os passos
+### Encadear os passos {#把步骤串起来}
 
 Há três formas de passar estado entre passos, e a escolha define o que o próximo passo enxerga:
 
@@ -203,7 +203,7 @@ Algumas lições de projeto que já custaram caro mais de uma vez:
 6. **Trabalho paralelo no mesmo repositório usa `worker(isolate=True)`.** O fechamento (merge, limpar worktree, abrir PR) hoje fica
    por conta do seu workflow; o harness só garante que as alterações caiam cada uma na sua worktree.
 
-### O workbench precisa estar pendurado no Workflow
+### O workbench precisa estar pendurado no Workflow {#工作台要挂在-workflow-上}
 
 Sempre que o workflow precisar escrever arquivos no [workbench](../reference/glossary.md#工作台) — o caso típico é
 `clarify_step(brief_path=...)` — você precisa criar um `Workbench` e pendurá-lo **ao mesmo tempo** em `Workflow.workbench`
@@ -245,7 +245,7 @@ Pendurar o `channel` no workflow tem duas razões: `run()` liga o `on_event` del
     Criar um único objeto e compartilhá-lo dos dois lados elimina o problema; quando `Workflow.workbench` existe, o `-W` da linha de comando é ignorado
     e prevalece o do workflow.
 
-### `continuous=True`: rodar de novo no mesmo caminho
+### `continuous=True`: rodar de novo no mesmo caminho {#continuoustrue同一个路径再跑一次}
 
 As três formas acima falam de passo a passo **dentro de uma run**. Entre processos, o eixo é outro:
 
@@ -271,7 +271,7 @@ Três consequências:
 
 O projeto completo e o `--new` estão em [Continuidade](continuity.md).
 
-## Quando não usar
+## Quando não usar {#什么时候不该用它}
 
 - **Um único agent e nenhum verdict necessário** — não envolva em `Workflow`. Chame `await rt.run(spec, "…")` direto,
   ou use a linha de comando `flower once "读一眼这个仓库"`.

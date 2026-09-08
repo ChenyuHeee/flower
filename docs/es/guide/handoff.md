@@ -15,7 +15,7 @@ exactamente ese archivo.
     el `session_id` **final** de ese step, y ese es precisamente el sucesor —— así que el próximo wake
     engancha con el sucesor, no con la generación que se quemó.
 
-## Qué problema resuelve
+## Qué problema resuelve {#解决什么问题}
 
 El auto-compact que trae el SDK se dispara en **ventana −33k** (medido: cuando la ventana es `200000` el
 umbral es `167000`; el algoritmo de compactación en sí está en el binario del harness, no se puede cambiar,
@@ -42,7 +42,7 @@ El handoff devuelve esto al mismo enfoque: **otra pieza congelada**, con la mism
 precisamente el propio enfoque de este proyecto —— el `HANDOFF.md` en la raíz del repositorio es exactamente
 lo mismo, escrito por una persona.
 
-## Cómo se usa (código mínimo)
+## Cómo se usa (código mínimo) {#怎么用最小代码}
 
 La línea de comandos trae el handoff por defecto:
 
@@ -87,9 +87,9 @@ rt = Runtime(workspace=".", run_dir="runs", handoff=False)   # apagarlo, vuelve 
     `AgentSpec(compact=CompactPolicy(mode="auto"))` —— si el spec lo da él mismo se respeta, no se sobrescribe.
     Ojo que esto **gana silenciosamente** sobre las suposiciones de la mitad del handoff.
 
-## Qué hace realmente
+## Qué hace realmente {#它实际做了什么}
 
-### Momento del disparo: dos caminos hacia el handoff
+### Momento del disparo: dos caminos hacia el handoff {#触发时机两条路进换代}
 
 **Uno, el nivel llega al umbral.** El criterio es `_handoff_due`: `handoff.enabled` y **no estar en la ronda que
 escribe el handoff** y `_ctx >= handoff.at` y este step ya haber obtenido un `session_id`. `_ctx` es el tamaño de
@@ -104,7 +104,7 @@ En `warn_at` primero se emite un aviso de aproximación, una sola vez por genera
 Ambos caminos **no están sujetos a `max_attempts`**, y además **no consumen cuota de reintentos** (internamente
 `attempt -= 1`) —— el handoff no es un fallo.
 
-### El handoff document: cinco secciones, solo dos obligatorias
+### El handoff document: cinco secciones, solo dos obligatorias {#交接书五段必填只有两段}
 
 Cada sección bloquea un tipo de error que "quien toma el relevo va a cometer":
 
@@ -127,7 +127,7 @@ En `to_markdown()` las secciones vacías se escriben como `(vacío)`; el encabez
 claramente a quien toma el relevo "estás tomando el relevo", para que no vuelva a pedirle a alguien el contexto.
 El campo `step` solo se usa en el encabezado del documento, no participa en el parseo.
 
-#### Por qué "caminos sin salida" es la más cara
+#### Por qué "caminos sin salida" es la más cara {#走不通的路为什么最贵}
 
 Porque es **lo que a quien toma el relevo le cuesta más caro redescubrir**, y lo que quien escribe más fácilmente omite.
 
@@ -138,7 +138,7 @@ toma el relevo daría exactamente las mismas vueltas.
 
 Por eso el `HANDOFF_PROMPT` dedica un párrafo específico a señalar esto, e incluye ese costo medido.
 
-### Cómo se ve
+### Cómo se ve {#长什么样}
 
 ```text
 # Contexto 130.0K/200K · quedan unos 20K para el handoff
@@ -160,7 +160,7 @@ El evento es `Event("handoff")`, y `payload["phase"]` tiene **tres** valores: `n
 colgada) y `done` (relevo terminado). El payload de `done` además lleva `context`, `window`, `degraded`, `path`,
 `sections`.
 
-### Cómo se calcula el umbral
+### Cómo se calcula el umbral {#阈值怎么算}
 
 ```python
 at      = max(10_000, window - headroom)   # línea del handoff, con piso de 10k
@@ -201,7 +201,7 @@ de 5 veces**, y una tarea long-horizon quedaría hecha trizas.
 Con `flower -v` puedes ver antes de arrancar la configuración de credenciales vigente (endpoint, nombre del modelo,
 token enmascarado dejando solo los primeros 4 dígitos).
 
-### `is_overflow`: convertir un error duro en un handoff en el momento
+### `is_overflow`: convertir un error duro en un handoff en el momento {#is_overflow把硬错变成当场换代}
 
 Este es el requisito previo para **atreverse a tomar 1 millón como valor por defecto de `default_window()`**.
 
@@ -217,7 +217,7 @@ Así el costo de juzgarla demasiado grande baja de "este step falla" a "el hando
 
 `is_overflow` es una **función a nivel de módulo**, no un método de `Handoff`, y es de argumentos variables.
 
-### Cuando el handoff no se puede escribir: degradación, no parada
+### Cuando el handoff no se puede escribir: degradación, no parada {#交接写不出来时降级不是停下}
 
 La ronda que escribe el handoff también puede fallar —— se cortó la red, el modelo tuvo un fallo, el parseo salió con
 una sección obligatoria faltante. Como el auto-compact ya está apagado, **no hay respaldo**, y parar aquí equivale a
@@ -238,7 +238,7 @@ La ronda que escribe el handoff tiene además dos arreglos deliberados: corre co
 handoff tiene que poder escribirse, no puede atascarse en el presupuesto**; y `on_event=None` —— esta ronda no
 refresca la UI.
 
-### Una mina: la ronda que escribe el handoff tiene que estar exenta del umbral
+### Una mina: la ronda que escribe el handoff tiene que estar exenta del umbral {#一颗地雷写交接那一轮必须豁免阈值}
 
 El handoff se escribe **después de cruzar la línea** —— en ese momento el nivel de por sí sigue por encima del umbral.
 Sin la exención, el primer mensaje de la ronda del handoff volvería a juzgar "hay que hacer handoff", y entonces se
@@ -250,7 +250,7 @@ handoff fueron versiones degradadas**. Los tests offline no lo atraparon —— 
 y el falso no corre este criterio. Ahora el criterio se elevó a `Runtime._handoff_due()`, y offline se verifica
 directamente.
 
-### Un cierre contra el descontrol
+### Un cierre contra el descontrol {#一道防跑飞的闸}
 
 `max_generations=8`.
 
@@ -265,7 +265,7 @@ directamente.
     pequeño —— al llegar al límite el mensaje de error lo dice directamente ("el umbral muy probablemente está por
     debajo del piso de arranque de este rol, sube window, o `--no-handoff`").
 
-### El proceso completo de un handoff
+### El proceso completo de un handoff {#一次换代的完整过程}
 
 ```text
 Trabajando (session A)
@@ -283,7 +283,7 @@ Trabajando (session B) sigue
 `HANDOFF_PROMPT` es el prompt que hace que la sesión actual escriba el handoff, con dos placeholders `{used}` y
 `{window}`. **No es un rol nuevo** —— solo esta sesión actual tiene ese contexto.
 
-### El handoff no cuenta como reintento, cómo se lleva la cuenta
+### El handoff no cuenta como reintento, cómo se lleva la cuenta {#换代不算重试账怎么记}
 
 | Campo | Cómo cambia en el handoff |
 |---|---|
@@ -296,7 +296,7 @@ Trabajando (session B) sigue
 Todos estos campos entran en `manifest.json`, y a posteriori se puede reconstruir por completo "cuántas generaciones
 quemó este step, cuánto costó cada una".
 
-### Dónde queda el handoff
+### Dónde queda el handoff {#交接落在哪}
 
 `<workbench>/notes/交接-<nombre del step con caracteres ilegales quitados>.md`; la generación anterior existente se
 mueve a `notes/archive/交接/<nombre del step>-<timestamp>.md`.
@@ -306,7 +306,7 @@ quien toma el relevo vía prompt, el handoff procede como de costumbre, solo que
 archivo después**. Para poder recuperarlo, hay que activar el workbench (`Runtime(workbench=True)`, o que el
 [workflow](../reference/glossary.md#流程) monte uno él mismo).
 
-## Cuándo no deberías usarlo
+## Cuándo no deberías usarlo {#什么时候不该用它}
 
 - **Simplemente quieres usar compact.** `flower --no-handoff`, o `Runtime(handoff=False)`. El handoff apaga de paso
   el auto-compact, y si no quieres ese efecto colateral, no lo actives.
@@ -324,7 +324,7 @@ archivo después**. Para poder recuperarlo, hay que activar el workbench (`Runti
   (spill, [trim](../reference/glossary.md#裁剪), [prune](../reference/glossary.md#剪除)) son más baratas, ver
   [economía del contexto](context.md).
 
-## Perillas
+## Perillas {#旋钮}
 
 | Síntoma | Cuál ajustar |
 |---|---|
@@ -335,7 +335,7 @@ archivo después**. Para poder recuperarlo, hay que activar el workbench (`Runti
 | Quieres leer el handoff después pero no encuentras el archivo | No activaste el workbench. El handoff no hace spill, solo fue por prompt |
 | Simplemente quieres usar compact | `--no-handoff` |
 
-## Relacionado
+## Relacionado {#相关}
 
 - [continuity](continuity.md) —— reengancha entre procesos con la run anterior, es lo mismo que esta página en el otro sentido
 - [economía del contexto](context.md) —— las capas que recortan en el momento

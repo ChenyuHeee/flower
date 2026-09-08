@@ -12,7 +12,7 @@ edit it whenever you like; that file is exactly what the taking-over session rea
     The two mesh automatically, no extra wiring needed: [lineage](../reference/glossary.md#血缘) records the **last**
     `session_id` of that step, and that is the successor — so the next wake attaches to the successor, not to the generation that was burned.
 
-## What problem it solves
+## What problem it solves {#解决什么问题}
 
 The SDK's built-in auto-compact fires at **window − 33k** (measured: with a `200000` window the threshold is `167000`;
 the compaction algorithm itself lives in the harness binary and can't be changed — all you can change is whether it fires),
@@ -37,7 +37,7 @@ Handoff pulls this back into the same practice: **one more frozen artifact**, th
 structured, written to disk, **something you can open, change a line in, and let it keep running**. And this is exactly what this project does for itself —
 `HANDOFF.md` at the repo root is the same kind of thing, written by a human.
 
-## How to use it (minimal code)
+## How to use it (minimal code) {#怎么用最小代码}
 
 The command line ships with handoff on by default:
 
@@ -80,9 +80,9 @@ rt = Runtime(workspace=".", run_dir="runs", handoff=False)   # 关掉,退回 aut
     To keep auto-compact as a fallback you must **explicitly** pass `AgentSpec(compact=CompactPolicy(mode="auto"))` —
     if the spec supplies its own, that is respected and not overridden. Note that this **silently wins** over the assumptions on the handoff side.
 
-## What it actually does
+## What it actually does {#它实际做了什么}
 
-### Trigger points: two roads into handoff
+### Trigger points: two roads into handoff {#触发时机两条路进换代}
 
 **One: the water level reaches the threshold.** The criterion is `_handoff_due`: `handoff.enabled`, **not currently in the round that writes the handoff**,
 `_ctx >= handoff.at`, and this step has already obtained a `session_id`. `_ctx` is the context size the **main thread** actually saw on its last round —
@@ -96,7 +96,7 @@ At `warn_at` an approaching-threshold notice fires once, once per generation, so
 Neither road is **bound by `max_attempts`**, and neither **consumes retry budget** (internally `attempt -= 1`) —
 a handoff is not a failure.
 
-### The handoff document: five sections, only two required
+### The handoff document: five sections, only two required {#交接书五段必填只有两段}
 
 Each section blocks one class of mistake the successor would make:
 
@@ -116,7 +116,7 @@ And the `complete()` verdict has consequences: if a required section is missing,
 `to_markdown()` writes `(空)` for empty sections; the header of `prompt_block()` tells the successor plainly "you are taking over,"
 to keep it from turning around and asking a human for background. The `step` field is used only in the document header and takes no part in parsing.
 
-#### Why "dead ends" is the most expensive
+#### Why "dead ends" is the most expensive {#走不通的路为什么最贵}
 
 Because it is **what costs the successor the most to rediscover**, and it is the section the writer is most likely to skip.
 
@@ -126,7 +126,7 @@ if the conclusion of that hour isn't written down, the successor will circle it 
 
 So `HANDOFF_PROMPT` devotes a paragraph to this specifically, with that measured cost attached.
 
-### What it looks like
+### What it looks like {#长什么样}
 
 ```text
 # 上下文 130.0K/200K · 还有约 20K 到换代
@@ -146,7 +146,7 @@ The event is `Event("handoff")`, and `payload["phase"]` has **three** values: `n
 writing a handoff takes a dozen-odd seconds, and without this event the UI looks frozen), and `done` (handoff complete). The `done` payload also carries
 `context`, `window`, `degraded`, `path`, and `sections`.
 
-### How the thresholds are computed
+### How the thresholds are computed {#阈值怎么算}
 
 ```python
 at      = max(10_000, window - headroom)   # 换代线,有 10k 下限
@@ -184,7 +184,7 @@ when it can actually run to 950,000 — **a factor of 5**, and long-horizon work
 
 `flower -v` shows the effective credential configuration before the run starts (endpoint, model name, token masked to the first 4 characters).
 
-### `is_overflow`: turning a hard error into an on-the-spot handoff
+### `is_overflow`: turning a hard error into an on-the-spot handoff {#is_overflow把硬错变成当场换代}
 
 This is the precondition for **daring to default `default_window()` to 1,000,000**.
 
@@ -199,7 +199,7 @@ So the cost of judging the window too large drops from "this step fails" to "thi
 
 `is_overflow` is a **module-level function**, not a method on `Handoff`, and it is variadic.
 
-### When the handoff can't be written: degrade, don't stop
+### When the handoff can't be written: degrade, don't stop {#交接写不出来时降级不是停下}
 
 The round that writes the handoff can also fail — the network drops, the model glitches, or parsing comes back missing a required section. Because
 auto-compact is already off, **there is no fallback**, and stopping here means hitting the window.
@@ -217,7 +217,7 @@ that checks whether `doing` carries that marker.
 The handoff-writing round has two more deliberate arrangements: it runs with `max_budget_usd=None` — **the handoff must be writable,
 it cannot be blocked on budget**; and `on_event=None` — this round does not push to the UI.
 
-### One landmine: the handoff-writing round must be exempt from the threshold
+### One landmine: the handoff-writing round must be exempt from the threshold {#一颗地雷写交接那一轮必须豁免阈值}
 
 The handoff is written **after the line has been crossed** — at which point the water level is of course still above the threshold. Without the exemption, the first message of
 the handoff round is judged "time to hand off" again, so it gets interrupted before writing a single word, **every generation produces a degraded artifact**,
@@ -226,7 +226,7 @@ and everything looks fine (the degraded path works very well).
 This was hit for real: the first live run of `tests/handoff_live.py` produced **degraded handoffs for both generations**. The offline tests missed it —
 there `_attempt` was replaced wholesale, so the fake never exercised this criterion. The criterion is now lifted into `Runtime._handoff_due()`, which offline tests verify directly.
 
-### A brake against runaway
+### A brake against runaway {#一道防跑飞的闸}
 
 `max_generations=8`.
 
@@ -239,7 +239,7 @@ there `_attempt` was replaced wholesale, so the fake never exercised this criter
     A normal long run never reaches 8; if you do hit it, it is almost certainly a `window` set too small — and the error message at the limit says exactly that
     ("the threshold is probably below this role's startup floor; raise window, or use `--no-handoff`").
 
-### One handoff, end to end
+### One handoff, end to end {#一次换代的完整过程}
 
 ```text
 work (session A)
@@ -260,7 +260,7 @@ work (session B) continues
 `HANDOFF_PROMPT` is the prompt that makes the current session write the handoff; it contains the two placeholders `{used}` and `{window}`.
 **It is not a new role** — only this session has that context.
 
-### A handoff is not a retry; how the books are kept
+### A handoff is not a retry; how the books are kept {#换代不算重试账怎么记}
 
 | Field | What happens on handoff |
 |---|---|
@@ -272,7 +272,7 @@ work (session B) continues
 
 All of these go into `manifest.json`, so afterwards you can fully reconstruct "how many generations this step burned, and what each one cost."
 
-### Where the handoff lands
+### Where the handoff lands {#交接落在哪}
 
 `<workbench>/notes/交接-<step name with illegal characters stripped>.md`; an existing previous generation is moved to
 `notes/archive/交接/<step name>-<timestamp>.md`.
@@ -281,7 +281,7 @@ All of these go into `manifest.json`, so afterwards you can fully reconstruct "h
 the handoff proceeds as usual, and only **the human can't dig up that file afterwards**. To be able to, turn the workbench on
 (`Runtime(workbench=True)`, or let the [workflow](../reference/glossary.md#流程) mount one itself).
 
-## When you shouldn't use it
+## When you shouldn't use it {#什么时候不该用它}
 
 - **You actually want compact.** `flower --no-handoff`, or `Runtime(handoff=False)`.
   Handoff turns auto-compact off as a side effect; if you don't want that side effect, don't turn it on.
@@ -296,7 +296,7 @@ the handoff proceeds as usual, and only **the human can't dig up that file after
   (spill, [trim](../reference/glossary.md#裁剪), [prune](../reference/glossary.md#剪除)) are cheaper —
   see [Context economics](context.md).
 
-## Knobs
+## Knobs {#旋钮}
 
 | Symptom | Which one to turn |
 |---|---|
@@ -307,7 +307,7 @@ the handoff proceeds as usual, and only **the human can't dig up that file after
 | Want to read the handoff afterwards but can't find the file | No workbench. The handoff isn't written to disk, it only went through the prompt |
 | You just want compact | `--no-handoff` |
 
-## Related
+## Related {#相关}
 
 - [Continuity](continuity.md) — picking up the previous run across processes; the other direction of the same thing as this page
 - [Context economics](context.md) — the layers that trim on the spot

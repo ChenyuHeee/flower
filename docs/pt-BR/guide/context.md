@@ -6,7 +6,7 @@ ela não carrega determina até onde essa execução vai. O formato do flower �
 [coordenador](../reference/glossary.md#协调者) não põe a mão na massa, produções longas vão para o
 disco, hooks podam na hora — sai todo dessa única premissa. Esta página explica por quê.
 
-## Que problema resolve
+## Que problema resolve {#解决什么问题}
 
 [Compact](../reference/glossary.md#压缩) é esperar o contexto encher para só então resumir o que
 já passou: trata o sintoma. O problema de verdade é:
@@ -33,7 +33,7 @@ As duas primeiras camadas controlam **o que entra**; as duas últimas, **o que f
 entrou**. A ordem não pode ser invertida: por mais agressiva que seja a quarta camada, ela não
 recupera o volume que vazou pela primeira.
 
-## Como usar (código mínimo)
+## Como usar (código mínimo) {#怎么用最小代码}
 
 ```python
 from flower import Runtime, coordinator, worker
@@ -60,9 +60,9 @@ fixo em `PruningSessionStore`, e não há parâmetro de construção para trocá
     Conclusão: **com `Runtime(workbench=False)` combinado com `coordinator()`, Bash / Write / Edit
     na thread principal não têm nenhuma barreira.**
 
-## O que ele realmente faz
+## O que ele realmente faz {#它实际做了什么}
 
-### Camada um: divisão de trabalho (a que mais economiza)
+### Camada um: divisão de trabalho (a que mais economiza) {#第一层分工省得最多}
 
 O coordenador interpreta "uma pessoa que sabe usar o Claude Code": decompõe, delega, lê relatórios,
 decide. Ele não tem Bash / Write / Edit — as ferramentas são apenas `Agent`, `TodoWrite`, `Read`
@@ -104,7 +104,7 @@ tarefa**. A única regra que ainda precisa ser dita é "onde fica o workbench + 
 para `artifacts/` + responda só com caminhos e conclusões" — porque o índice do workbench não chega
 ao subagent, e o task brief é o único canal.
 
-### Camada dois: workbench (cura o "reescrever toda vez")
+### Camada dois: workbench (cura o "reescrever toda vez") {#第二层工作台治每次重写}
 
 Três diretórios sob `.flower/`, que acompanham o workspace:
 
@@ -133,7 +133,7 @@ disco, nem limpa o índice dentro do system prompt**.
     workbench + produções longas vão para `artifacts/`" precisa ser repassado pelo coordenador no
     task brief — é o único canal, não é redundância.
 
-### Camada três: spill na hora
+### Camada três: spill na hora {#第三层当场落盘}
 
 O `spill_guard` é um hook `PostToolUse` que olha o resultado da ferramenta **antes de ele entrar no
 modelo**: o que passar de `threshold` (padrão **4000** caracteres) vai para
@@ -161,7 +161,7 @@ Runtime(workspace="repo", workbench=True, spill_threshold=4000)   # None ou 0 = 
 **Quanto economiza**: naquela execução do [HT001](../cases/ht001.md), 103 spills trocaram 791.4K
 caracteres por ponteiros de caminho, sem residir no contexto.
 
-### Camada quatro: trim e prune
+### Camada quatro: trim e prune {#第四层裁剪与剪除}
 
 Essa camada vive no [session store](../reference/glossary.md#会话存储). O store do `Runtime` é
 sempre `PruningSessionStore` (cadeia de herança `SqliteSessionStore` ← `TrimmingSessionStore` ←
@@ -219,7 +219,7 @@ não podem ser atingidas por engano, e a cadeia de `parentUuid` precisa ser reco
 `Runtime(trim=False)` (o padrão) **não significa não limpar nada**: ele só desliga o trim de
 resultados grandes; expiração, chamadas recusadas e resíduos de desconexão continuam valendo.
 
-### Contraexemplo: tarefas de dar uma olhada, faça você mesmo
+### Contraexemplo: tarefas de dar uma olhada, faça você mesmo {#反例看一眼的活自己干}
 
 As três primeiras camadas dizem "delegue", mas há um contraexemplo: comandos como `git status`,
 `ls`, `cat` produzem resultados de algumas dezenas de caracteres, enquanto **só a inicialização de
@@ -248,7 +248,7 @@ completo** — medido, as três tentativas do coordenador foram barradas e ele a
 despachar subagent. Agora a checagem quebra por segmento: só libera se cada segmento estiver na
 whitelist, e `git status && rm -rf x` continua barrado (a segunda parte não está na tabela).
 
-### Append, não substituição
+### Append, não substituição {#叠加不替换}
 
 ```python
 system_prompt = {"type": "preset", "preset": "claude_code", "append": spec.instructions}
@@ -281,7 +281,7 @@ prompt, não ocupa o histórico da conversa, e o compact não o apaga — o pre�
     $0.1, um agent com `allowed_tools=["Read"]` chamou Write / Bash sem problema. Quem realmente
     barra é o hook.
 
-## Quando não usar
+## Quando não usar {#什么时候不该用它}
 
 As quatro camadas economizam sobre o **material bruto**. Os problemas abaixo elas não resolvem, e
 alguns ficam até mais difíceis de enxergar por causa delas:
