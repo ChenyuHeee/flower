@@ -206,6 +206,8 @@ def main() -> int:                                          # noqa: C901
         (["go", "x"],                    {"cmd": "go", "ask": "x"}),
         (["run", "flows.py:main"],       {"cmd": "run", "target": "flows.py:main"}),
         (["once", "看一眼"],              {"cmd": "once", "prompt": "看一眼"}),
+        (["setup"],                      {"cmd": "setup"}),          # issue #11
+        (["-v", "setup"],                {"cmd": "setup", "verbose": True}),
         (["-v", "x"],                    {"cmd": "go", "verbose": True}),
         (["x", "-v"],                    {"cmd": "go", "verbose": True}),
         (["-w", "/tmp/p", "x"],          {"cmd": "go", "workspace": "/tmp/p"}),
@@ -239,6 +241,15 @@ def main() -> int:                                          # noqa: C901
     # --help 不能被 go 截走
     for h in (["--help"], ["-h"], ["-v", "--help"]):
         check(_with_default_cmd(h, ap) == h, f"{h} 原样交给 argparse(不注入 go)")
+
+    # issue #11:_CMDS 漏了 "setup" 时,`flower setup` 被重写成 `flower go setup`,
+    # "setup" 被当成 go 的诉求正文跑掉 —— 没有任何 argv 能到达 _run_setup_cmd。
+    # 这条断言走的正是 setup_offline.py 绕过的那一层(_with_default_cmd)。
+    check(_with_default_cmd(["setup"], ap) == ["setup"],
+          "`flower setup` 不被重写成 go setup(#11)")
+    setup_fn = getattr(ap.parse_args(_with_default_cmd(["setup"], ap)), "fn", None)
+    check(getattr(setup_fn, "__name__", "") == "_run_setup_cmd",
+          "`flower setup` 到达 _run_setup_cmd,不是被当成 go 的诉求")
 
     print("\n[7b] 交互输入诉求(不用在 shell 里打引号)")
     import io

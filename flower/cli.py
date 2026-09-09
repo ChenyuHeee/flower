@@ -602,7 +602,7 @@ class Render:
         sub = bool(ev.payload.get("subagent"))
         self._enter(sub)
         pad = self.GUTTER if sub else "  "
-        arg = (ev.text or "")[:_width() - len(pad) - 16]
+        arg = (ev.text or "").replace("\n", " ")   # 通用分支也要去换行(此前只有 Agent 分支去)
         if ev.tool == "Agent":
             inp = ev.payload.get("input") or {}
             who = inp.get("subagent_type", "?")
@@ -611,6 +611,7 @@ class Render:
                  f"{C['dim']}{what}{C['off']}")
             return
         color = C["dim"] if sub else C["blu"]
+        arg = _fit(arg, max(8, _width() - _cols(pad) - 16))
         _say(f"{pad}{color}{G['tool']} {ev.tool}{C['off']} {C['dim']}{arg}{C['off']}")
 
     def _on_tool_result(self, ev: Event) -> None:
@@ -686,7 +687,12 @@ class Render:
 
 
 def render(ev: Event, *, verbose: bool = False) -> None:
-    """向后兼容的单发入口。长跑请用 :class:`Render`(它维护状态)。"""
+    """向后兼容的单发入口:**每次调用都是新实例,状态归零**。
+
+    **别拿它当 ``on_event``** —— 那样每条事件都新建一个 :class:`Render`,
+    累计花费 / 上下文 / 耗时全部每次清零(实测 ``once`` 的状态行永远
+    ``累计 $0.00 · 0:00``,见 issue #14)。长跑请自己持一个 :class:`Render`
+    实例传进去。"""
     Render(verbose=verbose)(ev)
 
 
@@ -918,7 +924,7 @@ def answer_from_stdin(channel, *, on_aside=None, on_interrupt=None,
                     channel.decline(ask.id)
                 continue
 
-            if raw_line.startswith("?") or raw_line.startswith("?"):
+            if raw_line.startswith("?") or raw_line.startswith("？"):
                 q = raw_line[1:].strip()
                 if q and on_aside:
                     on_aside(q)
@@ -948,7 +954,7 @@ def answer_from_stdin(channel, *, on_aside=None, on_interrupt=None,
     return stop
 
 
-_CMDS = ("go", "run", "once")
+_CMDS = ("go", "run", "once", "setup")
 
 
 def _with_default_cmd(argv: list[str], parser: argparse.ArgumentParser) -> list[str]:
@@ -1262,11 +1268,12 @@ async def _run_once(args) -> None:
     )
     rt = Runtime(workspace=args.workspace, run_dir=args.run_dir,
                  workbench=args.workbench, trim=args.trim)
+    show = Render(verbose=args.verbose)   # 持一个实例:状态行(累计/上下文/耗时)才不会每条事件清零
     try:
         await rt.run(
             spec, args.prompt,
             resume=args.resume, fork=args.fork,
-            on_event=lambda e: render(e, verbose=args.verbose),
+            on_event=show,
         )
     finally:
         rt.close()
