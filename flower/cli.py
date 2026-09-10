@@ -1499,6 +1499,13 @@ def main() -> None:
     if args.verbose:
         for k, v in describe().items():
             print(f"{C['dim']}{k} = {v}{C['off']}")
+        # #15 去静默:pip/wheel 装的 flower 不含 plugin/(只有源码 checkout 有),
+        # 而挂载失败此前一声不响 —— 表现成"模型好像没用那个领域知识",几乎无法归因。
+        # -v 下至少说一句(不默认刷屏,免得纯框架用户每次被念叨)。归属/打包见 #15。
+        from .core.agent import PLUGIN_DIR
+        if not PLUGIN_DIR.is_dir():
+            print(f"{C['ylw']}{G['warn']} 领域能力包未加载:{_short(PLUGIN_DIR)} 不存在 —— "
+                  f"pip/wheel 装的不含 plugin/,skill/agents/hooks 这一层不生效(#15){C['off']}")
     asyncio.run(args.fn(args))
 
 
