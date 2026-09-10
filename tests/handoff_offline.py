@@ -322,9 +322,10 @@ async def main() -> int:
                 os.environ[k] = v
 
     print("\n[7d] 模型不符 → 警告一行,整次运行只一次(#23)")
-    save2 = os.environ.get("ANTHROPIC_MODEL")
+    save2 = {k: os.environ.get(k) for k in ("ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL")}
     try:
         os.environ["ANTHROPIC_MODEL"] = "claude-opus-5[1m]"
+        os.environ.pop("ANTHROPIC_DEFAULT_OPUS_MODEL", None)
         rt = runtime(tmp / "mm", bench=False)
         seen: list = []
         rt._warn_model_mismatch("claude-opus-5", seen.append)     # 网关回的不是 [1m] 变体
@@ -341,8 +342,20 @@ async def main() -> int:
         rt2._warn_model_mismatch("CLAUDE-OPUS-5[1M]", seen2.append)
         check(not seen2, "大小写不同但其实同一个模型 → 不警告")
         rt2.close()
+        # 只配 OPUS_MODEL(不配 ANTHROPIC_MODEL)时,窗口按它判,警告也得认它(审查 #23 LOW-MED)
+        os.environ.pop("ANTHROPIC_MODEL", None)
+        os.environ["ANTHROPIC_DEFAULT_OPUS_MODEL"] = "claude-opus-5[1m]"
+        rt3 = runtime(tmp / "mm3", bench=False)
+        seen3: list = []
+        rt3._warn_model_mismatch("claude-opus-5", seen3.append)
+        check(len(seen3) == 1, "只配 ANTHROPIC_DEFAULT_OPUS_MODEL 时也发警告(和 default_window 同一条链)")
+        rt3.close()
     finally:
-        os.environ["ANTHROPIC_MODEL"] = save2 if save2 is not None else ""
+        for k, v in save2.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
     print("\n[8] 上一代的交接进档案")
     rt = runtime(tmp / "g")
