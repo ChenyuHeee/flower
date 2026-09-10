@@ -340,6 +340,8 @@ def main() -> int:                                          # noqa: C901
     check(not (ws / "runs" / "manifest.json").exists(),
           "没有 manifest —— Runtime.run() 一次都没进")
     check((ws / ".flower" / "INDEX.md").is_file(), "工作台索引生成在项目内")
+    check(not (ws / "CLAUDE.md").exists() and not (ws / "AGENTS.md").exists(),
+          "clarify-only 不写「给下一个工具的交接」—— 没做出东西就没得交接(#24 的 gate)")
 
     # ---------------------------------------------------------------
     print("\n[10] 唤醒:同一个目录再跑一次 `flower`(空回车 = 接着做,零请求)")

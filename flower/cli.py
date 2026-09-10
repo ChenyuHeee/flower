@@ -26,6 +26,7 @@ import unicodedata
 from pathlib import Path
 
 from .core.agent import AgentSpec, HandoffPolicy
+from .core.bequest import BEQUEST_PROMPT, Bequest, mechanical, write_both
 from .core.env import (PROBE_AUTH, PROBE_CONFIG, PROBE_NET, check_credentials,
                        describe, load_dotenv, probe_credentials, user_env_path)
 from .core.events import Event
@@ -1061,7 +1062,45 @@ def _load(ref: str):
     return getattr(mod, attr)
 
 
-async def _drive(wf, args, *, trim: bool | None = None) -> None:
+async def _finish_bequest(rt: Runtime, on_event) -> None:
+    """收尾:给下一个工具(Claude Code / Codex)在项目根写一份 CLAUDE.md + AGENTS.md。
+
+    一次长程运行的最终接手者不是另一个 flower 会话,是拿着 Claude Code / Codex 来
+    微调的人 —— 而「正文.md 是生成物,别直接改」这种知识此前只写在脚本 docstring 里,
+    没人告诉新来的工具去读(见 issue #24)。收尾时让当前会话读工作台写五段(一轮的钱,
+    相对整次运行可忽略);写不出来就机械兜底。**绝不覆盖用户已有的 CLAUDE.md** ——
+    用带标记的受管块。best-effort:这一步失败不该影响运行的退出。
+    """
+    wb = rt.workbench
+    if wb is None or not (wb.notes / "需求.md").is_file():
+        return                              # 不是带确认书的运行,没有可交接的现场
+    beq: Bequest | None = None
+    try:
+        spec = oracle(name="收尾:给下一个工具的交接", max_budget_usd=1.0)
+        r = await rt.run(spec, BEQUEST_PROMPT, step_name="收尾交接", on_event=on_event)
+        beq = Bequest.parse(r.text or "")
+    except Exception:                        # noqa: BLE001 —— 收尾失败不该带走这次运行
+        beq = None
+    if beq is None or not beq.complete():
+        try:
+            what = (wb.notes / "需求.md").read_text(encoding="utf-8")[:400]
+        except OSError:
+            what = ""
+        beq = mechanical(
+            what=what,
+            workbench_hint=f"{wb.show(wb.root)}/ —— notes/(需求/目标/决策/交接)、"
+                           f"artifacts/(产出)、scripts/(脚本,别直接改它生成的产物)。",
+        )
+    try:
+        paths = write_both(rt.workspace, beq.block_body())
+    except OSError:
+        return
+    tag = f" {C['ylw']}(降级:机械拼的){C['off']}" if beq.degraded else ""
+    _say(f"\n{C['grn']}{G['yes']} 给下一个工具的交接{C['off']} "
+         f"{C['dim']}{' / '.join(_short(p) for p in paths)}{C['off']}{tag}")
+
+
+async def _drive(wf, args, *, trim: bool | None = None, finish: bool = False) -> None:
     """跑一个 Workflow 对象。`run` 和 `go` 共用这一段。"""
     # workflow 自带工作台就用它的 —— 它把 brief/log 落在那里面,两边必须是同一个,
     # 否则确认书写在一处、注入索引扫的是另一处。见 Workflow.workbench。
@@ -1174,6 +1213,11 @@ async def _drive(wf, args, *, trim: bool | None = None) -> None:
                                      on_interrupt=take_interrupt,
                                      interrupt_req=interrupt_req)
         ctx = await wf.run(rt, on_event=sink)
+        # 收尾:给下一个工具留一份交接。只在 `go` 收尾做(finish=True)——
+        # 自己写的 workflow(`run`)的收尾是使用者的活,不该被框架自动塞一步;
+        # clarify-only 没做出东西、失败的运行更没有成果,都不写。见 #24。
+        if finish and not ctx.get("_failed_at") and not getattr(args, "clarify_only", False):
+            await _finish_bequest(rt, sink)
     finally:
         if prev_sigint is not None:
             signal.signal(signal.SIGINT, prev_sigint)
@@ -1264,7 +1308,7 @@ async def _run_go(args) -> None:
         )
     except ValueError as e:
         sys.exit(str(e))
-    await _drive(wf, args, trim=not args.no_trim)
+    await _drive(wf, args, trim=not args.no_trim, finish=True)
 
 
 async def _run_once(args) -> None:
