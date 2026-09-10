@@ -359,7 +359,8 @@ class Runtime:
         if self._model_warned:
             return
         self._model_warned = True                       # 有响应了就算数,别每条都判
-        want = (os.environ.get("ANTHROPIC_MODEL") or "").strip()
+        want = (os.environ.get("ANTHROPIC_MODEL")
+                or os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL") or "").strip()  # 和 default_window 同一条链
         if not want or want.lower() == served.lower():
             return
         if on_event:
@@ -475,12 +476,13 @@ class Runtime:
             # spec.workbench=False:hook 照挂(spill 对它的 Read 仍有用),
             # 只是不注入索引 —— 没有写工具的角色执行不了那些规矩。
             prelude = self.workbench.prompt_block() if spec.workbench else ""
-            if prelude:
-                # **索引进首条 user 消息,不进 system_prompt**(#22)。索引每落一个
-                # 文件就变(路径+大小),放在缓存前缀里每次作废整段历史(实测同一请求
-                # 贵 3.7 倍;176K 上下文下一次变化 ≈ 重写 150K)。挪到消息里 = 落在
-                # 缓存断点之后,只有它自己重算。信息一字不少,只换位置 —— 对质量零影响
-                # (和 SDK 的 exclude_dynamic_sections 同一个道理)。
+            if prelude and resume is None:
+                # **索引只在新会话的首条 user 消息注入一次**(#22),不进 system_prompt。
+                # 索引每落一个文件就变,放在缓存前缀里每次作废整段历史(实测同一请求贵
+                # 3.7 倍)。挪进消息 = 落在缓存断点之后,只有它自己重算。
+                # **只在 resume is None 注入**:同一 session 的 resume(打断/重试/断网续)
+                # 里它早已在 msg0,再前置只会在历史里堆副本、每轮重发,反而把撞墙点提前
+                # (审查 #22 MEDIUM)。换代新一代走的也是 resume=None(新会话),照样注入。
                 prompt = f"{prelude}\n\n{prompt}"
             hooks = merge_hooks(hooks, workbench_hooks(
                 self.workbench,

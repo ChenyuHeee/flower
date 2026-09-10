@@ -388,26 +388,32 @@ def main() -> int:                                          # noqa: C901
     check(opts0.system_prompt["append"] == "STATIC-RULES",
           "build_options:append 只有静态 instructions —— 索引不再拼进来")
     # 2. 跑一次 _attempt(把 query 换成录音机),看真正发出去的 prompt / options
-    captured: dict = {}
+    captured: list = []
 
     async def fake_query(*, prompt, options):
-        captured["prompt"], captured["opts"] = prompt, options
+        captured.append({"prompt": prompt, "opts": options})
         return
         yield        # noqa —— 让它是 async generator(不产出任何消息)
 
-    async def _run_attempt():
-        res = StepResult(step="干活")
-        await rt._attempt(spec, "去把 md→html 做出来", res,
+    async def _run_attempts():
+        r1 = StepResult(step="干活")
+        await rt._attempt(spec, "去把 md→html 做出来", r1,
                           resume=None, fork=False, resume_at=None, on_event=None)
+        r2 = StepResult(step="干活")            # 同一 session 的 resume(打断/续跑)
+        await rt._attempt(spec, "接着从断点续", r2,
+                          resume="old-sid", fork=False, resume_at=None, on_event=None)
 
     orig_q, rtmod.query = rtmod.query, fake_query
     try:
-        asyncio.run(_run_attempt())
+        asyncio.run(_run_attempts())
     finally:
         rtmod.query = orig_q
-    check("需求.md" in captured["prompt"] and captured["prompt"].endswith("去把 md→html 做出来"),
-          "真正发出的 prompt = 索引 + 原任务(索引前置进消息)")
-    check("需求.md" not in captured["opts"].system_prompt["append"],
+    fresh_p, resume_p = captured[0]["prompt"], captured[1]["prompt"]
+    check("需求.md" in fresh_p and fresh_p.endswith("去把 md→html 做出来"),
+          "新会话(resume=None):prompt = 索引 + 原任务(索引前置进首条消息)")
+    check("需求.md" not in resume_p and resume_p == "接着从断点续",
+          "同 session resume:**不再重注索引**(它早在 msg0,重注会堆副本、把撞墙点提前;审查 #22)")
+    check("需求.md" not in captured[0]["opts"].system_prompt["append"],
           "而 system_prompt.append 里**没有**索引 —— 前缀稳定,加文件不作废整段历史")
     rt.close()
 
