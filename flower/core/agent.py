@@ -277,14 +277,17 @@ def build_options(
     portable: bool = True,
     add_dirs: list[str] | None = None,
     flush: str = "eager",
-    prelude: str = "",
 ) -> ClaudeAgentOptions:
     """把 AgentSpec 编译成 SDK options。
 
     portable=True 时不读取任何宿主机配置,保证换机行为一致。
-    prelude 追加在领域指令之后(工作台索引走这里)—— 它每轮都在,所以要短。
+
+    **system_prompt.append 只放静态的领域指令(spec.instructions)。** 工作台索引
+    **不**在这里 —— 它每落一个文件就变,坐在缓存前缀(tools→system→messages)里会
+    每次作废整段历史(实测同一请求贵 3.7 倍,见 #22)。索引由 Runtime 注入到**首条
+    user 消息**,在缓存断点之后,只有它自己重算,信息一字不少。
     """
-    append = spec.instructions if not prelude else f"{spec.instructions}\n\n{prelude}"
+    append = spec.instructions
     opts: dict[str, Any] = {
         # 关键:preset 保留 Claude Code 的全部原生能力,append 叠加专业化。
         "system_prompt": {

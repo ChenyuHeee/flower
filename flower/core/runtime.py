@@ -475,6 +475,13 @@ class Runtime:
             # spec.workbench=False:hook 照挂(spill 对它的 Read 仍有用),
             # 只是不注入索引 —— 没有写工具的角色执行不了那些规矩。
             prelude = self.workbench.prompt_block() if spec.workbench else ""
+            if prelude:
+                # **索引进首条 user 消息,不进 system_prompt**(#22)。索引每落一个
+                # 文件就变(路径+大小),放在缓存前缀里每次作废整段历史(实测同一请求
+                # 贵 3.7 倍;176K 上下文下一次变化 ≈ 重写 150K)。挪到消息里 = 落在
+                # 缓存断点之后,只有它自己重算。信息一字不少,只换位置 —— 对质量零影响
+                # (和 SDK 的 exclude_dynamic_sections 同一个道理)。
+                prompt = f"{prelude}\n\n{prompt}"
             hooks = merge_hooks(hooks, workbench_hooks(
                 self.workbench,
                 delegate_only=spec.delegate_only,
@@ -502,7 +509,6 @@ class Runtime:
                  if self.workbench is not None and self.workbench.external else None)
         options = build_options(
             spec,
-            prelude=prelude,
             cwd=self.workspace,
             add_dirs=extra,
             session_store=self.store,
