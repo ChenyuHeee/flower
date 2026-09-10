@@ -112,6 +112,21 @@ def main() -> int:
     write_managed(d2 / "CLAUDE.md", b_new.block_body())
     check((d2 / "CLAUDE.md").read_text(encoding="utf-8") == t3, "同内容重跑 → 文件逐字节不变(幂等)")
 
+    print("\n[5b] 标记被用户破坏(孤儿/多对)→ 退回安全追加,绝不删用户内容")
+    d6 = tmp / "broken"
+    d6.mkdir()
+    victim = "接手的人手删了 end 标记,还在孤儿标记后面写了要紧的东西"
+    (d6 / "CLAUDE.md").write_text(f"# 用户约定\n\n{BEGIN}\n{victim}\n", encoding="utf-8")  # 孤儿 BEGIN
+    write_managed(d6 / "CLAUDE.md", b_new.block_body())
+    tb = (d6 / "CLAUDE.md").read_text(encoding="utf-8")
+    check(victim in tb, "**孤儿标记后面的用户内容没被删**(认不出干净一对 → 退回追加)")
+    check("用户约定" in tb, "块前的用户内容也在")
+    # 孤儿 END:同样不删
+    (d6 / "CLAUDE.md").write_text(f"要紧内容\n{END}\n后面还有\n", encoding="utf-8")
+    write_managed(d6 / "CLAUDE.md", b_new.block_body())
+    te = (d6 / "CLAUDE.md").read_text(encoding="utf-8")
+    check("要紧内容" in te and "后面还有" in te, "孤儿 END 也不删用户内容")
+
     print("\n[6] 一份内容,两个名字:CLAUDE.md + AGENTS.md")
     d3 = tmp / "both"
     paths = write_both(d3, b.block_body())

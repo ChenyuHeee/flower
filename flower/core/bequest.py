@@ -121,7 +121,13 @@ def write_managed(path: str | Path, body: str) -> Path:
     block = _wrap(body)
     p.parent.mkdir(parents=True, exist_ok=True)
     old = p.read_text(encoding="utf-8") if p.is_file() else ""
-    if BEGIN in old and END in old:
+    # **只在恰好一对、且顺序正确时做外科替换。** 用户手删了一个标记(孤儿 BEGIN/
+    # 或 END)、或标记错序 / 出现多对时,split(...,1) 那套会把标记之间的用户内容
+    # 一并删掉 —— 那正是这条要防的"静默吃掉别人的仓库约定"(审查 #24 MEDIUM)。
+    # 认不出干净的一对就退回安全追加:多堆一个块很难看,但绝不删用户的东西。
+    clean_pair = (old.count(BEGIN) == 1 and old.count(END) == 1
+                  and old.find(BEGIN) < old.find(END))
+    if clean_pair:
         pre = old.split(BEGIN, 1)[0].rstrip()
         post = old.split(END, 1)[1].lstrip()
         new = "\n\n".join(c for c in (pre, block, post) if c).strip() + "\n"
@@ -185,8 +191,9 @@ notes/ / artifacts/ / scripts/ 各放什么,接手的人该先读哪几个文件
 
 ---
 
-只输出这五段。**不要真去创建 CLAUDE.md 或 AGENTS.md** —— 那两个文件由框架带着安全的
-受管块写(绝不覆盖别人已有的),你只负责内容。
+只输出这五段。每段**正文别以段名起行**(比如生成物那段,别用"生成物…"另起一行 ——
+会被解析成新标题、把这段最值钱的内容丢掉)。**不要真去创建 CLAUDE.md 或 AGENTS.md**
+—— 那两个文件由框架带着安全的受管块写(绝不覆盖别人已有的),你只负责内容。
 """
 """让**当前收尾会话**写这份交接的那句话。read-only 角色(见 :func:`roles.oracle`):
 它读工作台、输出五段,框架负责安全落盘 —— managed-block 的安全逻辑不能交给模型。"""
