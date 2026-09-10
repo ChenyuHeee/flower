@@ -136,7 +136,9 @@ class Workbench:
         return text
 
     def prompt_block(self) -> str:
-        """注入 system prompt 的那一段。有意做短 —— 它每轮都在。"""
+        """工作台索引那一段。**由 Runtime 注入到每个新会话的首条 user 消息**
+        (不是 system prompt —— 它每落一个文件就变,坐在缓存前缀里会作废整段历史,
+        见 #22)。有意做短。"""
         self.ensure()
         parts = [f"# 工作台 {self.show(self.root)}/", ""]
         if self.external:

@@ -87,7 +87,7 @@ def main() -> int:
     print("\n[3] run_setup:交互问 → chmod 600 写盘 → 立即生效")
     clean_env()
     os.environ["XDG_CONFIG_HOME"] = str(tmp / "cfg2")
-    answers = iter(["sk-ant-realkey", "", ""])           # 官方 key,网关/模型都回车
+    answers = iter(["sk-ant-realkey", "", "", ""])       # 官方 key,网关/模型/窗口都回车
     import builtins, io
     real_input, builtins.input = builtins.input, lambda *a: next(answers)
     real_tty, sys.stdin.isatty = sys.stdin.isatty, lambda: True
@@ -105,7 +105,18 @@ def main() -> int:
         check("ANTHROPIC_API_KEY=sk-ant-realkey" in body,
               "sk-ant- 前缀 → 写 API_KEY(不是 AUTH_TOKEN)")
         check("ANTHROPIC_BASE_URL" not in body, "网关留空 → 不写 BASE_URL(用官方默认)")
+        check("FLOWER_WINDOW" not in body, "窗口留空 → 不写(靠按名字判 + 撞墙自校准)")
         check(env.check_credentials() is None, "写完立即生效")
+        # 再配一次,这次给了窗口 → 写进 FLOWER_WINDOW(#23)
+        answers2 = iter(["tok-gw", "https://gw/maas", "claude-opus-5[1m]", "200000"])
+        builtins.input = lambda *a: next(answers2)
+        real_out2, sys.stdout = sys.stdout, io.StringIO()
+        try:
+            cli.run_setup(reason="给窗口")
+        finally:
+            sys.stdout = real_out2
+        body2 = env.user_env_path().read_text(encoding="utf-8")
+        check("FLOWER_WINDOW=200000" in body2, "给了窗口 → 写进 FLOWER_WINDOW=200000")
     finally:
         builtins.input, sys.stdin.isatty = real_input, real_tty
 

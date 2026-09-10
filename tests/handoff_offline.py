@@ -266,6 +266,97 @@ async def main() -> int:
         for k, v in keep.items():
             os.environ[k] = v if v is not None else ""
 
+    print("\n[7c] 窗口配置 + 自校准:FLOWER_WINDOW > 自校准 > 名字猜(--window 更高)")
+    from flower.core.agent import remember_overflow, calibrated_window, calib_path
+    save = {k: os.environ.get(k) for k in
+            ("ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_BASE_URL",
+             "FLOWER_WINDOW", "XDG_CONFIG_HOME")}
+    cfg = tmp / "cfg23"
+    try:
+        os.environ["XDG_CONFIG_HOME"] = str(cfg)     # 隔离:别写用户真实的 ~/.config/flower/.windows
+        os.environ["ANTHROPIC_BASE_URL"] = "https://gw.example/maas"
+        os.environ["ANTHROPIC_MODEL"] = "claude-opus-5[1m]"    # 只按名字猜会判 1M
+        os.environ.pop("ANTHROPIC_DEFAULT_OPUS_MODEL", None)
+        os.environ.pop("FLOWER_WINDOW", None)
+        check(default_window() == 1_000_000, "无配置无校准 → 按名字判 1M(这正是坑 AI4S 的默认)")
+        # 1. FLOWER_WINDOW 配置优先于名字猜
+        os.environ["FLOWER_WINDOW"] = "200000"
+        check(default_window() == 200_000, "FLOWER_WINDOW=200000 优先于按名字判的 1M")
+        for bad in ("abc", "0", "-5", ""):
+            os.environ["FLOWER_WINDOW"] = bad
+            check(default_window() == 1_000_000, f"FLOWER_WINDOW={bad!r} 非法 → 忽略,回落名字猜")
+        os.environ.pop("FLOWER_WINDOW", None)
+        # 2. 自校准:撞墙水位写进 .windows,按 base_url+model 记
+        check(calibrated_window() is None, "还没撞过 → 无校准")
+        remember_overflow(174_000)
+        check(calib_path().exists() and str(cfg) in str(calib_path()),
+              f"校准写进隔离目录:{calib_path()}")
+        check(calibrated_window() == 174_000, "记住了撞墙水位 174K")
+        check(default_window() == 174_000, "自校准优先于按名字判的 1M")
+        remember_overflow(160_000)
+        check(calibrated_window() == 160_000, "取 min:见过更小的溢出点(160K)就更保守")
+        remember_overflow(999_000)
+        check(calibrated_window() == 160_000, "更大的溢出点不放宽(min 不动)")
+        # 3. FLOWER_WINDOW 又优先于自校准(显式盖过学来的 —— 网关升级也能救回)
+        os.environ["FLOWER_WINDOW"] = "500000"
+        check(default_window() == 500_000, "FLOWER_WINDOW 优先于自校准")
+        os.environ.pop("FLOWER_WINDOW", None)
+        # 校准按 base_url+model 记:换条链路就不适用
+        os.environ["ANTHROPIC_MODEL"] = "claude-opus-5"
+        check(calibrated_window() is None and default_window() == 1_000_000,
+              "换模型名 → 那条校准不适用,回落名字猜")
+        os.environ["ANTHROPIC_MODEL"] = "claude-opus-5[1m]"
+        os.environ["ANTHROPIC_BASE_URL"] = "https://other.gw/v1"
+        check(calibrated_window() is None, "换 base_url → 那条校准也不适用")
+        os.environ["ANTHROPIC_BASE_URL"] = "https://gw.example/maas"
+        check(calibrated_window() == 160_000, "回到原链路 → 校准还在")
+        # --window 更高:它在 cli 里显式传进 HandoffPolicy(window=),不经过 default_window
+        os.environ["FLOWER_WINDOW"] = "200000"
+        check(HandoffPolicy(window=333_000).window == 333_000,
+              "--window(显式 window=)优先于 FLOWER_WINDOW 与自校准")
+    finally:
+        for k, v in save.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    print("\n[7d] 模型不符 → 警告一行,整次运行只一次(#23)")
+    save2 = {k: os.environ.get(k) for k in ("ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL")}
+    try:
+        os.environ["ANTHROPIC_MODEL"] = "claude-opus-5[1m]"
+        os.environ.pop("ANTHROPIC_DEFAULT_OPUS_MODEL", None)
+        rt = runtime(tmp / "mm", bench=False)
+        seen: list = []
+        rt._warn_model_mismatch("claude-opus-5", seen.append)     # 网关回的不是 [1m] 变体
+        mism = [e for e in seen if e.payload.get("model_mismatch")]
+        check(len(mism) == 1, f"配置 [1m]、网关回 claude-opus-5 → 警告一次(实际 {len(mism)})")
+        check(mism and "claude-opus-5[1m]" in mism[0].text and "FLOWER_WINDOW" in mism[0].text,
+              "警告点明要的模型 + 给出可操作出路(配 FLOWER_WINDOW / --window)")
+        seen.clear()
+        rt._warn_model_mismatch("claude-opus-5", seen.append)
+        check(not seen, "第二次不再警告 —— 整次运行只一行,不刷屏")
+        rt.close()
+        rt2 = runtime(tmp / "mm2", bench=False)
+        seen2: list = []
+        rt2._warn_model_mismatch("CLAUDE-OPUS-5[1M]", seen2.append)
+        check(not seen2, "大小写不同但其实同一个模型 → 不警告")
+        rt2.close()
+        # 只配 OPUS_MODEL(不配 ANTHROPIC_MODEL)时,窗口按它判,警告也得认它(审查 #23 LOW-MED)
+        os.environ.pop("ANTHROPIC_MODEL", None)
+        os.environ["ANTHROPIC_DEFAULT_OPUS_MODEL"] = "claude-opus-5[1m]"
+        rt3 = runtime(tmp / "mm3", bench=False)
+        seen3: list = []
+        rt3._warn_model_mismatch("claude-opus-5", seen3.append)
+        check(len(seen3) == 1, "只配 ANTHROPIC_DEFAULT_OPUS_MODEL 时也发警告(和 default_window 同一条链)")
+        rt3.close()
+    finally:
+        for k, v in save2.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
     print("\n[8] 上一代的交接进档案")
     rt = runtime(tmp / "g")
     notes = rt.workbench.notes
@@ -399,6 +490,40 @@ async def main() -> int:
           f"最后报的是真实死因,不是被改写成「余量不够」:{(res.error or '')[:40]}")
     check(res.context < rt.handoff.at,
           f"上下文 {res.context} 远低于阈值 {rt.handoff.at} —— 不该被判成装不下")
+
+    print("\n[14b] 撞真墙时把水位写进自校准 —— 下一次就阈值触发,不再空交接")
+    _sv = {k: os.environ.get(k) for k in
+           ("ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL", "XDG_CONFIG_HOME")}
+    try:
+        os.environ["XDG_CONFIG_HOME"] = str(tmp / "cfg23b")
+        os.environ["ANTHROPIC_BASE_URL"] = "https://gw.calib/maas"
+        os.environ["ANTHROPIC_MODEL"] = "claude-opus-5[1m]"
+        check(calibrated_window() is None, "起点无校准")
+        rt = runtime(tmp / "cal", window=1_000_000)
+        hits: list = []
+
+        async def overflow_at_174k(sp, pr, result, *, resume, fork, resume_at, on_event):
+            hits.append(pr)
+            result.session_id = "old"
+            if len(hits) == 1:
+                rt._ctx, result.context = 174_000, 174_000   # 撞墙前主线程见到的水位
+                result.errors.append("prompt is too long: 999999 tokens")
+                result.ok, result.error = False, result.errors[-1]
+            else:
+                result.ok, result.text = True, "接着干完了"
+
+        rt._attempt = overflow_at_174k               # type: ignore[method-assign]
+        res = await rt.run(SPEC, "任务", step_name="干活")
+        check(res.retired == ["old"], "撞墙 → 换代(和 [11] 一致)")
+        check(calibrated_window() == 174_000,
+              f"撞墙水位 174K 已记进自校准,下次按它算阈值(实际 {calibrated_window()})")
+        rt.close()
+    finally:
+        for k, v in _sv.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
     print(f"\n{'✓ 换代全部通过' if ok else '✗ 有失败'}")
     return 0 if ok else 1

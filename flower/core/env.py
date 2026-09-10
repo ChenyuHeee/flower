@@ -196,7 +196,7 @@ def check_credentials() -> str | None:
             "最省事:跑一次 `flower setup`,把 token 存到 "
             f"{user_env_path()}(装一次,处处生效)。\n"
             "或者:在当前目录建 `.env`,或 export 进进程环境。\n"
-            "flower 不读 ~/.claude/settings.json —— 那是可移植性的代价。"
+            "(已试过借本机 Claude Code 的 token —— 读 ~/.claude/settings.json 的 env 块 —— 也没找到可用的。)"
         )
     return None
 

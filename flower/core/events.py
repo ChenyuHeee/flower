@@ -114,6 +114,10 @@ def normalize(message: Any) -> list[Event]:
             g = u.get if isinstance(u, dict) else (lambda k, d=0: getattr(u, k, d))
             meta["context"] = (g("input_tokens", 0) + g("cache_read_input_tokens", 0)
                                + g("cache_creation_input_tokens", 0))
+        # 网关实际服务的模型。用来警告"配置要的"和"实际回的"不符 —— 窗口是按模型名
+        # 判的,名字对不上往往意味着窗口/能力也不是你以为的那个(issue #23)。
+        if (mdl := getattr(message, "model", None)) and mdl != "<synthetic>":
+            meta["model"] = mdl
         content = message.content
         # UserMessage 的正文是**输入**(用户 prompt / 派给 subagent 的任务书),
         # 不是模型产出。归到 "prompt",不进正文。

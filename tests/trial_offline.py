@@ -118,7 +118,7 @@ def main() -> int:                                          # noqa: C901
         print("\n[3] 那条承诺的直接断言:确认书出现在注入 system prompt 的索引里")
         Brief.parse(COMPLETE_BRIEF).write(bp)
         check("需求.md" in rt.workbench.prompt_block(),
-              "prompt_block()(进 system prompt 的那段)里有 需求.md")
+              "prompt_block()(注入 agent 的那段索引;#22 后进首条消息)里有 需求.md")
         check("需求.md" in rt.workbench.refresh(), "INDEX.md 里也有")
         rt.close()
         rt3 = Runtime(workspace=ws, run_dir=ws / "runs2", workbench=True)
@@ -206,6 +206,8 @@ def main() -> int:                                          # noqa: C901
         (["go", "x"],                    {"cmd": "go", "ask": "x"}),
         (["run", "flows.py:main"],       {"cmd": "run", "target": "flows.py:main"}),
         (["once", "看一眼"],              {"cmd": "once", "prompt": "看一眼"}),
+        (["setup"],                      {"cmd": "setup"}),          # issue #11
+        (["-v", "setup"],                {"cmd": "setup", "verbose": True}),
         (["-v", "x"],                    {"cmd": "go", "verbose": True}),
         (["x", "-v"],                    {"cmd": "go", "verbose": True}),
         (["-w", "/tmp/p", "x"],          {"cmd": "go", "workspace": "/tmp/p"}),
@@ -239,6 +241,15 @@ def main() -> int:                                          # noqa: C901
     # --help 不能被 go 截走
     for h in (["--help"], ["-h"], ["-v", "--help"]):
         check(_with_default_cmd(h, ap) == h, f"{h} 原样交给 argparse(不注入 go)")
+
+    # issue #11:_CMDS 漏了 "setup" 时,`flower setup` 被重写成 `flower go setup`,
+    # "setup" 被当成 go 的诉求正文跑掉 —— 没有任何 argv 能到达 _run_setup_cmd。
+    # 这条断言走的正是 setup_offline.py 绕过的那一层(_with_default_cmd)。
+    check(_with_default_cmd(["setup"], ap) == ["setup"],
+          "`flower setup` 不被重写成 go setup(#11)")
+    setup_fn = getattr(ap.parse_args(_with_default_cmd(["setup"], ap)), "fn", None)
+    check(getattr(setup_fn, "__name__", "") == "_run_setup_cmd",
+          "`flower setup` 到达 _run_setup_cmd,不是被当成 go 的诉求")
 
     print("\n[7b] 交互输入诉求(不用在 shell 里打引号)")
     import io
@@ -329,6 +340,8 @@ def main() -> int:                                          # noqa: C901
     check(not (ws / "runs" / "manifest.json").exists(),
           "没有 manifest —— Runtime.run() 一次都没进")
     check((ws / ".flower" / "INDEX.md").is_file(), "工作台索引生成在项目内")
+    check(not (ws / "CLAUDE.md").exists() and not (ws / "AGENTS.md").exists(),
+          "clarify-only 不写「给下一个工具的交接」—— 没做出东西就没得交接(#24 的 gate)")
 
     # ---------------------------------------------------------------
     print("\n[10] 唤醒:同一个目录再跑一次 `flower`(空回车 = 接着做,零请求)")
@@ -358,6 +371,51 @@ def main() -> int:                                          # noqa: C901
     ap2 = build_parser()
     check(ap2.parse_args(_with_default_cmd(["--new", "另一件事"], ap2)).new is True,
           "`flower --new \"另一件事\"` 解析成 go --new(归档行为见 lineage_offline [8])")
+
+    # ---------------------------------------------------------------
+    print("\n[11] 工作台索引进首条 user 消息、不进 system_prompt(#22:别作废缓存前缀)")
+    import flower.core.runtime as rtmod
+    from flower.core.runtime import StepResult
+    from flower.core.agent import AgentSpec as _Spec, build_options as _bo
+    ws = fresh(tmp, "p7")
+    wb = Workbench(ws, home=ws / ".flower").ensure()
+    Brief.parse(COMPLETE_BRIEF).write(wb.notes / "需求.md")
+    rt = Runtime(workspace=ws, run_dir=ws / "runs", workbench=wb)
+    check("需求.md" in rt.workbench.prompt_block(), "工作台索引里确实有 需求.md(前提)")
+    # 1. build_options 的 system_prompt.append 只有静态 instructions,索引不在里面
+    spec = _Spec(name="干活", instructions="STATIC-RULES", allowed_tools=["Read"], workbench=True)
+    opts0 = _bo(spec)
+    check(opts0.system_prompt["append"] == "STATIC-RULES",
+          "build_options:append 只有静态 instructions —— 索引不再拼进来")
+    # 2. 跑一次 _attempt(把 query 换成录音机),看真正发出去的 prompt / options
+    captured: list = []
+
+    async def fake_query(*, prompt, options):
+        captured.append({"prompt": prompt, "opts": options})
+        return
+        yield        # noqa —— 让它是 async generator(不产出任何消息)
+
+    async def _run_attempts():
+        r1 = StepResult(step="干活")
+        await rt._attempt(spec, "去把 md→html 做出来", r1,
+                          resume=None, fork=False, resume_at=None, on_event=None)
+        r2 = StepResult(step="干活")            # 同一 session 的 resume(打断/续跑)
+        await rt._attempt(spec, "接着从断点续", r2,
+                          resume="old-sid", fork=False, resume_at=None, on_event=None)
+
+    orig_q, rtmod.query = rtmod.query, fake_query
+    try:
+        asyncio.run(_run_attempts())
+    finally:
+        rtmod.query = orig_q
+    fresh_p, resume_p = captured[0]["prompt"], captured[1]["prompt"]
+    check("需求.md" in fresh_p and fresh_p.endswith("去把 md→html 做出来"),
+          "新会话(resume=None):prompt = 索引 + 原任务(索引前置进首条消息)")
+    check("需求.md" not in resume_p and resume_p == "接着从断点续",
+          "同 session resume:**不再重注索引**(它早在 msg0,重注会堆副本、把撞墙点提前;审查 #22)")
+    check("需求.md" not in captured[0]["opts"].system_prompt["append"],
+          "而 system_prompt.append 里**没有**索引 —— 前缀稳定,加文件不作废整段历史")
+    rt.close()
 
     print(f"\n{'✓ 一键入口与模板验证全部通过' if not fail else f'✗ {fail} 项失败'}"
           f"(共 {ok + fail} 项)")

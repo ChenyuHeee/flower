@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -63,17 +64,88 @@ SMALL_WINDOW = ("haiku",)
 而它实际会用到的那几个模型(Opus 5 / Sonnet 5)都到 100 万。"""
 
 
+def _env_window() -> int | None:
+    """``FLOWER_WINDOW`` 配置键 —— 窗口是网关的属性,和 BASE_URL/MODEL 同类,
+    该能写进 ~/.config/flower/.env(装一次处处生效),不该只有命令行 --window。
+    非正整数当没设(配错了不该把窗口搞成 0)。"""
+    raw = os.environ.get("FLOWER_WINDOW")
+    if not raw:
+        return None
+    try:
+        w = int(raw)
+    except ValueError:
+        return None
+    return w if w > 0 else None
+
+
+def calib_path() -> Path:
+    """自校准记录的位置。沿用 update.state_path 的先例(~/.config/flower/ 下)。"""
+    from .env import user_env_path                       # 局部 import,避免 env↔agent 环
+    return user_env_path().parent / ".windows"
+
+
+def _calib_key() -> str:
+    """按 base_url + model 记 —— 窗口是这条链路的属性,换网关/换模型就该重新学。"""
+    base = os.environ.get("ANTHROPIC_BASE_URL") or "default"
+    model = (os.environ.get("ANTHROPIC_MODEL")
+             or os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL") or "")
+    return f"{base}|{model}"
+
+
+def calibrated_window() -> int | None:
+    """上次在这条 base_url+model 上撞"prompt 太长"的水位(如果记过)。"""
+    try:
+        data = json.loads(calib_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    w = data.get(_calib_key()) if isinstance(data, dict) else None
+    return int(w) if isinstance(w, (int, float)) and w > 0 else None
+
+
+def remember_overflow(context: int) -> None:
+    """撞到"prompt 太长"时把撞墙水位记下来 —— 之后 :func:`default_window` 按它算
+    阈值,用户根本不用知道网关的真实上限(issue #23)。
+
+    取 min:见过更小的溢出点就更保守。这是**兜底**,不是唯一入口 —— FLOWER_WINDOW
+    和 --window 都优先于它,网关升级了也能显式盖过这条陈旧记录。best-effort,
+    写不动就算了(和 update 的状态文件同一个态度)。"""
+    if context <= 0:
+        return
+    p = calib_path()
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            data = {}
+    except (OSError, ValueError):
+        data = {}
+    key = _calib_key()
+    prev = data.get(key)
+    prev = prev if isinstance(prev, (int, float)) and prev > 0 else None
+    data[key] = min(int(prev), context) if prev else context
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(data), encoding="utf-8")
+    except OSError:
+        pass
+
+
 def default_window() -> int:
-    """按配置里的模型名判上下文窗口。**默认 100 万。**
+    """推断上下文窗口,按优先级:**FLOWER_WINDOW 配置 > 自校准 > 按模型名猜(默认 100 万)**。
 
-    判错了不会变成硬错:真实窗口比这个小的话,请求会被 API 以"prompt 太长"
-    退回,而 :class:`~flower.core.runtime.Runtime` 认得这个信号 ——
-    它会当场换代(用机械拼的降级交接,因为那个会话已经大到跑不动一轮了),
-    而不是让这一步失败。所以这里可以取积极的默认值。
+    (``--window`` 命令行更高 —— 它在 cli 里显式传进 HandoffPolicy,不经过这里。)
 
-    实测:开发这台机器的网关配的是 ``claude-opus-5[1m]``。早先按 200k 算的话
-    每 15 万就换一代,而它其实能跑到 95 万 —— 差 5 倍,长程活会被切得稀碎。
+    为什么要前两条(issue #23):窗口是**网关的属性**,和 BASE_URL/MODEL 同类,
+    却一直只能靠 --window,既没有配置文件入口、也不会从撞墙里学。而只按名字猜
+    对除 haiku 外一律判 1M —— 网关配 ``claude-opus-5[1m]`` 但实际只给 200K 窗口时,
+    就会在 ~174K 溢出、走降级空交接(整个流程里最贵的故障)。
+
+    判错仍不是硬错:真实窗口更小的话请求会被 API 以"prompt 太长"退回,Runtime
+    认得这个信号 —— 当场换代(降级交接),同时把撞墙水位记进自校准,下一次就准了。
     """
+    if (w := _env_window()) is not None:
+        return w
+    if (w := calibrated_window()) is not None:
+        return w
     name = (os.environ.get("ANTHROPIC_MODEL")
             or os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL") or "").lower()
     if re.search(r"(?:^|[^a-z0-9])1m(?:[^a-z0-9]|$)", name):
@@ -205,14 +277,17 @@ def build_options(
     portable: bool = True,
     add_dirs: list[str] | None = None,
     flush: str = "eager",
-    prelude: str = "",
 ) -> ClaudeAgentOptions:
     """把 AgentSpec 编译成 SDK options。
 
     portable=True 时不读取任何宿主机配置,保证换机行为一致。
-    prelude 追加在领域指令之后(工作台索引走这里)—— 它每轮都在,所以要短。
+
+    **system_prompt.append 只放静态的领域指令(spec.instructions)。** 工作台索引
+    **不**在这里 —— 它每落一个文件就变,坐在缓存前缀(tools→system→messages)里会
+    每次作废整段历史(实测同一请求贵 3.7 倍,见 #22)。索引由 Runtime 注入到**每个
+    新会话的首条 user 消息**(resume 不重注),在缓存断点之后,只有它自己重算,信息一字不少。
     """
-    append = spec.instructions if not prelude else f"{spec.instructions}\n\n{prelude}"
+    append = spec.instructions
     opts: dict[str, Any] = {
         # 关键:preset 保留 Claude Code 的全部原生能力,append 叠加专业化。
         "system_prompt": {

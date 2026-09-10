@@ -26,6 +26,7 @@ import unicodedata
 from pathlib import Path
 
 from .core.agent import AgentSpec, HandoffPolicy
+from .core.bequest import BEQUEST_PROMPT, Bequest, mechanical, write_both
 from .core.env import (PROBE_AUTH, PROBE_CONFIG, PROBE_NET, check_credentials,
                        describe, load_dotenv, probe_credentials, user_env_path)
 from .core.events import Event
@@ -117,16 +118,26 @@ class _TtyGuard:
         except Exception:                                 # noqa: BLE001
             self._flock = None                            # Windows / 无 fcntl
 
-    WAIT = 0.25
+    WAIT = 2.0
     """最多为抢锁等多久(秒)。
 
     **并行不该有上限,所以这把锁绝不能是阻塞的。** 阻塞版实测:一个进程攥着锁
     (比如它正卡在往终端写 —— 终端不读了、被 Ctrl+S 挂起、或者正在崩),
     同一终端上**所有**别的 flower 跟着一起冻住,一个卡住会传染给全部。
-    改之前一个卡住只卡它自己,那是退步。
+    改之前一个卡住只卡它自己,那是退步。所以是限时抢,不是死等。
 
-    所以改成限时抢:正常情况锁持有时间是微秒级,0.25 秒抢不到说明有进程卡死了 ——
-    这时候**宁可交错也要写出去**。交错只是难看,冻住是真的没法用。
+    为什么是 2.0 而不是 0.25(issue #21):0.25 是按"持锁微秒级"调的,输出变大后
+    从没重验。实测慢终端下,一次**正常**的大块写入(``_say`` 一次写完整块)就会
+    持锁数秒 —— 终端消化不过来、``write()`` 阻塞 —— 于是 0.25 把它误判成"进程
+    卡死"、放弃锁照写,两进程的字节在任意位置交错(半个 UTF-8 / 畸形转义,正是
+    四次 Terminal 崩溃的成因)。掐两头实测(慢读端 8ms/256B):
+
+        WAIT=0.25 → 混行 14 / UTF-8 截断 25 / 畸形转义 3(放弃 8/24 次)
+        WAIT=2.0  → 0 / 0 / 0(放弃 0/24 次,实际最长只等了 0.81s)
+
+    **撕裂归零,吞吐一点没变** —— 上限调大不会真让人多等,只是不再过早放弃。
+    真卡死的进程最多让别人每次多等 2 秒,不是阻塞版那种永久冻住、一个传染全部。
+    ``termsafe_offline`` [7e] 把这个回归钉死(慢读端下 0.25 撕裂、2.0 归零)。
     """
 
     def _ensure(self) -> None:
@@ -602,7 +613,7 @@ class Render:
         sub = bool(ev.payload.get("subagent"))
         self._enter(sub)
         pad = self.GUTTER if sub else "  "
-        arg = (ev.text or "")[:_width() - len(pad) - 16]
+        arg = (ev.text or "").replace("\n", " ")   # 通用分支也要去换行(此前只有 Agent 分支去)
         if ev.tool == "Agent":
             inp = ev.payload.get("input") or {}
             who = inp.get("subagent_type", "?")
@@ -611,6 +622,7 @@ class Render:
                  f"{C['dim']}{what}{C['off']}")
             return
         color = C["dim"] if sub else C["blu"]
+        arg = _fit(arg, max(8, _width() - _cols(pad) - 16))
         _say(f"{pad}{color}{G['tool']} {ev.tool}{C['off']} {C['dim']}{arg}{C['off']}")
 
     def _on_tool_result(self, ev: Event) -> None:
@@ -686,7 +698,12 @@ class Render:
 
 
 def render(ev: Event, *, verbose: bool = False) -> None:
-    """向后兼容的单发入口。长跑请用 :class:`Render`(它维护状态)。"""
+    """向后兼容的单发入口:**每次调用都是新实例,状态归零**。
+
+    **别拿它当 ``on_event``** —— 那样每条事件都新建一个 :class:`Render`,
+    累计花费 / 上下文 / 耗时全部每次清零(实测 ``once`` 的状态行永远
+    ``累计 $0.00 · 0:00``,见 issue #14)。长跑请自己持一个 :class:`Render`
+    实例传进去。"""
     Render(verbose=verbose)(ev)
 
 
@@ -918,7 +935,7 @@ def answer_from_stdin(channel, *, on_aside=None, on_interrupt=None,
                     channel.decline(ask.id)
                 continue
 
-            if raw_line.startswith("?") or raw_line.startswith("?"):
+            if raw_line.startswith("?") or raw_line.startswith("？"):
                 q = raw_line[1:].strip()
                 if q and on_aside:
                     on_aside(q)
@@ -948,7 +965,7 @@ def answer_from_stdin(channel, *, on_aside=None, on_interrupt=None,
     return stop
 
 
-_CMDS = ("go", "run", "once")
+_CMDS = ("go", "run", "once", "setup")
 
 
 def _with_default_cmd(argv: list[str], parser: argparse.ArgumentParser) -> list[str]:
@@ -1045,7 +1062,45 @@ def _load(ref: str):
     return getattr(mod, attr)
 
 
-async def _drive(wf, args, *, trim: bool | None = None) -> None:
+async def _finish_bequest(rt: Runtime, on_event) -> None:
+    """收尾:给下一个工具(Claude Code / Codex)在项目根写一份 CLAUDE.md + AGENTS.md。
+
+    一次长程运行的最终接手者不是另一个 flower 会话,是拿着 Claude Code / Codex 来
+    微调的人 —— 而「正文.md 是生成物,别直接改」这种知识此前只写在脚本 docstring 里,
+    没人告诉新来的工具去读(见 issue #24)。收尾时让当前会话读工作台写五段(一轮的钱,
+    相对整次运行可忽略);写不出来就机械兜底。**绝不覆盖用户已有的 CLAUDE.md** ——
+    用带标记的受管块。best-effort:这一步失败不该影响运行的退出。
+    """
+    wb = rt.workbench
+    if wb is None or not (wb.notes / "需求.md").is_file():
+        return                              # 不是带确认书的运行,没有可交接的现场
+    beq: Bequest | None = None
+    try:
+        spec = oracle(name="收尾:给下一个工具的交接", max_budget_usd=1.0)
+        r = await rt.run(spec, BEQUEST_PROMPT, step_name="收尾交接", on_event=on_event)
+        beq = Bequest.parse(r.text or "")
+    except Exception:                        # noqa: BLE001 —— 收尾失败不该带走这次运行
+        beq = None
+    if beq is None or not beq.complete():
+        try:
+            what = (wb.notes / "需求.md").read_text(encoding="utf-8")[:400]
+        except OSError:
+            what = ""
+        beq = mechanical(
+            what=what,
+            workbench_hint=f"{wb.show(wb.root)}/ —— notes/(需求/目标/决策/交接)、"
+                           f"artifacts/(产出)、scripts/(脚本,别直接改它生成的产物)。",
+        )
+    try:
+        paths = write_both(rt.workspace, beq.block_body())
+    except OSError:
+        return
+    tag = f" {C['ylw']}(降级:机械拼的){C['off']}" if beq.degraded else ""
+    _say(f"\n{C['grn']}{G['yes']} 给下一个工具的交接{C['off']} "
+         f"{C['dim']}{' / '.join(_short(p) for p in paths)}{C['off']}{tag}")
+
+
+async def _drive(wf, args, *, trim: bool | None = None, finish: bool = False) -> None:
     """跑一个 Workflow 对象。`run` 和 `go` 共用这一段。"""
     # workflow 自带工作台就用它的 —— 它把 brief/log 落在那里面,两边必须是同一个,
     # 否则确认书写在一处、注入索引扫的是另一处。见 Workflow.workbench。
@@ -1158,6 +1213,11 @@ async def _drive(wf, args, *, trim: bool | None = None) -> None:
                                      on_interrupt=take_interrupt,
                                      interrupt_req=interrupt_req)
         ctx = await wf.run(rt, on_event=sink)
+        # 收尾:给下一个工具留一份交接。只在 `go` 收尾做(finish=True)——
+        # 自己写的 workflow(`run`)的收尾是使用者的活,不该被框架自动塞一步;
+        # clarify-only 没做出东西、失败的运行更没有成果,都不写。见 #24。
+        if finish and not ctx.get("_failed_at") and not getattr(args, "clarify_only", False):
+            await _finish_bequest(rt, sink)
     finally:
         if prev_sigint is not None:
             signal.signal(signal.SIGINT, prev_sigint)
@@ -1248,7 +1308,7 @@ async def _run_go(args) -> None:
         )
     except ValueError as e:
         sys.exit(str(e))
-    await _drive(wf, args, trim=not args.no_trim)
+    await _drive(wf, args, trim=not args.no_trim, finish=True)
 
 
 async def _run_once(args) -> None:
@@ -1262,11 +1322,12 @@ async def _run_once(args) -> None:
     )
     rt = Runtime(workspace=args.workspace, run_dir=args.run_dir,
                  workbench=args.workbench, trim=args.trim)
+    show = Render(verbose=args.verbose)   # 持一个实例:状态行(累计/上下文/耗时)才不会每条事件清零
     try:
         await rt.run(
             spec, args.prompt,
             resume=args.resume, fork=args.fork,
-            on_event=lambda e: render(e, verbose=args.verbose),
+            on_event=show,
         )
     finally:
         rt.close()
@@ -1405,6 +1466,11 @@ def run_setup(*, reason: str = "") -> bool:
          f"{C['dim']}(直接回车 = 默认;网关有自己的模型名就填,如 claude-opus-5[1m]){C['off']}")
     model = input("   > ").strip()
 
+    _say(f"\n{C['ylw']}4. 上下文窗口{C['off']} "
+         f"{C['dim']}(直接回车 = 按模型名自动判 + 撞墙自校准;网关窗口和模型名对不上时"
+         f"填真实值,如 200000 —— 见 #23){C['off']}")
+    window = input("   > ").strip()
+
     key = "ANTHROPIC_API_KEY" if token.startswith("sk-ant-") else "ANTHROPIC_AUTH_TOKEN"
     vals = {key: token}
     if base:
@@ -1413,6 +1479,8 @@ def run_setup(*, reason: str = "") -> bool:
         vals["ANTHROPIC_MODEL"] = model
         vals["ANTHROPIC_DEFAULT_OPUS_MODEL"] = model
         vals["ANTHROPIC_DEFAULT_SONNET_MODEL"] = model
+    if window.isdigit() and int(window) > 0:
+        vals["FLOWER_WINDOW"] = window
     path = _write_user_env(vals)
     load_dotenv(str(path), override=True)               # 立刻生效
     _say(f"\n{C['grn']}{G['yes']} 存好了:{path}{C['off']}\n")
@@ -1475,6 +1543,13 @@ def main() -> None:
     if args.verbose:
         for k, v in describe().items():
             print(f"{C['dim']}{k} = {v}{C['off']}")
+        # #15 去静默:pip/wheel 装的 flower 不含 plugin/(只有源码 checkout 有),
+        # 而挂载失败此前一声不响 —— 表现成"模型好像没用那个领域知识",几乎无法归因。
+        # -v 下至少说一句(不默认刷屏,免得纯框架用户每次被念叨)。归属/打包见 #15。
+        from .core.agent import PLUGIN_DIR
+        if not PLUGIN_DIR.is_dir():
+            print(f"{C['ylw']}{G['warn']} 领域能力包未加载:{_short(PLUGIN_DIR)} 不存在 —— "
+                  f"pip/wheel 装的不含 plugin/,skill/agents/hooks 这一层不生效(#15){C['off']}")
     asyncio.run(args.fn(args))
 
 

@@ -1,8 +1,9 @@
 """**会花钱的探针**($0.1–0.3):subagent 能看见 session 级的 system_prompt.append 吗?
 
-这是工作台机制的承重问题。`build_options` 把工作台索引放进
-``system_prompt.append``(session 级),而 README 和 workbench.py 的说法是
-"索引被注入**每个** agent 的 system prompt"。
+这是工作台机制的承重问题。工作台索引此前放进 ``system_prompt.append``(session 级),
+而 README 和 workbench.py 的说法是"索引被注入**每个** agent 的 system prompt"。
+(#22 之后索引改注入**首条 user 消息** —— 但 append 这条通道本身仍在,spec.instructions
+走它;"subagent 到底看不看得见主线程的 system prompt"这个承重问题不变。)
 
 如果 subagent 拿不到它,那么:
   * "后面每一个 subagent 开局就知道需求文件在哪"是错的
@@ -49,40 +50,29 @@ async def main() -> int:
 
     coord = AgentSpec(
         name="主控",
-        instructions="你负责派活。用 Agent 工具派 subagent_type='hand'。",
+        # 口令直接放进 instructions —— 它进 system_prompt.append(session 级)。
+        # #22 之后工作台索引不再走 append(改注入首条 user 消息),但 append 这条
+        # 通道本身仍在(spec.instructions 走它),要验的就是它到不到 subagent。
+        instructions=("你负责派活。用 Agent 工具派 subagent_type='hand'。\n\n"
+                      f"# 工作台口令\n\n本次运行的口令是 {TOKEN}。"),
         allowed_tools=["Agent"],
         agents={"hand": hand},
-        # 这一段会进 system_prompt.append。工作台索引走的就是这条路。
-        # 注意:AgentSpec.instructions 和 prelude 最终拼在一起进 append,
-        # 所以放在 instructions 里等价 —— 要验的是 append 这条通道本身。
         permission_mode="acceptEdits",
         max_budget_usd=1.0,
         max_turns=8,
     )
-    # 直接用 prelude 那条路,和工作台完全一致
-    from flower.core import agent as agent_mod
-    orig = agent_mod.build_options
-
-    def patched(spec, **kw):
-        kw["prelude"] = f"# 工作台口令\n\n本次运行的口令是 {TOKEN}。"
-        return orig(spec, **kw)
-
-    agent_mod.build_options = patched
+    rt = Runtime(workspace=WS, run_dir=WS / "runs")
     try:
-        rt = Runtime(workspace=WS, run_dir=WS / "runs")
-        try:
-            r = await rt.run(
-                coord,
-                "派 hand 去回答:它自己的 system prompt 里有没有出现一个形如 "
-                "XYZZY-... 的口令?让它如实回答,有就原样引出来,没有就说没有。"
-                "把它的原话转述给我。",
-                on_event=lambda e: print(f"  [{e.kind}] {(e.text or '')[:120]}", flush=True)
-                if e.kind in ("text", "error") else None,
-            )
-        finally:
-            rt.close()
+        r = await rt.run(
+            coord,
+            "派 hand 去回答:它自己的 system prompt 里有没有出现一个形如 "
+            "XYZZY-... 的口令?让它如实回答,有就原样引出来,没有就说没有。"
+            "把它的原话转述给我。",
+            on_event=lambda e: print(f"  [{e.kind}] {(e.text or '')[:120]}", flush=True)
+            if e.kind in ("text", "error") else None,
+        )
     finally:
-        agent_mod.build_options = orig
+        rt.close()
 
     text = r.text or ""
     print("\n" + "=" * 66)

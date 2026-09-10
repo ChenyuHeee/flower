@@ -61,7 +61,13 @@ say ""
 if command -v flower >/dev/null 2>&1; then
     step "${GRN}装好了${OFF} $(command -v flower)"
 else
-    BINDIR="$HOME/.local/bin"
+    # PATH 提示要指对地方。uv/pipx 装到 ~/.local/bin,但 pip --user 在 macOS 上
+    # 装到 ~/Library/Python/3.X/bin —— 写死 ~/.local/bin 会把最需要正确指引的
+    # pip 兜底那台机器指错(见 issue #16)。问 Python 要真实脚本目录。
+    if [ "$INSTALL" = "pip" ]; then
+        BINDIR="$("$PY" -c 'import sysconfig; print(sysconfig.get_path("scripts", scheme="posix_user"))' 2>/dev/null)"
+    fi
+    [ -n "$BINDIR" ] || BINDIR="$HOME/.local/bin"
     step "${GRN}装好了${OFF}(经 $INSTALL)"
     say "${YLW}! 但 flower 不在 PATH 上。${OFF}"
     say "  把这一行加进你的 ~/.zshrc 或 ~/.bashrc:"

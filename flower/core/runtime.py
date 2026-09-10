@@ -21,7 +21,7 @@ from pathlib import Path
 import anyio
 from claude_agent_sdk import query
 
-from .agent import AgentSpec, CompactPolicy, HandoffPolicy, build_options
+from .agent import AgentSpec, CompactPolicy, HandoffPolicy, build_options, remember_overflow
 from .env import check_credentials, load_dotenv
 from .events import Event, normalize
 from .handoff import HANDOFF_PROMPT, Handoff, degraded, is_overflow
@@ -119,6 +119,7 @@ class Runtime:
         self._warned = False     # 逼近提醒每代只发一次
         self._writing_handoff = False   # 见 _handoff_due:写交接那一轮豁免阈值
         self._degraded = 0              # 连续降级计数;见 run() 的换代分支
+        self._model_warned = False      # 配置模型 vs 网关实际回的模型,不符只警告一次(#23)
         self.results: list[StepResult] = []
         # 这次进程的标记 + 上次留下的账。manifest 是**跨进程累积**的:
         # 同一个目录接着跑(见 core/lineage.py),它就是唯一能查到
@@ -251,6 +252,11 @@ class Runtime:
             overflowed = (self.handoff.enabled and result.session_id
                           and is_overflow(result.error, *result.errors[fresh:]))
             if result.error == self.HANDOFF_DUE or overflowed:
+                if overflowed and self._ctx > 0:
+                    # 自校准:撞的是**真墙**(不是阈值触发)才记 —— 把这次的水位存进
+                    # ~/.config/flower/.windows(按 base_url+model),下次 default_window
+                    # 按它算阈值 → 阈值触发的真交接,而不是溢出兜底的空交接。见 #23。
+                    remember_overflow(self._ctx)
                 if len(result.retired) >= self.handoff.max_generations:
                     # 阈值低于这个 agent 的启动地板时,每个新会话一开口就越线,
                     # 于是永远换代下去(换代不吃重试额度)。这里是那道闸。
@@ -341,6 +347,28 @@ class Runtime:
                 f"还有约 {max(0, h.at - self._ctx) / 1000:.0f}K 到换代"),
                 payload={"phase": "near", "step": step, "context": self._ctx,
                          "window": h.window, "at": h.at}))
+
+    def _warn_model_mismatch(self, served: str, on_event) -> None:
+        """配置要的模型 vs 网关实际回的模型,不符就警告**一行**(整次运行只一次)。
+
+        窗口是按模型名判的(见 :func:`~flower.core.agent.default_window`),名字对不上
+        往往意味着上下文窗口/能力也不是你以为的那个 —— 正是 #23 的现场:配置写
+        ``claude-opus-5[1m]``,网关实际只有 ``claude-opus-5``(200K 窗口),flower 按名字
+        判 1M → 174K 溢出 → 空交接。这条在第一次响应就能把整件事挑明,最便宜。
+        """
+        if self._model_warned:
+            return
+        self._model_warned = True                       # 有响应了就算数,别每条都判
+        want = (os.environ.get("ANTHROPIC_MODEL")
+                or os.environ.get("ANTHROPIC_DEFAULT_OPUS_MODEL") or "").strip()  # 和 default_window 同一条链
+        if not want or want.lower() == served.lower():
+            return
+        if on_event:
+            on_event(Event("error", text=(
+                f"配置要 {want},网关实际回 {served} —— 窗口是按模型名判的,对不上"
+                f"多半意味着上下文窗口也不是你以为的那个。若撞上空交接,"
+                f"配 FLOWER_WINDOW=<真实窗口> 或用 --window(见 #23)。"),
+                payload={"model_mismatch": True, "want": want, "served": served}))
 
     async def _write_handoff(
         self,
@@ -448,6 +476,14 @@ class Runtime:
             # spec.workbench=False:hook 照挂(spill 对它的 Read 仍有用),
             # 只是不注入索引 —— 没有写工具的角色执行不了那些规矩。
             prelude = self.workbench.prompt_block() if spec.workbench else ""
+            if prelude and resume is None:
+                # **索引只在新会话的首条 user 消息注入一次**(#22),不进 system_prompt。
+                # 索引每落一个文件就变,放在缓存前缀里每次作废整段历史(实测同一请求贵
+                # 3.7 倍)。挪进消息 = 落在缓存断点之后,只有它自己重算。
+                # **只在 resume is None 注入**:同一 session 的 resume(打断/重试/断网续)
+                # 里它早已在 msg0,再前置只会在历史里堆副本、每轮重发,反而把撞墙点提前
+                # (审查 #22 MEDIUM)。换代新一代走的也是 resume=None(新会话),照样注入。
+                prompt = f"{prelude}\n\n{prompt}"
             hooks = merge_hooks(hooks, workbench_hooks(
                 self.workbench,
                 delegate_only=spec.delegate_only,
@@ -475,7 +511,6 @@ class Runtime:
                  if self.workbench is not None and self.workbench.external else None)
         options = build_options(
             spec,
-            prelude=prelude,
             cwd=self.workspace,
             add_dirs=extra,
             session_store=self.store,
@@ -529,6 +564,8 @@ class Runtime:
                         self._ctx = max(self._ctx, int(n))
                         result.context = self._ctx
                         self._maybe_warn(on_event, name)
+                    if (m := ev.payload.get("model")) and not ev.payload.get("subagent"):
+                        self._warn_model_mismatch(m, on_event)
                     if ev.kind == "text" and not ev.payload.get("subagent"):
                         # 只收主线程的正文。subagent 的发言留在它自己的 transcript,
                         # 派给它的任务书是 kind="prompt",两者都不进 StepResult.text。

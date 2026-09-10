@@ -269,6 +269,58 @@ def main() -> int:
     ra.close()
     rb.close()
 
+    print("\n[7e] 慢读端:一次正常的大块写入就持锁超过 0.25s → 撕裂;提到 2.0 归零")
+    # 现有 [7] 读端太快(0.3ms/64B),0.25s 下也报 0/0/0,测不出这个问题(issue #21)。
+    # 真因:慢终端下 write() 阻塞数秒是**正常**的(终端消化不过来,不是进程卡死),
+    # 0.25 把它误判成卡死、放弃锁照写 → 两进程字节交错。这里用慢读端(8ms/512B)
+    # 逼出阻塞,把 WAIT 设进 fork 前的类属性(子进程继承),对比 0.25 与 2.0。
+    def _slow_pty(wait, *, rd=512, slp=0.008, lines=300, rounds=3):
+        save = _cli._TtyGuard.WAIT
+        _cli._TtyGuard.WAIT = wait                     # fork 前设好,两个 writer 才继承得到
+        pid, fd = pty.fork()
+        if pid == 0:
+            blk = "\n".join(
+                f"{C['cyn']}A 很长的中文行撑满宽度触发长时间持锁 {i:03d}{C['off']}"
+                for i in range(lines))
+            blk2 = blk.replace("A ", "B ").replace(C['cyn'], C['red'])
+            a = _os.fork()
+            if a == 0:
+                for _ in range(rounds):
+                    _cli._say(blk)                     # _say 一次写完整块 → 慢读端下这一次 write 就阻塞很久
+                _os._exit(0)
+            for _ in range(rounds):
+                _cli._say(blk2)
+            _os.waitpid(a, 0)
+            _os._exit(0)
+        buf = b""
+        while True:
+            try:
+                d = _os.read(fd, rd)
+            except OSError:
+                break
+            if not d:
+                break
+            buf += d
+            _t.sleep(slp)                              # 慢读端:小口读 + 睡,逼 write() 阻塞
+        _os.waitpid(pid, 0)
+        _cli._TtyGuard.WAIT = save
+        t = buf.decode("utf-8", "replace")
+        rows = t.replace("\r", "").split("\n")
+        mixed = sum(1 for l in rows if "A " in l and "B " in l)
+        cut = t.count(chr(0xFFFD))
+        torn = len(_re.findall("\x1b\\[[0-9;]*[^0-9;m\x1b]", _SGR.sub("", t)))
+        return mixed, cut, torn
+
+    if not has_pty:
+        check(True, "本平台没有 pty,跳过慢读端测试(锁本身在 [7c] 验)")
+    else:
+        m0, c0, t0 = _slow_pty(0.25)
+        m2, c2, t2 = _slow_pty(2.0)
+        check(m0 + c0 + t0 > 0,
+              f"WAIT=0.25 慢读端下复现撕裂(混行 {m0} / 截断 {c0} / 畸形 {t0})")
+        check(m2 + c2 + t2 == 0,
+              f"WAIT=2.0 慢读端下归零(混行 {m2} / 截断 {c2} / 畸形 {t2})")
+
     print(f"\n{'✓ 终端安全全部通过' if ok else '✗ 有失败'}")
     return 0 if ok else 1
 
