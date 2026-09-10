@@ -1422,6 +1422,11 @@ def run_setup(*, reason: str = "") -> bool:
          f"{C['dim']}(直接回车 = 默认;网关有自己的模型名就填,如 claude-opus-5[1m]){C['off']}")
     model = input("   > ").strip()
 
+    _say(f"\n{C['ylw']}4. 上下文窗口{C['off']} "
+         f"{C['dim']}(直接回车 = 按模型名自动判 + 撞墙自校准;网关窗口和模型名对不上时"
+         f"填真实值,如 200000 —— 见 #23){C['off']}")
+    window = input("   > ").strip()
+
     key = "ANTHROPIC_API_KEY" if token.startswith("sk-ant-") else "ANTHROPIC_AUTH_TOKEN"
     vals = {key: token}
     if base:
@@ -1430,6 +1435,8 @@ def run_setup(*, reason: str = "") -> bool:
         vals["ANTHROPIC_MODEL"] = model
         vals["ANTHROPIC_DEFAULT_OPUS_MODEL"] = model
         vals["ANTHROPIC_DEFAULT_SONNET_MODEL"] = model
+    if window.isdigit() and int(window) > 0:
+        vals["FLOWER_WINDOW"] = window
     path = _write_user_env(vals)
     load_dotenv(str(path), override=True)               # 立刻生效
     _say(f"\n{C['grn']}{G['yes']} 存好了:{path}{C['off']}\n")
